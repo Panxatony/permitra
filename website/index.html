@@ -23,10 +23,20 @@
   a:hover { text-decoration: underline; }
   .wrap { max-width: 1040px; margin: 0 auto; padding: 0 1.25rem; }
 
-  header.hero { background: linear-gradient(160deg, var(--brand) 0%, var(--brand-2) 100%); color: #fff; padding: 4.5rem 0 4rem; }
+  /* Sprachumschaltung: Standard Deutsch; body.en blendet .lang-de aus */
+  body:not(.en) .lang-en { display: none; }
+  body.en .lang-de { display: none; }
+
+  header.hero { background: linear-gradient(160deg, var(--brand) 0%, var(--brand-2) 100%); color: #fff; padding: 3.2rem 0 4rem; position: relative; }
   .hero .wrap { display: flex; flex-direction: column; gap: 1.2rem; align-items: flex-start; }
+  .topline { width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.4rem; }
   .logo { display: flex; align-items: center; gap: .6rem; font-size: 1.35rem; font-weight: 800; letter-spacing: .02em; }
   .logo svg { width: 34px; height: 34px; }
+  .lang-toggle {
+    background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.55);
+    border-radius: 8px; padding: .4rem .9rem; font: inherit; font-weight: 700; cursor: pointer;
+  }
+  .lang-toggle:hover { border-color: #fff; }
   h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); line-height: 1.2; max-width: 34ch; }
   .hero p.sub { max-width: 62ch; color: #d7e0f2; font-size: 1.06rem; }
   .cta { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: .6rem; }
@@ -63,78 +73,138 @@
 
 <header class="hero">
   <div class="wrap">
-    <div class="logo">
-      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3z" fill="#fff" opacity=".92"/>
-        <path d="M8.5 12.2l2.4 2.4 4.6-4.8" stroke="#1d2b45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-      </svg>
-      Permitra
+    <div class="topline">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3z" fill="#fff" opacity=".92"/>
+          <path d="M8.5 12.2l2.4 2.4 4.6-4.8" stroke="#1d2b45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        Permitra
+      </div>
+      <button class="lang-toggle" id="langToggle" type="button" aria-label="Sprache wechseln / switch language">
+        <span class="lang-de">EN</span><span class="lang-en">DE</span>
+      </button>
     </div>
-    <h1>Firewall-Regeln und ACI-Contracts zentral planen, prüfen und dokumentieren</h1>
+
+    <h1>
+      <span class="lang-de">Firewall-Regeln und ACI-Contracts zentral planen, prüfen und dokumentieren</span>
+      <span class="lang-en">Plan, review and document firewall rules and ACI contracts in one place</span>
+    </h1>
     <p class="sub">
-      Permitra ersetzt die Excel-Kommunikationsmatrix: Sicherheitsregeln entstehen in einem
-      nachvollziehbaren Workflow mit Review und Vier-Augen-Freigabe, werden gegen die
-      Zonen-Matrix geprüft und als fertige Konfiguration für Juniper SRX, Check Point und
-      Cisco ACI exportiert – Permitra ist die Quelle der Wahrheit für das Soll, geschrieben
-      wird weiterhin in den Management-Tools der Hersteller.
+      <span class="lang-de">
+        Permitra ersetzt die Excel-Kommunikationsmatrix: Sicherheitsregeln entstehen in einem
+        nachvollziehbaren Workflow mit Review und Vier-Augen-Freigabe, werden gegen die
+        Zonen-Matrix geprüft und als fertige Konfiguration für Juniper SRX, Check Point und
+        Cisco ACI exportiert – Permitra ist die Quelle der Wahrheit für das Soll, geschrieben
+        wird weiterhin in den Management-Tools der Hersteller.
+      </span>
+      <span class="lang-en">
+        Permitra replaces the Excel communication matrix: security rules are created in a
+        traceable workflow with review and four-eyes approval, validated against the zone
+        matrix, and exported as ready-to-apply configuration for Juniper SRX, Check Point and
+        Cisco ACI – Permitra is the source of truth for the intended state, while devices are
+        still configured through the vendors' management tools.
+      </span>
     </p>
     <div class="cta">
-      <a class="btn btn-primary" href="https://demo.permitra.de">Live-Demo ansehen</a>
-      <a class="btn btn-ghost" href="#features">Funktionen</a>
+      <a class="btn btn-primary" href="https://demo.permitra.de">
+        <span class="lang-de">Live-Demo ansehen</span><span class="lang-en">Open live demo</span>
+      </a>
+      <a class="btn btn-ghost" href="#features">
+        <span class="lang-de">Funktionen</span><span class="lang-en">Features</span>
+      </a>
     </div>
   </div>
 </header>
 
 <section id="about">
   <div class="wrap">
-    <h2>Was ist Permitra?</h2>
+    <h2><span class="lang-de">Was ist Permitra?</span><span class="lang-en">What is Permitra?</span></h2>
     <p class="lede">
-      Permitra ist ein <strong>Planungs- und Dokumentationswerkzeug</strong> für
-      Netzwerk-Sicherheitsregeln. Anträge werden hier gestellt, geprüft, freigegeben und
-      versioniert dokumentiert. Die Umsetzung erfolgt in den Werkzeugen der Hersteller
-      (Check Point SmartConsole, Juniper CLI, Cisco APIC) – Permitra erzeugt die passenden
-      Konfigurationen zum Übernehmen und macht per Soll-Ist-Abgleich sichtbar, wo
-      Dokumentation und tatsächliche Gerätekonfiguration auseinanderlaufen.
+      <span class="lang-de">
+        Permitra ist ein <strong>Planungs- und Dokumentationswerkzeug</strong> für
+        Netzwerk-Sicherheitsregeln. Anträge werden hier gestellt, geprüft, freigegeben und
+        versioniert dokumentiert. Die Umsetzung erfolgt in den Werkzeugen der Hersteller
+        (Check Point SmartConsole, Juniper CLI, Cisco APIC) – Permitra erzeugt die passenden
+        Konfigurationen zum Übernehmen und macht per Soll-Ist-Abgleich sichtbar, wo
+        Dokumentation und tatsächliche Gerätekonfiguration auseinanderlaufen.
+      </span>
+      <span class="lang-en">
+        Permitra is a <strong>planning and documentation tool</strong> for network security
+        rules. Requests are raised, reviewed, approved and documented with full version
+        history. Implementation still happens in the vendors' tools (Check Point SmartConsole,
+        Juniper CLI, Cisco APIC) – Permitra generates the matching configuration to apply and
+        its drift comparison shows where documentation and the actual device configuration
+        diverge.
+      </span>
     </p>
   </div>
 </section>
 
 <section class="alt" id="features">
   <div class="wrap">
-    <h2>Funktionen</h2>
+    <h2><span class="lang-de">Funktionen</span><span class="lang-en">Features</span></h2>
     <div class="grid">
       <div class="card">
-        <h3>Regel-Workflow mit Freigaben</h3>
-        <p>Eindeutige Rule-IDs, Entwurf → Review → Freigabe durch Change Approver,
-        Versionshistorie, Kommentare und Rezertifizierung ablaufender Regeln.</p>
+        <h3><span class="lang-de">Regel-Workflow mit Freigaben</span><span class="lang-en">Rule workflow with approvals</span></h3>
+        <p>
+          <span class="lang-de">Eindeutige Rule-IDs, Entwurf → Review → Freigabe durch Change Approver,
+          Versionshistorie, Kommentare und Rezertifizierung ablaufender Regeln.</span>
+          <span class="lang-en">Unique rule IDs, draft → review → approval by change approvers,
+          version history, comments and recertification of expiring rules.</span>
+        </p>
       </div>
       <div class="card">
-        <h3>Sicherheitszonen nach BSI</h3>
-        <p>Zonen-Kommunikationsmatrix (Allow/Block) mit P-A-P-Modell: Zonenübergänge
-        laufen immer über eine Firewall, ACI wirkt nur innerhalb einer Zone.
-        Matrix-Änderungen brauchen zwei Freigaben.</p>
+        <h3><span class="lang-de">Sicherheitszonen nach BSI</span><span class="lang-en">Security zones (BSI model)</span></h3>
+        <p>
+          <span class="lang-de">Zonen-Kommunikationsmatrix (Allow/Block) mit P-A-P-Modell: Zonenübergänge
+          laufen immer über eine Firewall, ACI wirkt nur innerhalb einer Zone.
+          Matrix-Änderungen brauchen zwei Freigaben.</span>
+          <span class="lang-en">Zone communication matrix (allow/block) with the P-A-P model: zone
+          transitions always cross a firewall, ACI only applies within a zone.
+          Matrix changes require two approvals.</span>
+        </p>
       </div>
       <div class="card">
-        <h3>Netzwerk-Registry</h3>
-        <p>Jedes Netz gehört zu genau einer Zone. Quell- und Ziel-Zonen einer Regel
-        werden automatisch aus den Adressen abgeleitet – Änderungen an der Zuordnung
-        durchlaufen den Freigabe-Workflow.</p>
+        <h3><span class="lang-de">Netzwerk-Registry</span><span class="lang-en">Network registry</span></h3>
+        <p>
+          <span class="lang-de">Jedes Netz gehört zu genau einer Zone. Quell- und Ziel-Zonen einer Regel
+          werden automatisch aus den Adressen abgeleitet – Änderungen an der Zuordnung
+          durchlaufen den Freigabe-Workflow.</span>
+          <span class="lang-en">Every network belongs to exactly one zone. Source and destination zones
+          of a rule are derived automatically from its addresses – mapping changes go through
+          the approval workflow.</span>
+        </p>
       </div>
       <div class="card">
-        <h3>Automatische Komponenten-Ermittlung</h3>
-        <p>Aus Quelle und Ziel ermittelt Permitra, auf welchen Firewall-Clustern oder
-        ACI-Fabrics eine Regel umzusetzen ist – inklusive Umsetzungsstatus für den Betrieb.</p>
+        <h3><span class="lang-de">Automatische Komponenten-Ermittlung</span><span class="lang-en">Automatic component resolution</span></h3>
+        <p>
+          <span class="lang-de">Aus Quelle und Ziel ermittelt Permitra, auf welchen Firewall-Clustern oder
+          ACI-Fabrics eine Regel umzusetzen ist – inklusive Umsetzungsstatus für den Betrieb.</span>
+          <span class="lang-en">From source and destination, Permitra determines on which firewall
+          clusters or ACI fabrics a rule must be implemented – including an implementation
+          status for operations.</span>
+        </p>
       </div>
       <div class="card">
-        <h3>Exporte für die Praxis</h3>
-        <p>Juniper-SRX-set-Kommandos, Check Point mgmt_cli und Management-API,
-        Cisco-ACI-Contracts (EPG-basiert, inkl. PBR Service Graphs), Host-Firewalls
-        (nftables, firewalld, iptables), CSV und JSON.</p>
+        <h3><span class="lang-de">Exporte für die Praxis</span><span class="lang-en">Practical exports</span></h3>
+        <p>
+          <span class="lang-de">Juniper-SRX-set-Kommandos, Check Point mgmt_cli und Management-API,
+          Cisco-ACI-Contracts (EPG-basiert, inkl. PBR Service Graphs), Host-Firewalls
+          (nftables, firewalld, iptables), CSV und JSON.</span>
+          <span class="lang-en">Juniper SRX set commands, Check Point mgmt_cli and Management API,
+          Cisco ACI contracts (EPG-based, incl. PBR service graphs), host firewalls
+          (nftables, firewalld, iptables), CSV and JSON.</span>
+        </p>
       </div>
       <div class="card">
-        <h3>Analyse &amp; Drift</h3>
-        <p>Adress-Suche und Pfad-Analyse über die Komponenten-Topologie, Konflikt-Warnungen,
-        Soll-Ist-Abgleich gegen hochgeladene Gerätekonfigurationen.</p>
+        <h3><span class="lang-de">Analyse &amp; Drift</span><span class="lang-en">Analysis &amp; drift</span></h3>
+        <p>
+          <span class="lang-de">Adress-Suche und Pfad-Analyse über die Komponenten-Topologie, Konflikt-Warnungen,
+          Soll-Ist-Abgleich gegen hochgeladene Gerätekonfigurationen.</span>
+          <span class="lang-en">Address search and path analysis across the component topology, conflict
+          warnings, and drift comparison against uploaded device configurations.</span>
+        </p>
       </div>
     </div>
   </div>
@@ -142,15 +212,28 @@
 
 <section id="demo">
   <div class="wrap">
-    <h2>Live-Demo</h2>
-    <p class="lede">Die öffentliche Demo läuft mit fiktiven Beispieldaten
-    (11 Zonen, rund 100 Regeln, 4 Sicherheitskomponenten) und wird jede Nacht zurückgesetzt.</p>
+    <h2><span class="lang-de">Live-Demo</span><span class="lang-en">Live demo</span></h2>
+    <p class="lede">
+      <span class="lang-de">Die öffentliche Demo läuft mit fiktiven Beispieldaten
+      (11 Zonen, rund 100 Regeln, 4 Sicherheitskomponenten) und wird jede Nacht zurückgesetzt.</span>
+      <span class="lang-en">The public demo runs on fictional sample data
+      (11 zones, around 100 rules, 4 security components) and is reset every night.</span>
+    </p>
     <div class="demo-box">
       <strong><a href="https://demo.permitra.de">demo.permitra.de</a></strong>
       <ul>
-        <li>Benutzer: <code>architekt</code>, <code>betrieb</code>, <code>approver</code>, <code>approver2</code>, <code>admin</code></li>
-        <li>Passwort jeweils: Benutzername + <code>123</code></li>
-        <li>Oberfläche auf Deutsch und Englisch (Umschalter in der Kopfzeile)</li>
+        <li>
+          <span class="lang-de">Benutzer:</span><span class="lang-en">Users:</span>
+          <code>architekt</code>, <code>betrieb</code>, <code>approver</code>, <code>approver2</code>, <code>admin</code>
+        </li>
+        <li>
+          <span class="lang-de">Passwort jeweils: Benutzername + <code>123</code></span>
+          <span class="lang-en">Password: username + <code>123</code></span>
+        </li>
+        <li>
+          <span class="lang-de">Oberfläche auf Deutsch und Englisch (Umschalter in der Kopfzeile)</span>
+          <span class="lang-en">Interface in German and English (toggle in the top bar)</span>
+        </li>
       </ul>
     </div>
   </div>
@@ -158,15 +241,18 @@
 
 <section class="alt" id="tech">
   <div class="wrap">
-    <h2>Technik</h2>
-    <p class="lede">Bewusst schlank gehalten und selbst zu hosten – ein Docker-Compose-Stack genügt.</p>
+    <h2><span class="lang-de">Technik</span><span class="lang-en">Technology</span></h2>
+    <p class="lede">
+      <span class="lang-de">Bewusst schlank gehalten und selbst zu hosten – ein Docker-Compose-Stack genügt.</span>
+      <span class="lang-en">Deliberately lean and self-hosted – a single Docker Compose stack is all it takes.</span>
+    </p>
     <div class="stack">
       <span class="pill">FastAPI</span>
       <span class="pill">SQLAlchemy + Alembic</span>
       <span class="pill">PostgreSQL</span>
       <span class="pill">React 18 + Vite</span>
       <span class="pill">Docker Compose</span>
-      <span class="pill">JWT / rollenbasierte Rechte</span>
+      <span class="pill"><span class="lang-de">JWT / rollenbasierte Rechte</span><span class="lang-en">JWT / role-based access</span></span>
     </div>
   </div>
 </section>
@@ -175,11 +261,20 @@
   <div class="wrap">
     <h2>Open Source</h2>
     <p class="lede">
-      Permitra ist Open Source unter der
-      <strong><a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a></strong> –
-      frei nutzbar, auch kommerziell, inklusive expliziter Patentklausel.
-      Der öffentliche Quellcode-Zugang und Beitragshinweise folgen an dieser Stelle
-      mit der ersten veröffentlichten Version.
+      <span class="lang-de">
+        Permitra ist Open Source unter der
+        <strong><a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a></strong> –
+        frei nutzbar, auch kommerziell, inklusive expliziter Patentklausel.
+        Der öffentliche Quellcode-Zugang und Beitragshinweise folgen an dieser Stelle
+        mit der ersten veröffentlichten Version.
+      </span>
+      <span class="lang-en">
+        Permitra is open source under the
+        <strong><a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License 2.0</a></strong> –
+        free to use, including commercially, with an explicit patent grant.
+        Public source code access and contribution guidelines will follow here with the
+        first published release.
+      </span>
     </p>
   </div>
 </section>
@@ -187,9 +282,42 @@
 <footer>
   <div class="wrap">
     <span>© 2026 Permitra</span>
-    <span><a href="https://demo.permitra.de">Demo</a> · <a href="#features">Funktionen</a></span>
+    <span>
+      <a href="https://demo.permitra.de">Demo</a> ·
+      <a href="#features"><span class="lang-de">Funktionen</span><span class="lang-en">Features</span></a>
+    </span>
   </div>
 </footer>
+
+<script>
+  (function () {
+    var META = {
+      de: {
+        title: 'Permitra – Zentrale Verwaltung von Sicherheitsregeln',
+        desc: 'Permitra ist ein Planungs- und Dokumentationswerkzeug für Firewall-Regeln und Cisco-ACI-Contracts: Review-Workflow, Zonen-Matrix nach BSI, Exporte für Juniper SRX, Check Point und ACI.'
+      },
+      en: {
+        title: 'Permitra – Central management of security rules',
+        desc: 'Permitra is a planning and documentation tool for firewall rules and Cisco ACI contracts: review workflow, BSI-style zone matrix, exports for Juniper SRX, Check Point and ACI.'
+      }
+    };
+    function apply(lang) {
+      document.body.classList.toggle('en', lang === 'en');
+      document.documentElement.lang = lang;
+      document.title = META[lang].title;
+      var m = document.querySelector('meta[name="description"]');
+      if (m) m.setAttribute('content', META[lang].desc);
+      try { localStorage.setItem('permitra_www_lang', lang); } catch (e) {}
+    }
+    var saved = null;
+    try { saved = localStorage.getItem('permitra_www_lang'); } catch (e) {}
+    var initial = saved || ((navigator.language || 'de').toLowerCase().indexOf('de') === 0 ? 'de' : 'en');
+    apply(initial);
+    document.getElementById('langToggle').addEventListener('click', function () {
+      apply(document.body.classList.contains('en') ? 'de' : 'en');
+    });
+  })();
+</script>
 
 </body>
 </html>
