@@ -99,11 +99,17 @@ input, select, textarea {
   border: 1px solid var(--border); border-radius: 6px; background: #fff;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid #b9ccff; border-color: var(--primary); }
+/* Kein display:flex auf fieldset: Safari rendert die legend sonst verschoben
+   in die Rahmenlinie. Die legend wird per float zum normalen Block-Element,
+   Abstände zwischen den Kindern kommen über Margins statt flex-gap. */
 fieldset {
   border: 1px solid var(--border); border-radius: 8px; background: var(--panel);
-  margin: 0 0 1rem; padding: 1rem; display: flex; flex-direction: column; gap: .8rem;
+  margin: 0 0 1rem; padding: 1rem; min-width: 0;
 }
-legend { font-weight: 700; padding: 0 .4rem; }
+legend { float: left; width: 100%; font-weight: 700; padding: 0; margin: 0 0 .8rem; }
+fieldset > * { clear: both; }
+fieldset > * + * { margin-top: .8rem; }
+fieldset > legend + * { margin-top: 0; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8rem; }
 .rule-form { max-width: 950px; }
