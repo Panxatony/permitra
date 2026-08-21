@@ -160,10 +160,10 @@ def seed(wipe: bool):
             db.query(model).delete()
         db.commit()
 
-    # Umgebungen/VRFs: IT (Default) und OT – gleiche Firewalls, überlappende Netze möglich
-    vrf_it = Vrf(name="IT", description="IT-Umgebung (Default)")
-    vrf_ot = Vrf(name="OT", description="OT-Umgebung (Produktionsnetz) – überlappende IP-Bereiche mit IT")
-    db.add_all([vrf_it, vrf_ot])
+    # Vorerst eine Umgebung; das Multi-Umgebungs-/VRF-Scoping bleibt vorbereitet
+    # (zweite Umgebung, z.B. OT, kann später über /api/vrfs ergänzt werden)
+    vrf_it = Vrf(name="IT", description="Default-Umgebung")
+    db.add(vrf_it)
     db.flush()
 
     # Objektkatalog: wiederverwendbare Adress- und Dienst-Objekte
@@ -450,30 +450,6 @@ def seed(wipe: bool):
     db.flush()
     db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
                        change_note="Demo-Regel angelegt", changed_by="demo-seed"))
-
-    # OT-Umgebung: GLEICHE IP-Bereiche wie IT (überlappend), eigene Zuordnungen und Regel
-    for cidr, zone_name in (("10.10.20.0/24", "VPN"), ("10.10.80.0/24", "MGMT")):
-        db.add(ZoneNetwork(cidr=cidr, zone_id=zones[zone_name].id, vrf_id=vrf_ot.id,
-                           description=f"OT {zone_name} (überlappt mit IT)"))
-        db.add(AddressComponentMap(ip=cidr, alias=f"OT-{zone_name}", vrf_id=vrf_ot.id,
-                                   component_ids=[fw_ffm.id], created_by="demo-seed"))
-    ot_rule = Rule(
-        rule_id="SR0104", vrf_id=vrf_ot.id, name="OT-Leitstand-Zugriff", application="OT/SCADA",
-        components=[fw_ffm],
-        source_zone="VPN", destination_zone="MGMT",
-        source=[{"ip": "10.10.20.15", "alias": "ot-wartung01"}],
-        destination=[{"ip": "10.10.80.10", "alias": "ot-leitstand01"}],
-        services=[{"protocol": "TCP", "port": "22"}], action=RuleAction.permit,
-        justification="OT-Umgebung: Wartungszugriff auf den Leitstand – gleiche IPs wie IT, "
-                      "aber eigener VRF und Umsetzung auf FW-Cluster-FFM",
-        business_context="OT", requestor="Max Bauer", owner="mbauer",
-        change_id="CHN2027010", status=RuleStatus.approved,
-        impl_status={"FW-Cluster-FFM": "umgesetzt"}, created_by="demo-seed",
-    )
-    db.add(ot_rule)
-    db.flush()
-    db.add(RuleVersion(rule_pk=ot_rule.id, version=1, snapshot={"seed": "demo"},
-                       change_note="Demo-Regel angelegt (OT)", changed_by="demo-seed"))
 
     db.commit()
     rules_count = db.query(Rule).count()
