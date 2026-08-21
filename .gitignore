@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+securewall.db
+node_modules/
+frontend/dist/
+.env
+.pytest_cache/
+data/
+backups/
+.env

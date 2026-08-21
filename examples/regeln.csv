@@ -1,0 +1,3 @@
+Rule-ID;Application;Sicherheitselement;Komponenten;Source SZ;Quelle/Quellsystem;Destination-SZ;Ziel/Zielsystem;Protokoll;Port;Anlass;Requestor;Bearbeiter;Umsetzungsstatus;Status;Change-ID;Letzte Änderung;Info;Fachlicher Bezug
+SR0001;Backup;Check Point;FW-Cluster-FFM;MON;log03.demo.local (10.10.90.38);PROD-APP;app08.demo.local (10.10.30.71) | svc11.demo.local (10.10.30.31) | svc63.demo.local (10.10.30.218);TCP;443;Zugriff Backup auf PROD-APP;Julia Klein;jweber;FW-Cluster-FFM: neu;approved;CHN2026001;2026-08-20;;Deployment
+SR0101;Portal;Juniper;FW-Cluster-BER;VPN;NET-VPN (10.10.20.0/24);MGMT;jump01.demo.local (10.10.80.10);TCP;22;Demo: absichtlich überlappende Regel für Konflikt-Warnung;Max Bauer;mbauer;FW-Cluster-BER: umgesetzt;approved;CHN2026999;2026-08-20;;

@@ -1,0 +1,104 @@
+[
+  {
+    "rule_id": "SR0001",
+    "name": "Backup-PROD-APP-001",
+    "application": "Backup",
+    "components": [
+      "FW-Cluster-FFM"
+    ],
+    "platforms": [
+      "checkpoint"
+    ],
+    "source_zone": "MON",
+    "destination_zone": "PROD-APP",
+    "source": [
+      {
+        "ip": "10.10.90.38",
+        "alias": "log03.demo.local"
+      }
+    ],
+    "destination": [
+      {
+        "ip": "10.10.30.71",
+        "alias": "app08.demo.local"
+      },
+      {
+        "ip": "10.10.30.31",
+        "alias": "svc11.demo.local"
+      },
+      {
+        "ip": "10.10.30.218",
+        "alias": "svc63.demo.local"
+      }
+    ],
+    "services": [
+      {
+        "protocol": "TCP",
+        "port": "443"
+      }
+    ],
+    "action": "permit",
+    "status": "approved",
+    "impl_status": {
+      "FW-Cluster-FFM": "neu"
+    },
+    "description": "Freischaltung für Backup",
+    "justification": "Zugriff Backup auf PROD-APP",
+    "business_context": "Deployment",
+    "info": "",
+    "requestor": "Julia Klein",
+    "owner": "jweber",
+    "change_id": "CHN2026001",
+    "valid_from": "2026-07-23",
+    "valid_until": null,
+    "version": 1,
+    "updated_at": "2026-08-20T21:45:53.300947+00:00"
+  },
+  {
+    "rule_id": "SR0101",
+    "name": "Konflikt-Demo-SR0101",
+    "application": "Portal",
+    "components": [
+      "FW-Cluster-BER"
+    ],
+    "platforms": [
+      "juniper"
+    ],
+    "source_zone": "VPN",
+    "destination_zone": "MGMT",
+    "source": [
+      {
+        "ip": "10.10.20.0/24",
+        "alias": "NET-VPN"
+      }
+    ],
+    "destination": [
+      {
+        "ip": "10.10.80.10",
+        "alias": "jump01.demo.local"
+      }
+    ],
+    "services": [
+      {
+        "protocol": "TCP",
+        "port": "22"
+      }
+    ],
+    "action": "permit",
+    "status": "approved",
+    "impl_status": {
+      "FW-Cluster-BER": "umgesetzt"
+    },
+    "description": "",
+    "justification": "Demo: absichtlich überlappende Regel für Konflikt-Warnung",
+    "business_context": "",
+    "info": "",
+    "requestor": "Max Bauer",
+    "owner": "mbauer",
+    "change_id": "CHN2026999",
+    "valid_from": null,
+    "valid_until": null,
+    "version": 1,
+    "updated_at": "2026-08-20T21:45:53.616976+00:00"
+  }
+]

@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: permitra
+      POSTGRES_USER: permitra
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-permitra}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U permitra"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://permitra:${DB_PASSWORD:-permitra}@db:5432/permitra
+      SECRET_KEY: ${SECRET_KEY:-please-change-me-in-production}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Für den Excel-Import: das data-Verzeichnis in den Container mounten
+    volumes:
+      - ./data:/data:ro
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

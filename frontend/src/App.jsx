@@ -1,0 +1,104 @@
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { api, clearSession, getUser, getVrfName, setVrfName } from './api'
+import { useLang } from './i18n'
+import Components from './pages/Components'
+import Dashboard from './pages/Dashboard'
+import Gateways from './pages/Gateways'
+import Networks from './pages/Networks'
+import ObjectCatalog from './pages/ObjectCatalog'
+import Recertification from './pages/Recertification'
+import ExportPage from './pages/ExportPage'
+import Login from './pages/Login'
+import RuleDetail from './pages/RuleDetail'
+import RuleForm from './pages/RuleForm'
+import RuleList from './pages/RuleList'
+import Search from './pages/Search'
+import ZoneMatrix from './pages/ZoneMatrix'
+
+const ROLE_LABELS = { architect: 'Architekt', operations: 'Betrieb', change_approver: 'Change Approver', admin: 'Administrator' }
+
+function Layout({ children }) {
+  const user = getUser()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { lang, t, toggle } = useLang()
+  const [vrfs, setVrfs] = useState([])
+  useEffect(() => {
+    api.vrfs().then(setVrfs).catch(() => setVrfs([]))
+  }, [])
+  const currentVrf = getVrfName() || (vrfs[0]?.name ?? '')
+  const switchVrf = (name) => {
+    setVrfName(name)
+    window.location.reload()  // alle Ansichten im neuen Umgebungs-Kontext laden
+  }
+  if (!user) return <Navigate to="/login" state={{ from: location }} />
+
+  const logout = () => {
+    clearSession()
+    navigate('/login')
+  }
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="topbar-row">
+          <Link to="/" className="brand">🛡️ Permitra</Link>
+          <div className="userbox">
+            {vrfs.length > 1 && (
+              <label className="vrf-select" title="Umgebung/VRF – getrennte Welten mit ggf. überlappenden IP-Bereichen (z.B. IT und OT)">
+                <span className="muted-light">{t('Umgebung')}:</span>
+                <select value={currentVrf} onChange={(e) => switchVrf(e.target.value)}>
+                  {vrfs.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
+                </select>
+              </label>
+            )}
+            <span>{user.full_name || user.username}</span>
+            <span className={`badge role-${user.role}`}>{t(ROLE_LABELS[user.role])}</span>
+            <button className="btn btn-topbar btn-lang" onClick={toggle}
+              title={lang === 'de' ? 'Switch to English' : 'Auf Deutsch umstellen'}>
+              {lang === 'de' ? 'EN' : 'DE'}
+            </button>
+            <button className="btn btn-topbar" onClick={logout}>{t('Abmelden')}</button>
+          </div>
+        </div>
+        <nav>
+          <Link to="/">{t('Dashboard')}</Link>
+          <Link to="/rules">{t('Regeln')}</Link>
+          {(user.role === 'architect' || user.role === 'admin') && <Link to="/rules/new">{t('Neue Regel')}</Link>}
+          <Link to="/search">{t('Analyse')}</Link>
+          <Link to="/recertification">{t('Rezertifizierung')}</Link>
+          <Link to="/zones">{t('Sicherheitszonen')}</Link>
+          <Link to="/networks">{t('Netzwerke')}</Link>
+          <Link to="/components">{t('Komponenten')}</Link>
+          <Link to="/gateways">{t('ACI Gateways')}</Link>
+          <Link to="/objects">{t('Objekte')}</Link>
+          <Link to="/export">{t('Export')}</Link>
+        </nav>
+      </header>
+      <main>{children}</main>
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/" element={<Layout><Dashboard /></Layout>} />
+      <Route path="/rules" element={<Layout><RuleList /></Layout>} />
+      <Route path="/recertification" element={<Layout><Recertification /></Layout>} />
+      <Route path="/rules/new" element={<Layout><RuleForm /></Layout>} />
+      <Route path="/rules/:id" element={<Layout><RuleDetail /></Layout>} />
+      <Route path="/rules/:id/edit" element={<Layout><RuleForm /></Layout>} />
+      <Route path="/search" element={<Layout><Search /></Layout>} />
+      <Route path="/path" element={<Navigate to="/search" replace />} />
+      <Route path="/zones" element={<Layout><ZoneMatrix /></Layout>} />
+      <Route path="/networks" element={<Layout><Networks /></Layout>} />
+      <Route path="/components" element={<Layout><Components /></Layout>} />
+      <Route path="/gateways" element={<Layout><Gateways /></Layout>} />
+      <Route path="/objects" element={<Layout><ObjectCatalog /></Layout>} />
+      <Route path="/export" element={<Layout><ExportPage /></Layout>} />
+    </Routes>
+  )
+}

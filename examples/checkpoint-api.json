@@ -1,0 +1,52 @@
+{
+  "objects": [
+    {
+      "type": "host",
+      "name": "log03.demo.local",
+      "ip-address": "10.10.90.38"
+    },
+    {
+      "type": "host",
+      "name": "app08.demo.local",
+      "ip-address": "10.10.30.71"
+    },
+    {
+      "type": "host",
+      "name": "svc11.demo.local",
+      "ip-address": "10.10.30.31"
+    },
+    {
+      "type": "host",
+      "name": "svc63.demo.local",
+      "ip-address": "10.10.30.218"
+    },
+    {
+      "type": "service-tcp",
+      "name": "tcp_443",
+      "port": "443"
+    }
+  ],
+  "access-rules": [
+    {
+      "layer": "Network",
+      "position": "top",
+      "name": "SR0001 Backup-PROD-APP-001",
+      "source": [
+        "log03.demo.local"
+      ],
+      "destination": [
+        "app08.demo.local",
+        "svc11.demo.local",
+        "svc63.demo.local"
+      ],
+      "service": [
+        "tcp_443"
+      ],
+      "action": "Accept",
+      "track": {
+        "type": "Log"
+      },
+      "comments": "SR0001 | CHN2026001 | Zugriff Backup auf PROD-APP"
+    }
+  ]
+}

@@ -1,0 +1,144 @@
+# Permitra – Kubernetes-Manifeste (Namespace, DB, Backend, Frontend, Ingress)
+# Voraussetzung: Images sind in eine Registry gepusht (REGISTRY anpassen).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: permitra
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: permitra-secrets
+  namespace: permitra
+type: Opaque
+stringData:
+  DB_PASSWORD: "change-me"
+  SECRET_KEY: "change-me-long-random-string"
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: db
+  namespace: permitra
+spec:
+  serviceName: db
+  replicas: 1
+  selector:
+    matchLabels: { app: db }
+  template:
+    metadata:
+      labels: { app: db }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_DB
+              value: permitra
+            - name: POSTGRES_USER
+              value: permitra
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: permitra-secrets, key: DB_PASSWORD } }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata: { name: pgdata }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: 5Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: permitra
+spec:
+  selector: { app: db }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: permitra
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      containers:
+        - name: backend
+          image: REGISTRY/permitra-backend:latest
+          env:
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: permitra-secrets, key: DB_PASSWORD } }
+            - name: DATABASE_URL
+              value: postgresql+psycopg2://permitra:$(DB_PASSWORD)@db:5432/permitra
+            - name: SECRET_KEY
+              valueFrom: { secretKeyRef: { name: permitra-secrets, key: SECRET_KEY } }
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            httpGet: { path: /api/health, port: 8000 }
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: permitra
+spec:
+  selector: { app: backend }
+  ports: [{ port: 8000 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: permitra
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: REGISTRY/permitra-frontend:latest
+          ports: [{ containerPort: 80 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: permitra
+spec:
+  selector: { app: frontend }
+  ports: [{ port: 80 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: permitra
+  namespace: permitra
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  rules:
+    - host: permitra.example.internal
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: backend, port: { number: 8000 } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { number: 80 } }
