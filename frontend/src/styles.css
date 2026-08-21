@@ -92,6 +92,9 @@ code { background: #eef1f6; padding: .1em .35em; border-radius: 4px; font-size: 
 
 /* Forms */
 label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; font-weight: 600; }
+/* In Grid-Zeilen sitzen alle Eingabefelder auf einer Linie, auch wenn die
+   Beschriftung daneben zwei Zeilen hat (z.B. "Rule-ID (wird automatisch vergeben)") */
+label:not(.inline):not(.checkbox) > *:last-child { margin-top: auto; }
 label.inline { flex-direction: row; align-items: center; gap: .5rem; }
 label.checkbox { flex-direction: row; align-items: center; gap: .35rem; font-weight: 400; }
 input, select, textarea {
