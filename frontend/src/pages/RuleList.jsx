@@ -37,11 +37,16 @@ export default function RuleList() {
     load(filters, p)
   }
 
+  // Filter folgt der URL: Navigation auf /rules (ohne Parameter) setzt den
+  // Status-Filter zurück, /rules?status=… (z.B. vom Dashboard) setzt ihn.
   useEffect(() => {
-    load()
+    const next = { ...EMPTY_FILTERS, status: searchParams.get('status') || '' }
+    setFilters(next)
+    setPage(0)
+    load(next, 0)
     api.components().then(setComponents).catch(() => setComponents([]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchParams])
 
   const set = (key) => (e) => setFilters({ ...filters, [key]: e.target.value })
   const submit = (e) => {
