@@ -190,6 +190,7 @@ def list_rules(
     port: str | None = None,
     protocol: str | None = None,
     rule_status: RuleStatus | None = Query(None, alias="status"),
+    impl: str | None = Query(None, description="'pending' = freigegebene Regeln mit offener Umsetzung"),
     application: str | None = None,
     platform: str | None = None,
     component: str | None = Query(None, description="Name (Teilstring) einer Komponente"),
@@ -251,7 +252,18 @@ def list_rules(
             r for r in rules
             if any(component.lower() in c.name.lower() for c in r.components)
         ]
+    if impl == "pending":
+        rules = [r for r in rules if impl_pending(r)]
     return RuleListOut(total=len(rules), items=rules[offset:offset + limit])
+
+
+def impl_pending(rule: Rule) -> bool:
+    """Freigegebene Regel, die auf mindestens einer Komponente noch umzusetzen ist
+    (Umsetzungsstatus fehlt, "offen", "neu" oder "zu ändern")."""
+    if rule.status != RuleStatus.approved or not rule.components:
+        return False
+    impl = rule.impl_status or {}
+    return any(impl.get(c.name) not in ("umgesetzt", "deaktiviert") for c in rule.components)
 
 
 def _match_address_field(entries: list, query: str, net) -> tuple[list[str], str | None]:
@@ -614,7 +626,9 @@ def update_rule(
     enforce_zone_matrix(
         db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
     )
-    data = payload.model_dump(exclude={"change_note", "component_ids", "vrf"})
+    # impl_status pflegt der Betrieb über den eigenen Endpunkt – ein Edit darf ihn
+    # nicht zurücksetzen (die Freigabe setzt umgesetzte Komponenten auf "zu ändern")
+    data = payload.model_dump(exclude={"change_note", "component_ids", "vrf", "impl_status"})
     data["services"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in payload.services]
     for key, value in data.items():
         setattr(rule, key, value)
@@ -665,6 +679,14 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     if new_status in (RuleStatus.approved, RuleStatus.rejected) and rule.status != RuleStatus.in_review:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Regel ist nicht im Review")
     rule.status = new_status
+    if new_status == RuleStatus.approved:
+        # Bereits umgesetzte Komponenten müssen nach einer erneuten Freigabe vom
+        # Betrieb angepasst werden -> Umsetzungsstatus "zu ändern"
+        impl = dict(rule.impl_status or {})
+        for c in rule.components:
+            if impl.get(c.name) == "umgesetzt":
+                impl[c.name] = "zu ändern"
+        rule.impl_status = impl
     rule.version += 1
     add_version(db, rule, user, note)
     if decision.comment:

@@ -43,10 +43,17 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         for c in db.query(SecurityComponent).order_by(SecurityComponent.name).all()
     ]
 
+    # Umzusetzende Regeln: freigegeben, aber auf mind. einer Komponente noch offen
+    from .rules_router import impl_pending
+
+    approved_rules = db.query(Rule).filter(Rule.status == RuleStatus.approved).all()
+    to_implement = sum(1 for r in approved_rules if impl_pending(r))
+
     return {
         "rules_total": db.query(Rule).count(),
         "by_status": {s.value: status_counts.get(s, 0) for s in RuleStatus},
         "open_reviews": status_counts.get(RuleStatus.in_review, 0),
+        "to_implement": to_implement,
         "expired": len(expired),
         "expiring_30d": len(expiring),
         "zones": db.query(Zone).count(),

@@ -4,7 +4,7 @@ import { api, getUser } from '../api'
 import { AddressList, ComponentBadges, Highlighted, ServiceList, StatusBadge } from '../components/shared'
 import { useLang } from '../i18n'
 
-const IMPL_OPTIONS = ['offen', 'neu', 'umgesetzt', 'deaktiviert']
+const IMPL_OPTIONS = ['offen', 'neu', 'zu ändern', 'umgesetzt', 'deaktiviert']
 
 export default function RuleDetail() {
   const { id } = useParams()

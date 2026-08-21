@@ -82,6 +82,8 @@ export default function Dashboard() {
         <Tile value={data.rules_total} label={t('Regeln gesamt')} to="/rules" />
         <Tile value={data.open_reviews} label={t('Offene Reviews')} to="/rules?status=in_review"
           tone={data.open_reviews ? 'tone-warn' : ''} />
+        <Tile value={data.to_implement} label={t('Umzusetzen')} to="/rules?impl=pending"
+          tone={data.to_implement ? 'tone-warn' : 'tone-good'} />
         <Tile value={data.expired} label={t('Abgelaufen')} to="/recertification"
           tone={data.expired ? 'tone-bad' : 'tone-good'} />
         <Tile value={data.expiring_30d} label={t('Läuft in 30 Tagen ab')} to="/recertification"

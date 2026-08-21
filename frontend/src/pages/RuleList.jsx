@@ -4,7 +4,7 @@ import { api } from '../api'
 import { AddressList, ComponentBadges, ServiceList, STATUS_LABELS, StatusBadge } from '../components/shared'
 import { useLang } from '../i18n'
 
-const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: '', status: '', component: '' }
+const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: '', status: '', component: '', impl: '' }
 
 export default function RuleList() {
   const PAGE_SIZE = 50
@@ -14,7 +14,11 @@ export default function RuleList() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(0)
   const [components, setComponents] = useState([])
-  const [filters, setFilters] = useState({ ...EMPTY_FILTERS, status: searchParams.get('status') || '' })
+  const [filters, setFilters] = useState({
+    ...EMPTY_FILTERS,
+    status: searchParams.get('status') || '',
+    impl: searchParams.get('impl') || '',
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -40,7 +44,11 @@ export default function RuleList() {
   // Filter folgt der URL: Navigation auf /rules (ohne Parameter) setzt den
   // Status-Filter zurück, /rules?status=… (z.B. vom Dashboard) setzt ihn.
   useEffect(() => {
-    const next = { ...EMPTY_FILTERS, status: searchParams.get('status') || '' }
+    const next = {
+      ...EMPTY_FILTERS,
+      status: searchParams.get('status') || '',
+      impl: searchParams.get('impl') || '',
+    }
     setFilters(next)
     setPage(0)
     load(next, 0)
@@ -81,6 +89,10 @@ export default function RuleList() {
         <select value={filters.status} onChange={set('status')}>
           <option value="">{t('Status')}</option>
           {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
+        </select>
+        <select value={filters.impl} onChange={set('impl')}>
+          <option value="">{t('Umsetzung')}</option>
+          <option value="pending">{t('Umzusetzen (offen / zu ändern)')}</option>
         </select>
         <select value={filters.component} onChange={set('component')}>
           <option value="">{t('Komponente')}</option>

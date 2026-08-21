@@ -202,6 +202,9 @@ const EN = {
   'CIDR- und Zonen-Änderungen werden als Antrag eingereicht (zwei Freigaben); Beschreibungs-Änderungen wirken sofort.':
     'CIDR and zone changes are submitted as a request (two approvals); description changes take effect immediately.',
   'Zuordnung beantragen': 'Request mapping',
+  'Umzusetzen': 'To implement',
+  'Umsetzung': 'Implementation',
+  'Umzusetzen (offen / zu ändern)': 'To implement (open / to change)',
   'Unbekanntes Netz:': 'Unknown network:',
   'ist keinem bekannten Netzwerk zugeordnet. Bitte das Netzwerk zuerst auf der Seite':
     'does not belong to any known network. Please first add the network on the',
