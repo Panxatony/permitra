@@ -66,38 +66,39 @@ def update_network(
     network_id: int,
     payload: dict,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect)),
+    user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    """Netzwerk einer anderen Zone zuordnen bzw. Beschreibung ändern."""
+    """Netzwerk-Zuordnung ändern. Beschreibungs-Änderungen wirken sofort;
+    CIDR-/Zonen-Änderungen sind sicherheitsrelevant und laufen als Antrag über
+    den Freigabe-Workflow (zwei Change Approver)."""
     network = db.query(ZoneNetwork).get(network_id)
     if not network:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Netzwerk-Zuordnung nicht gefunden")
-    if payload.get("cidr"):
-        from ..component_resolution import normalize_ip
+    from ..component_resolution import normalize_ip
 
-        norm = normalize_ip(payload["cidr"])
-        if norm is None:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                                f"'{payload['cidr']}' ist kein gültiges Netz (CIDR) und nicht 'any'")
-        duplicate = (
-            db.query(ZoneNetwork)
-            .filter(ZoneNetwork.cidr == norm, ZoneNetwork.vrf_id == network.vrf_id,
-                    ZoneNetwork.id != network_id)
-            .first()
-        )
-        if duplicate:
-            raise HTTPException(status.HTTP_409_CONFLICT,
-                                f"{norm} ist bereits der Zone '{duplicate.zone.name}' zugeordnet")
-        network.cidr = norm
-    if payload.get("zone"):
-        zone = find_zone(db, payload["zone"])
-        if not zone:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{payload['zone']}' nicht gefunden")
-        network.zone_id = zone.id
-    if "description" in payload:
+    new_cidr = normalize_ip(payload["cidr"]) if payload.get("cidr") else network.cidr
+    if new_cidr is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            f"'{payload['cidr']}' ist kein gültiges Netz (CIDR) und nicht 'any'")
+    new_zone = (payload.get("zone") or network.zone.name).strip()
+    needs_approval = (new_cidr != network.cidr
+                      or new_zone.upper() != network.zone.name.upper())
+
+    result = None
+    if needs_approval:
+        result = _create_batch(db, user, [{
+            "type": "net_update", "network_id": network.id,
+            "cidr": new_cidr, "zone": new_zone,
+        }], payload.get("comment", ""))
+    if "description" in payload and payload["description"] != network.description:
         network.description = payload["description"]
-    db.commit()
-    return {"id": network.id, "cidr": network.cidr, "zone": network.zone.name}
+        db.commit()
+        if not result:
+            result = {"status": "applied", "id": network.id,
+                      "detail": "Beschreibung aktualisiert"}
+    if not result:
+        result = {"status": "unchanged", "id": network.id, "detail": "Keine Änderung"}
+    return result
 
 
 @router.post("/{name}/networks", status_code=201)
@@ -105,46 +106,26 @@ def add_zone_network(
     name: str,
     payload: dict,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect)),
+    user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    """Netzwerk einer Zone zuordnen (jedes Netzwerk gehört zu genau einer Zone)."""
-    from ..component_resolution import normalize_ip
-
-    zone = find_zone(db, name)
-    if not zone:
+    """Netzwerk einer Zone zuordnen – läuft als Antrag über den
+    Freigabe-Workflow (zwei Change Approver), wie alle Zonen-Änderungen."""
+    if not find_zone(db, name):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Zone nicht gefunden")
-    from ..vrf import get_vrf
-
-    norm = normalize_ip(payload.get("cidr", ""))
-    if norm is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            f"'{payload.get('cidr')}' ist kein gültiges Netz (CIDR) und nicht 'any'")
-    vrf = get_vrf(db, payload.get("vrf") or None)
-    existing = db.query(ZoneNetwork).filter(ZoneNetwork.cidr == norm,
-                                            ZoneNetwork.vrf_id == vrf.id).first()
-    if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT,
-                            f"{norm} ist in Umgebung '{vrf.name}' bereits der Zone "
-                            f"'{existing.zone.name}' zugeordnet")
-    network = ZoneNetwork(cidr=norm, zone_id=zone.id, vrf_id=vrf.id,
-                          description=payload.get("description", ""),
-                          source=payload.get("source", "manual"))
-    db.add(network)
-    db.commit()
-    return {"id": network.id, "cidr": network.cidr, "zone": zone.name}
+    return _create_batch(db, user, [{
+        "type": "net_add", "zone": name, "cidr": payload.get("cidr", ""),
+        "description": payload.get("description", ""), "vrf": payload.get("vrf") or None,
+    }], payload.get("comment", ""))
 
 
-@router.delete("/networks/{network_id}", status_code=204)
+@router.delete("/networks/{network_id}")
 def delete_zone_network(
     network_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect)),
+    user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    network = db.query(ZoneNetwork).get(network_id)
-    if not network:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Netzwerk-Zuordnung nicht gefunden")
-    db.delete(network)
-    db.commit()
+    """Netzwerk-Zuordnung entfernen – läuft als Antrag über den Freigabe-Workflow."""
+    return _create_batch(db, user, [{"type": "net_delete", "network_id": network_id}], "")
 
 
 @router.put("/{name}/components")
@@ -291,11 +272,31 @@ def matrix(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     )
 
 
+def _pending_net_conflict(db: Session, cidr: str, network_id: int | None = None):
+    """Wartet für dieses CIDR bzw. diese Zuordnung bereits ein Antrag auf Freigabe?"""
+    pending = (
+        db.query(ZonePolicyChange)
+        .filter(ZonePolicyChange.change_type.in_(("net_add", "net_update", "net_delete")),
+                ZonePolicyChange.status == "pending")
+        .all()
+    )
+    for c in pending:
+        if c.to_zone == cidr:
+            return c
+        if network_id and (c.extra or {}).get("network_id") == network_id:
+            return c
+    return None
+
+
 def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> dict:
     """Legt einen Sammelantrag an. items:
-    {"type": "policy", "from_zone", "to_zone", "policy", "temporary"} oder
-    {"type": "zone_create", "name", "pap_level", "description"}."""
+    {"type": "policy", "from_zone", "to_zone", "policy", "temporary"},
+    {"type": "zone_create", "name", "pap_level", "description"} oder
+    {"type": "net_add"|"net_update"|"net_delete", ...} (Netzwerk-Zuordnungen)."""
     import uuid
+
+    from ..component_resolution import normalize_ip
+    from ..vrf import get_vrf
 
     if not items:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Keine Änderungen enthalten")
@@ -318,6 +319,73 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                 batch_id=batch_id, change_type="zone_create",
                 from_zone=name, to_zone="", old_policy=None, new_policy=level,
                 requested_by=user.username, comment=item.get("description", ""),
+            ))
+            continue
+        if item.get("type") == "net_add":
+            norm = normalize_ip(item.get("cidr") or "")
+            if norm is None:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                    f"'{item.get('cidr')}' ist kein gültiges Netz (CIDR) und nicht 'any'")
+            zone_name = (item.get("zone") or "").strip()
+            if not find_zone(db, zone_name) and zone_name.upper() not in new_zone_names:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{zone_name}' nicht gefunden")
+            vrf = get_vrf(db, item.get("vrf") or None)
+            existing = db.query(ZoneNetwork).filter(ZoneNetwork.cidr == norm,
+                                                    ZoneNetwork.vrf_id == vrf.id).first()
+            if existing:
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    f"{norm} ist in Umgebung '{vrf.name}' bereits der Zone "
+                                    f"'{existing.zone.name}' zugeordnet")
+            if _pending_net_conflict(db, norm):
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    f"Für {norm} wartet bereits ein Antrag auf Freigabe")
+            rows.append(ZonePolicyChange(
+                batch_id=batch_id, change_type="net_add",
+                from_zone=zone_name, to_zone=norm, old_policy=None, new_policy="add",
+                requested_by=user.username, comment=comment,
+                extra={"vrf": vrf.name, "description": item.get("description", "")},
+            ))
+            continue
+        if item.get("type") in ("net_update", "net_delete"):
+            network = db.query(ZoneNetwork).get(item.get("network_id") or 0)
+            if not network:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Netzwerk-Zuordnung nicht gefunden")
+            if _pending_net_conflict(db, network.cidr, network.id):
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    f"Für {network.cidr} wartet bereits ein Antrag auf Freigabe")
+            if item["type"] == "net_delete":
+                rows.append(ZonePolicyChange(
+                    batch_id=batch_id, change_type="net_delete",
+                    from_zone=network.zone.name, to_zone=network.cidr,
+                    old_policy=None, new_policy="delete",
+                    requested_by=user.username, comment=comment,
+                    extra={"network_id": network.id, "vrf": network.vrf.name if network.vrf else ""},
+                ))
+                continue
+            new_cidr = network.cidr
+            if item.get("cidr"):
+                norm = normalize_ip(item["cidr"])
+                if norm is None:
+                    raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                        f"'{item['cidr']}' ist kein gültiges Netz (CIDR) und nicht 'any'")
+                duplicate = db.query(ZoneNetwork).filter(
+                    ZoneNetwork.cidr == norm, ZoneNetwork.vrf_id == network.vrf_id,
+                    ZoneNetwork.id != network.id).first()
+                if duplicate:
+                    raise HTTPException(status.HTTP_409_CONFLICT,
+                                        f"{norm} ist bereits der Zone '{duplicate.zone.name}' zugeordnet")
+                new_cidr = norm
+            new_zone_name = (item.get("zone") or network.zone.name).strip()
+            if not find_zone(db, new_zone_name) and new_zone_name.upper() not in new_zone_names:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{new_zone_name}' nicht gefunden")
+            if new_cidr == network.cidr and new_zone_name.upper() == network.zone.name.upper():
+                continue  # keine sicherheitsrelevante Änderung
+            rows.append(ZonePolicyChange(
+                batch_id=batch_id, change_type="net_update",
+                from_zone=new_zone_name, to_zone=new_cidr, old_policy=None, new_policy="update",
+                requested_by=user.username, comment=comment,
+                extra={"network_id": network.id, "old_cidr": network.cidr,
+                       "old_zone": network.zone.name},
             ))
             continue
         # Matrix-Zelle
@@ -362,7 +430,7 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
     db.add_all(rows)
     db.commit()
     return {"status": "pending", "batch_id": batch_id, "items": len(rows),
-            "detail": f"{len(rows)} Änderung(en) beantragt – warten auf Freigabe durch den Betrieb"}
+            "detail": f"{len(rows)} Änderung(en) beantragt – warten auf Freigabe durch zwei Change Approver"}
 
 
 @router.post("/matrix/changes")
@@ -412,6 +480,7 @@ def list_changes(db: Session = Depends(get_db), _: User = Depends(get_current_us
             "decided_by": c.decided_by,
             "decided_at": c.decided_at.isoformat() if c.decided_at else None,
             "comment": c.comment,
+            "extra": c.extra or {},
         }
         for c in changes
     ]
@@ -461,6 +530,35 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
             if item.change_type == "zone_create" and not find_zone(db, item.from_zone):
                 db.add(Zone(name=item.from_zone, pap_level=item.new_policy,
                             description=item.comment, sort_order=db.query(Zone).count()))
+        db.flush()
+        # Netzwerk-Zuordnungen anwenden (nach evtl. neu angelegten Zonen)
+        from ..vrf import get_vrf
+
+        for item in batch:
+            extra = item.extra or {}
+            if item.change_type == "net_add":
+                zone = find_zone(db, item.from_zone)
+                if not zone:
+                    raise HTTPException(status.HTTP_409_CONFLICT,
+                                        f"Zone '{item.from_zone}' existiert nicht mehr")
+                vrf = get_vrf(db, extra.get("vrf") or None)
+                if not db.query(ZoneNetwork).filter(ZoneNetwork.cidr == item.to_zone,
+                                                    ZoneNetwork.vrf_id == vrf.id).first():
+                    db.add(ZoneNetwork(cidr=item.to_zone, zone_id=zone.id, vrf_id=vrf.id,
+                                       description=extra.get("description", ""), source="manual"))
+            elif item.change_type in ("net_update", "net_delete"):
+                network = db.query(ZoneNetwork).get(extra.get("network_id") or 0)
+                if not network:
+                    continue  # Zuordnung wurde zwischenzeitlich entfernt
+                if item.change_type == "net_delete":
+                    db.delete(network)
+                else:
+                    zone = find_zone(db, item.from_zone)
+                    if not zone:
+                        raise HTTPException(status.HTTP_409_CONFLICT,
+                                            f"Zone '{item.from_zone}' existiert nicht mehr")
+                    network.cidr = item.to_zone
+                    network.zone_id = zone.id
         db.flush()
         for item in batch:
             if item.change_type != "policy":

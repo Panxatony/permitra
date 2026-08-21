@@ -169,8 +169,10 @@ class ZonePolicyChange(Base):
     # werden gemeinsam freigegeben/abgelehnt
     batch_id: Mapped[str] = mapped_column(String(36), default="", index=True)
     # "policy" = Matrix-Zelle; "zone_create" = neue Zone (from_zone = Name,
-    # new_policy = P-A-P-Einstufung)
+    # new_policy = P-A-P-Einstufung); "net_add"/"net_update"/"net_delete" =
+    # Netzwerk-Zuordnung (from_zone = Zone, to_zone = CIDR, Details in extra)
     change_type: Mapped[str] = mapped_column(String(16), default="policy")
+    extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     from_zone: Mapped[str] = mapped_column(String(64), index=True)
     to_zone: Mapped[str] = mapped_column(String(64), index=True, default="")
     old_policy: Mapped[str | None] = mapped_column(String(16), nullable=True)  # None = neu

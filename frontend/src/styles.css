@@ -146,6 +146,7 @@ tr:hover td { background: #f4f8ff; }
 /* Detail */
 .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; }
+.plain-list { list-style: none; padding: 0; margin: 0.5rem 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .card.wide { grid-column: 1 / -1; }
 dl { display: grid; grid-template-columns: 140px 1fr; gap: .35rem .8rem; margin: 0; font-size: .88rem; }
 dt { color: var(--muted); }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api, getUser, getVrfName } from '../api'
 import { Modal } from '../components/shared'
 import { useLang } from '../i18n'
@@ -8,51 +9,66 @@ const SOURCE_LABELS = { manual: 'manuell', netbox: 'NetBox' }
 export default function Networks() {
   const { t } = useLang()
   const user = getUser()
-  const canEdit = ['architect', 'admin'].includes(user.role)
+  const canEdit = ['architect', 'operations', 'admin'].includes(user.role)
   const [networks, setNetworks] = useState([])
   const [zones, setZones] = useState([])
+  const [changes, setChanges] = useState([])
   const [filter, setFilter] = useState('')
   const [form, setForm] = useState({ cidr: '', zone: '', description: '' })
   const [editNet, setEditNet] = useState(null)  // Eintrag im Overlay-Editor
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
 
   const load = () => {
     api.zoneNetworks().then(setNetworks).catch((e) => setError(e.message))
     api.zones().then(setZones).catch(() => setZones([]))
+    api.matrixChanges().then(setChanges).catch(() => setChanges([]))
   }
   useEffect(() => { load() }, [])
 
+  // Offene Anträge für Netzwerk-Zuordnungen: Markierung je Eintrag/CIDR
+  const pendingNet = changes.filter(
+    (c) => c.status === 'pending' && c.change_type.startsWith('net_'))
+  const isPending = (n) => pendingNet.some(
+    (c) => c.to_zone === n.cidr || (c.extra && c.extra.network_id === n.id))
+
+  const netChangeLabel = (c) => {
+    if (c.change_type === 'net_add') return `${c.to_zone} → ${t('Zone')} ${c.from_zone}`
+    if (c.change_type === 'net_delete') return `${c.to_zone} ${t('aus Zone')} ${c.from_zone} ${t('entfernen')}`
+    const oldZone = c.extra?.old_zone, oldCidr = c.extra?.old_cidr
+    const parts = []
+    if (oldCidr && oldCidr !== c.to_zone) parts.push(`${oldCidr} → ${c.to_zone}`)
+    if (oldZone && oldZone !== c.from_zone) parts.push(`${t('Zone')} ${oldZone} → ${c.from_zone}`)
+    return `${oldCidr || c.to_zone}: ${parts.join(', ') || c.from_zone}`
+  }
+
+  const submit = async (fn) => {
+    setError('')
+    setNotice('')
+    try {
+      const result = await fn()
+      if (result?.status === 'pending') {
+        setNotice(t('Änderung beantragt – sie wird erst nach Freigabe durch zwei Change Approver wirksam.'))
+      } else if (result?.detail) {
+        setNotice(result.detail)
+      }
+      load()
+      return true
+    } catch (err) {
+      setError(err.message)
+      return false
+    }
+  }
+
   const add = async (e) => {
     e.preventDefault()
-    setError('')
-    try {
-      await api.addZoneNetwork(form.zone, form.cidr, form.description)
-      setForm({ cidr: '', zone: form.zone, description: '' })
-      load()
-    } catch (err) {
-      setError(err.message)
-    }
+    const ok = await submit(() => api.addZoneNetwork(form.zone, form.cidr, form.description))
+    if (ok) setForm({ cidr: '', zone: form.zone, description: '' })
   }
 
-  const reassign = async (network, zoneName) => {
-    setError('')
-    try {
-      await api.updateZoneNetwork(network.id, { zone: zoneName })
-      load()
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  const remove = async (network) => {
-    if (!window.confirm(`Zuordnung ${network.cidr} → ${network.zone} entfernen?`)) return
-    setError('')
-    try {
-      await api.deleteZoneNetwork(network.id)
-      load()
-    } catch (err) {
-      setError(err.message)
-    }
+  const remove = (network) => {
+    if (!window.confirm(t('Entfernen der Zuordnung beantragen?') + ` (${network.cidr} → ${network.zone})`)) return
+    submit(() => api.deleteZoneNetwork(network.id))
   }
 
   const shown = networks.filter((n) =>
@@ -72,9 +88,34 @@ export default function Networks() {
 
       <div className="infobox">
         {t('Die Verwaltung der Netzwerke selbst erfolgt in dedizierten Tools (z.B. NetBox/IPAM) – Permitra pflegt hier nur das Mapping auf die Sicherheitszonen. Ein automatischer Import aus externen Quellen kann über das Herkunftsfeld andocken; importierte Einträge erscheinen dann z.B. als „NetBox“.')}
+        {' '}
+        {t('Änderungen an der Zuordnung sind sicherheitsrelevant und werden erst nach Freigabe durch zwei Change Approver wirksam.')}
       </div>
 
       {error && <div className="error">{error}</div>}
+      {notice && <div className="infobox">{notice}</div>}
+
+      {pendingNet.length > 0 && (
+        <div className="card">
+          <h3>{t('Offene Anträge')} ({pendingNet.length})</h3>
+          <ul className="plain-list">
+            {pendingNet.map((c) => (
+              <li key={c.id}>
+                <span className="badge platform-unknown comp-badge">⏳</span>{' '}
+                {netChangeLabel(c)}
+                <span className="muted small">
+                  {' – '}{c.requested_by}
+                  {c.first_approved_by ? ` · ${t('Freigaben')}: 1/2 (${c.first_approved_by})` : ` · ${t('Freigaben')}: 0/2`}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="muted small">
+            {t('Freigabe durch Change Approver auf der Seite')}{' '}
+            <Link to="/zones">{t('Sicherheitszonen')}</Link>.
+          </p>
+        </div>
+      )}
 
       <form className="filterbar" onSubmit={(e) => e.preventDefault()}>
         <input value={filter} onChange={(e) => setFilter(e.target.value)}
@@ -96,11 +137,8 @@ export default function Networks() {
                 <td><code>{n.cidr}</code></td>
                 <td><span className="badge platform-unknown">{n.vrf}</span></td>
                 <td>
-                  {canEdit ? (
-                    <select value={n.zone} onChange={(e) => reassign(n, e.target.value)}>
-                      {zones.map((z) => <option key={z.id} value={z.name}>{z.name}</option>)}
-                    </select>
-                  ) : n.zone}
+                  {n.zone}
+                  {isPending(n) && <span className="badge platform-unknown comp-badge" title={t('Antrag wartet auf Freigabe')}> ⏳</span>}
                 </td>
                 <td>{n.description}</td>
                 <td>
@@ -109,7 +147,7 @@ export default function Networks() {
                   </span>
                 </td>
                 <td className="row-actions">
-                  {canEdit && (
+                  {canEdit && !isPending(n) && (
                     <>
                       <button className="btn btn-ghost"
                         onClick={() => setEditNet({ ...n })}>{t('Bearbeiten')}</button>
@@ -128,15 +166,14 @@ export default function Networks() {
         <Modal title={`${t('Bearbeiten')}: ${editNet.cidr}`} onClose={() => setEditNet(null)}>
           <form className="modal-form" onSubmit={async (e) => {
             e.preventDefault()
-            setError('')
-            try {
-              await api.updateZoneNetwork(editNet.id, {
-                cidr: editNet.cidr, zone: editNet.zone, description: editNet.description,
-              })
-              setEditNet(null)
-              load()
-            } catch (err) { setError(err.message) }
+            const ok = await submit(() => api.updateZoneNetwork(editNet.id, {
+              cidr: editNet.cidr, zone: editNet.zone, description: editNet.description,
+            }))
+            if (ok) setEditNet(null)
           }}>
+            <p className="muted small">
+              {t('CIDR- und Zonen-Änderungen werden als Antrag eingereicht (zwei Freigaben); Beschreibungs-Änderungen wirken sofort.')}
+            </p>
             <div className="grid-2">
               <label>{t('Netzwerk (CIDR)')}
                 <input value={editNet.cidr} required autoFocus
@@ -181,7 +218,7 @@ export default function Networks() {
             </label>
           </div>
           <div className="actions">
-            <button className="btn btn-primary" type="submit">{t('Zuordnung speichern')}</button>
+            <button className="btn btn-primary" type="submit">{t('Zuordnung beantragen')}</button>
             <span className="muted small">{t('Umgebung')}: {getVrfName() || 'Default'}</span>
           </div>
         </form>

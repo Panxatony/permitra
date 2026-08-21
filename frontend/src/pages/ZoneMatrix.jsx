@@ -211,10 +211,20 @@ export default function ZoneMatrix() {
       byBatch[key].items.push(c)
     })
   }
-  const itemLabel = (c) => c.change_type === 'zone_create'
-    ? `Neue Zone: ${c.from_zone} (${c.new_policy})`
-    : `${c.from_zone} → ${c.to_zone}: ${c.old_policy ? (c.old_policy === 'allow_only' ? 'Allow' : 'Block') : 'neu'}`
+  const itemLabel = (c) => {
+    if (c.change_type === 'zone_create') return `Neue Zone: ${c.from_zone} (${c.new_policy})`
+    if (c.change_type === 'net_add') return `Netz ${c.to_zone} → Zone ${c.from_zone}`
+    if (c.change_type === 'net_delete') return `Netz ${c.to_zone} aus Zone ${c.from_zone} entfernen`
+    if (c.change_type === 'net_update') {
+      const oldZone = c.extra?.old_zone, oldCidr = c.extra?.old_cidr
+      const parts = []
+      if (oldCidr && oldCidr !== c.to_zone) parts.push(`${oldCidr} → ${c.to_zone}`)
+      if (oldZone && oldZone !== c.from_zone) parts.push(`Zone ${oldZone} → ${c.from_zone}`)
+      return `Netz ${oldCidr || c.to_zone}: ${parts.join(', ') || `Zone ${c.from_zone}`}`
+    }
+    return `${c.from_zone} → ${c.to_zone}: ${c.old_policy ? (c.old_policy === 'allow_only' ? 'Allow' : 'Block') : 'neu'}`
       + ` → ${c.new_policy === 'allow_only' ? 'Allow' : 'Block'}`
+  }
 
   const load = useCallback(async () => {
     try {
@@ -570,6 +580,7 @@ export default function ZoneMatrix() {
                     {b.items.map((c) => (
                       <div key={c.id}>
                         {c.change_type === 'zone_create' && <span className="badge platform-unknown comp-badge">Zone</span>}
+                        {c.change_type.startsWith('net_') && <span className="badge platform-unknown comp-badge">Netz</span>}
                         {itemLabel(c)}
                       </div>
                     ))}

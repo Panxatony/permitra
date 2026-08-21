@@ -31,11 +31,20 @@ function EpgSection() {
   const addMap = async (e) => {
     e.preventDefault()
     setError('')
+    // Mehrere Adressen auf einmal: Komma-, Semikolon- oder Leerzeichen-getrennt
+    const ips = mapForm.ip.split(/[\s,;]+/).filter(Boolean)
     try {
-      await api.upsertEpgMap({ ...mapForm, epg_id: Number(mapForm.epg_id) })
+      for (const ip of ips) {
+        // Alias nur bei einer einzelnen Adresse übernehmen (Alias ist adressspezifisch)
+        await api.upsertEpgMap({ ip, alias: ips.length === 1 ? mapForm.alias : '',
+          epg_id: Number(mapForm.epg_id) })
+      }
       setMapForm({ ip: '', alias: '', epg_id: '' })
       load()
-    } catch (err) { setError(err.message) }
+    } catch (err) {
+      setError(err.message)
+      load()  // bereits gespeicherte Zuordnungen anzeigen
+    }
   }
 
   const removeEpg = async (epg) => {
@@ -95,7 +104,8 @@ function EpgSection() {
             <table>
               <thead><tr><th>IP/Netz</th><th>Alias</th><th>EPG</th><th></th></tr></thead>
               <tbody>
-                {mappings.map((m) => (
+                {[...mappings].sort((a, b) =>
+                  a.epg_name.localeCompare(b.epg_name) || a.ip.localeCompare(b.ip)).map((m) => (
                   <tr key={m.id}>
                     <td><code>{m.ip}</code></td>
                     <td>{m.alias}</td>
@@ -110,7 +120,8 @@ function EpgSection() {
           </div>
           <form onSubmit={addMap} className="object-form">
             <div className="grid-3">
-              <label>IP/Netz<input value={mapForm.ip} required placeholder="z.B. 10.10.30.0/24"
+              <label>IP/Netz(e)<input value={mapForm.ip} required
+                placeholder="z.B. 10.10.30.0/24, 10.10.30.5 – mehrere mit Komma"
                 onChange={(e) => setMapForm({ ...mapForm, ip: e.target.value })} /></label>
               <label>Alias<input value={mapForm.alias}
                 onChange={(e) => setMapForm({ ...mapForm, alias: e.target.value })} /></label>

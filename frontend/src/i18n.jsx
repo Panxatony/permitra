@@ -187,6 +187,21 @@ const EN = {
   'aktiv': 'active',
   'inaktiv': 'inactive',
   'Löschen': 'Delete',
+  // Netzwerke: Freigabe-Workflow
+  'Änderungen an der Zuordnung sind sicherheitsrelevant und werden erst nach Freigabe durch zwei Change Approver wirksam.':
+    'Changes to the mapping are security-relevant and only take effect after approval by two change approvers.',
+  'Änderung beantragt – sie wird erst nach Freigabe durch zwei Change Approver wirksam.':
+    'Change requested – it only takes effect after approval by two change approvers.',
+  'Entfernen der Zuordnung beantragen?': 'Request removal of this mapping?',
+  'Offene Anträge': 'Pending requests',
+  'Freigaben': 'Approvals',
+  'aus Zone': 'from zone',
+  'entfernen': 'remove',
+  'Freigabe durch Change Approver auf der Seite': 'Approval by change approvers on the page',
+  'Antrag wartet auf Freigabe': 'Request awaiting approval',
+  'CIDR- und Zonen-Änderungen werden als Antrag eingereicht (zwei Freigaben); Beschreibungs-Änderungen wirken sofort.':
+    'CIDR and zone changes are submitted as a request (two approvals); description changes take effect immediately.',
+  'Zuordnung beantragen': 'Request mapping',
   'Anlegen': 'Create',
   'Speichern': 'Save',
   'Kommunikationsbeziehungen der Komponenten': 'Component communication relationships',
