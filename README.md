@@ -334,3 +334,9 @@ cd backend && ../.venv/bin/python -m pytest tests/
 - **ServiceNow-Change-Tickets**: Beim Statuswechsel `approved` einen Hook aufrufen, der per
   ServiceNow-REST-API ein Change-Ticket erzeugt und die Ticket-Nummer in `change_id` schreibt.
 - **CMDB/Ticket-Integration**: Die komplette Funktionalität ist als REST-API verfügbar (`/docs`).
+
+## Lizenz
+
+Permitra ist Open Source und steht unter der [Apache License 2.0](LICENSE).
+
+Copyright 2026 Lars Vonhof-Hunold
