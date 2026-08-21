@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useLang } from '../i18n'
 import { api } from '../api'
 
@@ -197,11 +197,23 @@ export default function RuleForm() {
     </div>
   )
 
+  // Adressen aus unbekannten Netzen: erst das Netzwerk anlegen und einer Zone
+  // zuordnen – die Komponenten-Abfrage erscheint für sie noch nicht
+  const unassigned = resolved.unassigned || []
+  const unknownAssignable = resolved.unknown.filter((u) => !unassigned.includes(u.ip))
+
   const submit = async (e) => {
     e.preventDefault()
     setError('')
+    if (unassigned.length) {
+      setError(
+        t('Folgende Netze sind keiner Sicherheitszone zugeordnet:') + ` ${unassigned.join(', ')}. `
+        + t('Bitte zuerst auf der Seite „Netzwerke“ anlegen und einer Sicherheitszone zuordnen.'),
+      )
+      return
+    }
     // Neue Adressen: Zuordnung muss einmalig festgelegt sein und wird gespeichert
-    const missing = resolved.unknown.filter((u) => !(assignments[u.ip] || []).length)
+    const missing = unknownAssignable.filter((u) => !(assignments[u.ip] || []).length)
     if (missing.length) {
       setError(
         `Bitte festlegen, auf welchen Komponenten Regeln für folgende neue Adressen `
@@ -216,7 +228,7 @@ export default function RuleForm() {
       valid_until: form.valid_until || null,
     }
     try {
-      for (const u of resolved.unknown) {
+      for (const u of unknownAssignable) {
         await api.saveAddressMap({ ip: u.ip, alias: u.alias, component_ids: assignments[u.ip] })
       }
       if (isEdit) {
@@ -275,12 +287,21 @@ export default function RuleForm() {
         </div>
         {renderAddressEditor('source', t('Quelle (IP/Netz + optionaler Alias)'))}
         {renderAddressEditor('destination', t('Ziel (IP/Netz + optionaler Alias)'))}
-        {resolved.unknown.length > 0 && (
+        {unassigned.length > 0 && (
+          <div className="warnbox">
+            <strong>{t('Unbekanntes Netz:')}</strong>{' '}
+            {unassigned.map((ip, i) => <span key={ip}>{i > 0 && ', '}<code>{ip}</code></span>)}{' '}
+            {t('ist keinem bekannten Netzwerk zugeordnet. Bitte das Netzwerk zuerst auf der Seite')}{' '}
+            <Link to="/networks">{t('Netzwerke')}</Link>{' '}
+            {t('hinzufügen und einer Sicherheitszone zuordnen (Freigabe durch zwei Change Approver). Danach kann die Regel angelegt werden.')}
+          </div>
+        )}
+        {unknownAssignable.length > 0 && (
           <div className="warnbox">
             <strong>Neue Adresse(n):</strong> Bitte einmalig festlegen, auf welchen Komponenten
             Regeln für diese Adressen angelegt werden sollen (die Zuordnung wird gespeichert
             und künftig automatisch angewendet):
-            {resolved.unknown.map((u) => (
+            {unknownAssignable.map((u) => (
               <div key={u.ip} className="unknown-address">
                 <code>{u.ip}</code>{u.alias ? <span className="muted"> {u.alias}</span> : null}
                 <span className="assign-options">

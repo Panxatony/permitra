@@ -202,6 +202,15 @@ const EN = {
   'CIDR- und Zonen-Änderungen werden als Antrag eingereicht (zwei Freigaben); Beschreibungs-Änderungen wirken sofort.':
     'CIDR and zone changes are submitted as a request (two approvals); description changes take effect immediately.',
   'Zuordnung beantragen': 'Request mapping',
+  'Unbekanntes Netz:': 'Unknown network:',
+  'ist keinem bekannten Netzwerk zugeordnet. Bitte das Netzwerk zuerst auf der Seite':
+    'does not belong to any known network. Please first add the network on the',
+  'hinzufügen und einer Sicherheitszone zuordnen (Freigabe durch zwei Change Approver). Danach kann die Regel angelegt werden.':
+    'page and assign it to a security zone (approval by two change approvers). The rule can be created afterwards.',
+  'Folgende Netze sind keiner Sicherheitszone zugeordnet:':
+    'The following networks are not assigned to a security zone:',
+  'Bitte zuerst auf der Seite „Netzwerke“ anlegen und einer Sicherheitszone zuordnen.':
+    'Please first add them on the "Networks" page and assign them to a security zone.',
   'Anlegen': 'Create',
   'Speichern': 'Save',
   'Kommunikationsbeziehungen der Komponenten': 'Component communication relationships',

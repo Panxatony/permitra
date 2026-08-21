@@ -101,7 +101,8 @@ def derive_zones(db: Session, payload, vrf_id: int):
         if unassigned:
             problems.append(
                 f"{label}: Netz(e) keiner Sicherheitszone zugeordnet: {', '.join(unassigned)} "
-                "(Zuordnung auf der Seite Sicherheitszonen pflegen)"
+                "– bitte das Netzwerk zuerst auf der Seite „Netzwerke“ anlegen und einer "
+                "Sicherheitszone zuordnen"
             )
         elif len(hits) > 1:
             problems.append(f"{label} umfasst mehrere Zonen ({', '.join(sorted(hits))}) – bitte aufteilen")
@@ -546,15 +547,17 @@ def resolve_components_endpoint(
     src_zone, src_un, src_hits = resolve_zone_for_entries(db, src_entries, vrf_obj.id)
     dst_zone, dst_un, dst_hits = resolve_zone_for_entries(db, dst_entries, vrf_obj.id)
     for label, un, hits in (("Quelle", src_un, src_hits), ("Ziel", dst_un, dst_hits)):
-        if un:
-            zone_issues.append(f"{label}: Netz(e) keiner Zone zugeordnet: {', '.join(un)}")
-        elif len(hits) > 1:
+        if not un and len(hits) > 1:
             zone_issues.append(f"{label} umfasst mehrere Zonen: {', '.join(sorted(hits))}")
+    # Adressen aus unbekannten Netzen: erst Netzwerk anlegen und Zone zuordnen –
+    # die Komponenten-Zuordnung wird für sie noch nicht abgefragt
+    unassigned = list(dict.fromkeys(src_un + dst_un))
     components, unknown = resolve_rule_components(
         db, src_entries, dst_entries, src_zone or "", dst_zone or "", vrf_obj.id
     )
     out = ResolveOut(components=components, unknown=unknown).model_dump()
-    out.update({"source_zone": src_zone, "destination_zone": dst_zone, "zone_issues": zone_issues})
+    out.update({"source_zone": src_zone, "destination_zone": dst_zone,
+                "zone_issues": zone_issues, "unassigned": unassigned})
     return out
 
 
