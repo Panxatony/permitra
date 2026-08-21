@@ -14,6 +14,16 @@ const FORMATS = [
   { key: 'json', label: 'JSON (vollständig)', hint: 'Alle Felder für Integrationen' },
 ]
 
+// Capirca-/Aerleon-Anbindung: weitere Plattformen über den Policy-Generator
+const AERLEON_FORMATS = [
+  { key: 'aerleon-cisco', target: 'cisco', label: 'Cisco IOS (via Capirca)', hint: 'Extended ACL, generiert mit Aerleon' },
+  { key: 'aerleon-ciscoasa', target: 'ciscoasa', label: 'Cisco ASA (via Capirca)', hint: 'ASA-ACLs, generiert mit Aerleon' },
+  { key: 'aerleon-srx', target: 'srx', label: 'Juniper SRX zonenbasiert (via Capirca)', hint: 'Security Policies je Zonen-Paar' },
+  { key: 'aerleon-paloalto', target: 'paloalto', label: 'Palo Alto (via Capirca)', hint: 'Panorama-XML je Zonen-Paar' },
+  { key: 'aerleon-iptables', target: 'iptables', label: 'Linux iptables (via Capirca)', hint: 'FORWARD-Chain für Gateways' },
+  { key: 'aerleon-policy', target: 'policy', label: 'Capirca/Aerleon Policy (YAML)', hint: 'Objekte + Policy für bestehende Capirca-Pipelines' },
+]
+
 const HOST_FORMATS = [
   { key: 'host-debian', os: 'debian', label: 'Host-FW: Debian (nftables)', hint: 'nftables.conf für den Ziel-Server', file: 'nftables.conf' },
   { key: 'host-redhat', os: 'redhat', label: 'Host-FW: RedHat (firewalld)', hint: 'firewall-cmd Rich Rules', file: 'firewalld-rules.sh' },
@@ -31,6 +41,7 @@ export default function ExportPage() {
   const [targetIp, setTargetIp] = useState('')
 
   const hostFormat = HOST_FORMATS.find((f) => f.key === fmt)
+  const aerleonFormat = AERLEON_FORMATS.find((f) => f.key === fmt)
 
   useEffect(() => {
     api.components().then(setComponents).catch(() => setComponents([]))
@@ -45,6 +56,7 @@ export default function ExportPage() {
     setPreview('')
     try {
       const host = HOST_FORMATS.find((h) => h.key === f)
+      const aerleon = AERLEON_FORMATS.find((a) => a.key === f)
       let text
       if (host) {
         if (!targetIp.trim()) {
@@ -52,6 +64,9 @@ export default function ExportPage() {
           return
         }
         text = await api.exportPreview(`host/${host.os}`, { ip: targetIp.trim() })
+      } else if (aerleon) {
+        text = await api.exportPreview(`aerleon/${aerleon.target}`,
+          { only_approved: onlyApproved, component_id: componentId })
       } else {
         text = await api.exportPreview(f, { ids, only_approved: onlyApproved, component_id: componentId })
       }
@@ -71,6 +86,10 @@ export default function ExportPage() {
     if (hostFormat) {
       params.set('ip', targetIp.trim())
       path = `host/${hostFormat.os}`
+    } else if (aerleonFormat) {
+      params.set('only_approved', onlyApproved)
+      if (componentId) params.set('component_id', componentId)
+      path = `aerleon/${aerleonFormat.target}`
     } else {
       params.set('only_approved', onlyApproved)
       if (ids) params.set('ids', ids)
@@ -83,7 +102,9 @@ export default function ExportPage() {
         a.href = URL.createObjectURL(blob)
         a.download = hostFormat
           ? `${targetIp.trim().replaceAll('/', '_')}-${hostFormat.file}`
-          : FORMATS.find((f) => f.key === fmt)?.key + (fmt === 'csv' ? '.csv' : fmt.includes('json') ? '.json' : fmt.includes('yaml') ? '.yaml' : fmt === 'checkpoint-cli' ? '.sh' : '.conf')
+          : aerleonFormat
+            ? `permitra-${aerleonFormat.target}${aerleonFormat.target === 'policy' ? '.yaml' : '.acl'}`
+            : FORMATS.find((f) => f.key === fmt)?.key + (fmt === 'csv' ? '.csv' : fmt.includes('json') ? '.json' : fmt.includes('yaml') ? '.yaml' : fmt === 'checkpoint-cli' ? '.sh' : '.conf')
         a.click()
       })
   }
@@ -98,6 +119,15 @@ export default function ExportPage() {
       <div className="export-layout">
         <aside className="export-sidebar">
           {FORMATS.map((f) => (
+            <button key={f.key}
+              className={`format-btn ${f.key === fmt ? 'active' : ''}`}
+              onClick={() => setFmt(f.key)}>
+              <strong>{f.label}</strong>
+              <span className="muted small">{f.hint}</span>
+            </button>
+          ))}
+          <div className="export-divider muted small">{t('Weitere Plattformen via Capirca/Aerleon:')}</div>
+          {AERLEON_FORMATS.map((f) => (
             <button key={f.key}
               className={`format-btn ${f.key === fmt ? 'active' : ''}`}
               onClick={() => setFmt(f.key)}>
@@ -144,7 +174,7 @@ export default function ExportPage() {
           </div>
           {error && <div className="error">{error}</div>}
           {loading ? <p className="muted">Erzeuge Vorschau…</p>
-            : preview && <Highlighted text={preview} fmt={hostFormat ? 'checkpoint-cli' : fmt} />}
+            : preview && <Highlighted text={preview} fmt={(hostFormat || aerleonFormat) ? 'checkpoint-cli' : fmt} />}
         </section>
       </div>
     </div>

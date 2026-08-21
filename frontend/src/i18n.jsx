@@ -205,6 +205,7 @@ const EN = {
   'Umzusetzen': 'To implement',
   'Umsetzung': 'Implementation',
   'Umzusetzen (offen / zu ändern)': 'To implement (open / to change)',
+  'Weitere Plattformen via Capirca/Aerleon:': 'More platforms via Capirca/Aerleon:',
   'Unbekanntes Netz:': 'Unknown network:',
   'ist keinem bekannten Netzwerk zugeordnet. Bitte das Netzwerk zuerst auf der Seite':
     'does not belong to any known network. Please first add the network on the',

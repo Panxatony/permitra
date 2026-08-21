@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..exporters import aci, checkpoint, generic, hostfw, juniper
+from ..exporters import aci, aerleon_export, checkpoint, generic, hostfw, juniper
 from ..validation import parse_network
 from ..models import Rule, RuleStatus, User
 
@@ -27,6 +27,55 @@ def formats(_: User = Depends(get_current_user)):
         {"key": key, "filename": filename, "media_type": media}
         for key, (media, _fn, filename) in FORMATS.items()
     ]
+
+
+@router.get("/aerleon-targets")
+def aerleon_targets(_: User = Depends(get_current_user)):
+    """Verfügbare Capirca-/Aerleon-Ziel-Plattformen."""
+    return [
+        {"key": key, "label": label, "zone_based": key in aerleon_export.ZONE_BASED}
+        for key, (_tpl, label) in aerleon_export.TARGETS.items()
+    ] + [{"key": "policy", "label": "Capirca/Aerleon Policy (YAML)", "zone_based": False}]
+
+
+@router.get("/aerleon/{target}", response_class=PlainTextResponse)
+def aerleon(
+    target: str,
+    component_id: int | None = Query(None, description="Nur Regeln dieser Komponente"),
+    only_approved: bool = Query(True, description="Nur freigegebene Regeln exportieren"),
+    download: bool = False,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Capirca-/Aerleon-Export: Permitra-Regeln als native Konfiguration der
+    Ziel-Plattform bzw. als Policy-YAML für bestehende Capirca-Pipelines."""
+    if target != "policy" and target not in aerleon_export.TARGETS:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Unbekanntes Ziel '{target}'. Erlaubt: policy, {', '.join(aerleon_export.TARGETS)}",
+        )
+    query = db.query(Rule)
+    if only_approved:
+        query = query.filter(Rule.status == RuleStatus.approved)
+    rules = query.order_by(Rule.rule_id).all()
+    if component_id:
+        rules = [r for r in rules if any(c.id == component_id for c in r.components)]
+    if not rules:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Keine passenden Regeln")
+    try:
+        if target == "policy":
+            content = aerleon_export.export_policy_yaml(rules)
+            filename = "permitra-capirca.yaml"
+        else:
+            content = aerleon_export.export(rules, target)
+            filename = f"permitra-{target}.acl"
+    except Exception as exc:  # Aerleon meldet Detailfehler als ACLGeneratorError
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            f"Aerleon-Generierung fehlgeschlagen: {exc}")
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return PlainTextResponse(content, media_type="text/plain", headers=headers)
 
 
 @router.get("/host/{os_name}", response_class=PlainTextResponse)
