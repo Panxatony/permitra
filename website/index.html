@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Permitra – Zentrale Verwaltung von Sicherheitsregeln</title>
+<meta name="description" content="Permitra ist ein Planungs- und Dokumentationswerkzeug für Firewall-Regeln und Cisco-ACI-Contracts: Review-Workflow, Zonen-Matrix nach BSI, Exporte für Juniper SRX, Check Point und ACI.">
+<style>
+  :root {
+    --brand: #1d2b45;
+    --brand-2: #2e4570;
+    --accent: #3b6ff0;
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --ink: #1c2430;
+    --muted: #5a6572;
+    --border: #dfe5ee;
+    --good: #2e8b57;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 1.25rem; }
+
+  header.hero { background: linear-gradient(160deg, var(--brand) 0%, var(--brand-2) 100%); color: #fff; padding: 4.5rem 0 4rem; }
+  .hero .wrap { display: flex; flex-direction: column; gap: 1.2rem; align-items: flex-start; }
+  .logo { display: flex; align-items: center; gap: .6rem; font-size: 1.35rem; font-weight: 800; letter-spacing: .02em; }
+  .logo svg { width: 34px; height: 34px; }
+  h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); line-height: 1.2; max-width: 34ch; }
+  .hero p.sub { max-width: 62ch; color: #d7e0f2; font-size: 1.06rem; }
+  .cta { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: .6rem; }
+  .btn { display: inline-block; padding: .65rem 1.3rem; border-radius: 8px; font-weight: 700; }
+  .btn-primary { background: #fff; color: var(--brand); }
+  .btn-primary:hover { text-decoration: none; background: #e8eefc; }
+  .btn-ghost { border: 1.5px solid rgba(255,255,255,.55); color: #fff; }
+  .btn-ghost:hover { text-decoration: none; border-color: #fff; }
+
+  section { padding: 3.2rem 0; }
+  section.alt { background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  h2 { font-size: 1.5rem; margin-bottom: 1.2rem; }
+  .lede { max-width: 72ch; color: var(--muted); }
+  .lede strong { color: var(--ink); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.2rem; }
+  section.alt .card { background: var(--bg); }
+  .card h3 { font-size: 1.02rem; margin-bottom: .35rem; }
+  .card p { font-size: .92rem; color: var(--muted); }
+
+  .demo-box { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--good); border-radius: 10px; padding: 1.3rem 1.4rem; margin-top: 1.4rem; }
+  .demo-box code { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: .1rem .4rem; font-size: .9em; }
+  .demo-box ul { margin: .6rem 0 0 1.2rem; color: var(--muted); font-size: .95rem; }
+
+  .stack { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
+  .pill { background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: .25rem .85rem; font-size: .85rem; font-weight: 600; color: var(--muted); }
+
+  footer { padding: 2.2rem 0 2.8rem; color: var(--muted); font-size: .88rem; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2 4 5v6c0 5 3.4 9.3 8 11 4.6-1.7 8-6 8-11V5l-8-3z" fill="#fff" opacity=".92"/>
+        <path d="M8.5 12.2l2.4 2.4 4.6-4.8" stroke="#1d2b45" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      Permitra
+    </div>
+    <h1>Firewall-Regeln und ACI-Contracts zentral planen, prüfen und dokumentieren</h1>
+    <p class="sub">
+      Permitra ersetzt die Excel-Kommunikationsmatrix: Sicherheitsregeln entstehen in einem
+      nachvollziehbaren Workflow mit Review und Vier-Augen-Freigabe, werden gegen die
+      Zonen-Matrix geprüft und als fertige Konfiguration für Juniper SRX, Check Point und
+      Cisco ACI exportiert – Permitra ist die Quelle der Wahrheit für das Soll, geschrieben
+      wird weiterhin in den Management-Tools der Hersteller.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://demo.permitra.de">Live-Demo ansehen</a>
+      <a class="btn btn-ghost" href="#features">Funktionen</a>
+    </div>
+  </div>
+</header>
+
+<section id="about">
+  <div class="wrap">
+    <h2>Was ist Permitra?</h2>
+    <p class="lede">
+      Permitra ist ein <strong>Planungs- und Dokumentationswerkzeug</strong> für
+      Netzwerk-Sicherheitsregeln. Anträge werden hier gestellt, geprüft, freigegeben und
+      versioniert dokumentiert. Die Umsetzung erfolgt in den Werkzeugen der Hersteller
+      (Check Point SmartConsole, Juniper CLI, Cisco APIC) – Permitra erzeugt die passenden
+      Konfigurationen zum Übernehmen und macht per Soll-Ist-Abgleich sichtbar, wo
+      Dokumentation und tatsächliche Gerätekonfiguration auseinanderlaufen.
+    </p>
+  </div>
+</section>
+
+<section class="alt" id="features">
+  <div class="wrap">
+    <h2>Funktionen</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>Regel-Workflow mit Freigaben</h3>
+        <p>Eindeutige Rule-IDs, Entwurf → Review → Freigabe durch Change Approver,
+        Versionshistorie, Kommentare und Rezertifizierung ablaufender Regeln.</p>
+      </div>
+      <div class="card">
+        <h3>Sicherheitszonen nach BSI</h3>
+        <p>Zonen-Kommunikationsmatrix (Allow/Block) mit P-A-P-Modell: Zonenübergänge
+        laufen immer über eine Firewall, ACI wirkt nur innerhalb einer Zone.
+        Matrix-Änderungen brauchen zwei Freigaben.</p>
+      </div>
+      <div class="card">
+        <h3>Netzwerk-Registry</h3>
+        <p>Jedes Netz gehört zu genau einer Zone. Quell- und Ziel-Zonen einer Regel
+        werden automatisch aus den Adressen abgeleitet – Änderungen an der Zuordnung
+        durchlaufen den Freigabe-Workflow.</p>
+      </div>
+      <div class="card">
+        <h3>Automatische Komponenten-Ermittlung</h3>
+        <p>Aus Quelle und Ziel ermittelt Permitra, auf welchen Firewall-Clustern oder
+        ACI-Fabrics eine Regel umzusetzen ist – inklusive Umsetzungsstatus für den Betrieb.</p>
+      </div>
+      <div class="card">
+        <h3>Exporte für die Praxis</h3>
+        <p>Juniper-SRX-set-Kommandos, Check Point mgmt_cli und Management-API,
+        Cisco-ACI-Contracts (EPG-basiert, inkl. PBR Service Graphs), Host-Firewalls
+        (nftables, firewalld, iptables), CSV und JSON.</p>
+      </div>
+      <div class="card">
+        <h3>Analyse &amp; Drift</h3>
+        <p>Adress-Suche und Pfad-Analyse über die Komponenten-Topologie, Konflikt-Warnungen,
+        Soll-Ist-Abgleich gegen hochgeladene Gerätekonfigurationen.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <h2>Live-Demo</h2>
+    <p class="lede">Die öffentliche Demo läuft mit fiktiven Beispieldaten
+    (11 Zonen, rund 100 Regeln, 4 Sicherheitskomponenten) und wird jede Nacht zurückgesetzt.</p>
+    <div class="demo-box">
+      <strong><a href="https://demo.permitra.de">demo.permitra.de</a></strong>
+      <ul>
+        <li>Benutzer: <code>architekt</code>, <code>betrieb</code>, <code>approver</code>, <code>approver2</code>, <code>admin</code></li>
+        <li>Passwort jeweils: Benutzername + <code>123</code></li>
+        <li>Oberfläche auf Deutsch und Englisch (Umschalter in der Kopfzeile)</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="tech">
+  <div class="wrap">
+    <h2>Technik</h2>
+    <p class="lede">Bewusst schlank gehalten und selbst zu hosten – ein Docker-Compose-Stack genügt.</p>
+    <div class="stack">
+      <span class="pill">FastAPI</span>
+      <span class="pill">SQLAlchemy + Alembic</span>
+      <span class="pill">PostgreSQL</span>
+      <span class="pill">React 18 + Vite</span>
+      <span class="pill">Docker Compose</span>
+      <span class="pill">JWT / rollenbasierte Rechte</span>
+    </div>
+  </div>
+</section>
+
+<section id="opensource">
+  <div class="wrap">
+    <h2>Open Source</h2>
+    <p class="lede">
+      Permitra wird als Open-Source-Projekt veröffentlicht. Quellcode, Lizenz und
+      Beitragshinweise folgen an dieser Stelle mit der ersten öffentlichen Version.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Permitra</span>
+    <span><a href="https://demo.permitra.de">Demo</a> · <a href="#features">Funktionen</a></span>
+  </div>
+</footer>
+
+</body>
+</html>
