@@ -8,7 +8,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const navigate = useNavigate()
-  const { t } = useLang()
+  const { lang, t, toggle } = useLang()
 
   const submit = async (e) => {
     e.preventDefault()
@@ -24,6 +24,10 @@ export default function Login() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
+        <button type="button" className="btn btn-ghost login-lang" onClick={toggle}
+          title={lang === 'de' ? 'Switch to English' : 'Auf Deutsch umstellen'}>
+          {lang === 'de' ? 'EN' : 'DE'}
+        </button>
         <h1>🛡️ Permitra</h1>
         <p className="muted">{t('Zentrale Verwaltung von Sicherheitsregeln')}</p>
         <label>

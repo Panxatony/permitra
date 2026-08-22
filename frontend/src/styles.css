@@ -89,6 +89,8 @@ code { background: #eef1f6; padding: .1em .35em; border-radius: 4px; font-size: 
   padding: 2rem; width: 340px; display: flex; flex-direction: column; gap: .9rem;
 }
 .login-card h1 { text-align: center; }
+.login-card { position: relative; }
+.login-lang { position: absolute; top: .7rem; right: .7rem; padding: .25rem .6rem; font-size: .8rem; font-weight: 700; }
 
 /* Forms */
 label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; font-weight: 600; }
