@@ -1,325 +1,225 @@
 # 🛡️ Permitra
 
-Zentrale Webanwendung zur Verwaltung von Sicherheitsregeln für **Juniper SRX**, **Check Point** und **Cisco ACI Contracts** – als Ablösung der Excel-basierten Kommunikationsmatrix (AP0400).
+Central web application for managing network security rules for **Juniper SRX**, **Check Point** and **Cisco ACI contracts** — replacing the Excel-based communication matrix. Permitra is the source of truth for the *intended* state: rules are requested, reviewed, approved and documented here; devices are still configured through the vendors' management tools, and a drift comparison shows where documentation and reality diverge.
 
-## Architektur
+Project website: https://permitra.de · Live demo: https://demo.permitra.de
+
+## Architecture
 
 ```
 ┌──────────────┐      REST/JSON      ┌───────────────┐      SQL      ┌────────────┐
 │  React SPA   │ ──────────────────► │  FastAPI      │ ────────────► │ PostgreSQL │
-│  (Vite)      │  JWT (rollenbasiert)│  Backend      │  SQLAlchemy   │ (SQLite    │
-│  Tabelle,    │                     │  Validierung, │               │  für Dev)  │
-│  Review-UI,  │                     │  Workflow,    │               └────────────┘
-│  Export-     │                     │  Konflikt-    │
-│  Vorschau    │                     │  Erkennung    │
+│  (Vite)      │  JWT (role-based)   │  backend      │  SQLAlchemy   │ (SQLite    │
+│  tables,     │                     │  validation,  │               │  for dev)  │
+│  review UI,  │                     │  workflow,    │               └────────────┘
+│  export      │                     │  conflict     │
+│  preview     │                     │  detection    │
 └──────────────┘                     └──────┬────────┘
-                                            │ Exporter
+                                            │ exporters
                         ┌───────────────────┼──────────────────────┐
                         ▼                   ▼                      ▼
                  Juniper SRX          Check Point              Cisco ACI
-                 (set-Kommandos)      (mgmt_cli-Skript,        (APIC-JSON,
-                                       Management-API-JSON)     YAML)
+                 (set commands)       (mgmt_cli script,        (APIC JSON,
+                                       Management API JSON)     YAML)
+                        plus: Capirca/Aerleon (Cisco IOS/ASA, Palo Alto,
+                        zone-based SRX, iptables), host firewalls, CSV/JSON
 ```
 
-**Rollen:**
+**Roles:**
 
-| Rolle | Rechte |
+| Role | Permissions |
 |---|---|
-| `architect` (Architekt) | Regeln anlegen/bearbeiten, zum Review einreichen, kommentieren |
-| `operations` (Betrieb) | Umsetzungsstatus je Komponente pflegen, exportieren, Drift-Abgleich |
-| `change_approver` (Change Approver) | Freigaben: Regel-Reviews (eine Freigabe) und Zonen-/Matrix-Anträge (zwei Freigaben durch verschiedene Approver) |
-| `admin` | Alles, zusätzlich Benutzer- und Regel-Löschverwaltung |
+| `architect` | Create/edit rules, submit for review, comment |
+| `operations` | Maintain implementation status per component, export, drift comparison |
+| `change_approver` | Approvals: rule reviews (one approval) and zone/network/matrix requests (two approvals by different approvers); focused approvals start page |
+| `admin` | Permitra administration (user management, settings); focused admin start page |
 
-**Regel-Workflow:** `Entwurf → Im Review → Freigegeben/Abgelehnt → (Deaktiviert)`.
-Inhaltliche Änderungen an freigegebenen Regeln setzen den Status auf `Entwurf` zurück.
-Getrennt davon pflegt der Betrieb den **Umsetzungsstatus je Plattform** (`offen/neu/umgesetzt/deaktiviert` – entspricht den Spalten „Status Juniper“/„Status ACI“ im Excel).
+**Rule workflow:** `draft → in review → approved/rejected → (deactivated)`.
+Content changes to an approved rule reset it to `draft`. When a previously implemented rule is re-approved, its implementation status switches to *to change* so operations can re-apply and mark it *implemented* again. The dashboard shows a tile with the number of rules awaiting implementation.
 
-**Datenmodell**: Rule-ID im `SR#####`-Format (5-stellig, bis 99999 Regeln) mit Auto-Vergabe, Application, Quell-/Ziel-Zonen
-(Dropdown aus der Zonenverwaltung), mehrere Dienste (Protokoll/Port) pro Regel, Anlass,
-Requestor, Bearbeiter, Change-ID, Fachlicher Bezug, Gültigkeitszeitraum, Versionshistorie
-mit Snapshots, Kommentare.
+**Data model:** rule IDs in the `SR#####` format (5 digits, up to 99999 rules), assigned server-side; application, source/destination zones (derived automatically), multiple services (protocol/port) per rule, justification, requestor, owner, change ID, business context, validity period, version history with snapshots, comments.
 
-- **Adressen sind strukturiert**: Quelle/Ziel bestehen aus Einträgen, die **immer eine
-  IP oder ein Netz (CIDR, IPv4/IPv6)** sind – plus optionalem **Alias** pro Eintrag
-  (Hostname bei einer Einzel-IP, Netzwerkname bei einem Netz). Sonderwert `any`.
-  Die Exporter verwenden den Alias als Objektnamen (Juniper Address-Book, Check Point
-  Hosts/Netze); die Adress-Suche findet Einträge über IP-Überlappung **und** Alias.
-- **Regeln mappen auf konkrete Komponenten** (nicht abstrakt auf Plattformen): Jede Regel
-  referenziert die Sicherheitskomponenten (Firewall-Cluster bzw. ACI-Fabric), auf denen
-  eine Firewall-Regel bzw. ein ACI Contract angelegt werden muss. Die Plattform ergibt
-  sich aus dem Komponenten-Typ (steuert Exportformate und Zonen-Matrix-Prüfung), der
-  Umsetzungsstatus wird je Komponente gepflegt, und der Export lässt sich auf eine
-  Komponente einschränken (`/api/export/{fmt}?component_id=`).
-- **Komponenten werden automatisch aus Quelle/Ziel ermittelt** über die persistente
-  Adress-Zuordnung (`address_component_map`, API `/api/address-map`,
-  `/api/rules/resolve-components`): exakter Treffer oder spezifischstes enthaltendes
-  Netz; Intra-Zonen-Regeln lösen auf ACI-Komponenten auf, zonenübergreifende auf die
-  Firewall-Cluster. Enthält eine Regel eine **neue Adresse**, fordert das Formular
-  **einmalig** dazu auf festzulegen, auf welchen Komponenten Regeln für diese Adresse
-  angelegt werden – die Zuordnung wird gespeichert und künftig automatisch angewendet.
-  Ohne Zuordnung lehnt die API das Anlegen mit einer klaren Meldung ab.
+- **Addresses are structured**: source/destination entries are **always an IP or network (CIDR, IPv4/IPv6)** plus an optional **alias** per entry (hostname for a single IP, network name for a subnet). Special value `any`. Exporters use the alias as the object name (Juniper address book, Check Point hosts/networks); the address search matches on IP overlap **and** alias. Pure FQDN rules are deliberately not supported.
+- **Rules map to concrete components** (not abstract platforms): each rule references the security components (firewall clusters or ACI fabrics) on which a firewall rule or ACI contract must be created. The platform is derived from the component type; the implementation status is maintained per component; exports can be restricted to one component.
+- **Components are resolved automatically from source/destination** via the persistent address mapping (`address_component_map`): exact match or most specific containing network; intra-zone rules resolve to ACI components, cross-zone rules to firewall clusters. When a rule contains a **new address**, the form asks **once** on which components rules for that address should be created — the mapping is stored and applied automatically from then on.
+- **Network registry**: every network belongs to exactly one security zone (`zone_networks`). Source/destination zones of a rule are derived automatically from its addresses; unassigned networks are rejected with a clear hint pointing to the Networks page. Networks themselves are managed in dedicated tools (e.g. NetBox — import hook prepared via the `source` field); Permitra only maintains the network→zone mapping. **Changes to that mapping go through the approval workflow** (two change approvers).
 
-## Dashboard, Rezertifizierung, Drift & Objektkatalog
+## Dashboard, recertification, drift & object catalog
 
-- **Dashboard** (Startseite): Kennzahlen-Kacheln (Regeln, offene Reviews, abgelaufen /
-  läuft in 30 Tagen ab), Regeln nach Status und je Komponente, letzte Änderungen.
-- **Gültigkeits-Überwachung**: Ein täglicher Job deaktiviert freigegebene Regeln
-  automatisch nach Ablauf von `valid_until` (mit Versions- und Kommentareintrag).
-  Die Seite „Rezertifizierung" (`GET /api/rules/expiring?days=`) zeigt abgelaufene und
-  demnächst ablaufende Regeln; „Verlängern" (`POST /api/rules/{id}/extend`) setzt ein
-  neues Gültig-bis-Datum, **ohne** den Freigabe-Status zurückzusetzen.
-- **Soll-Ist-Abgleich (Drift)** auf der Komponenten-Seite: Ist-Konfiguration des Geräts
-  hinterlegen (`PUT /api/components/{id}/actual-config`; ein direkter Geräte-Abruf kann
-  als Adapter andocken) → `GET /api/components/{id}/drift` meldet **fehlende** (freigegeben,
-  nicht umgesetzt), **veraltete** (umgesetzt, nicht mehr freigegeben) und **unbekannte**
-  Regel-IDs (Schatten-Regeln). Abgleich über die SR-IDs, die alle Exporte mitführen.
-- **Objektkatalog** (`/api/objects/...`): wiederverwendbare Adress-Objekte (Alias → IP/Netz)
-  und Dienst-Objekte (z.B. HTTPS = TCP/443), im Regelformular per Auswahl übernehmbar.
-  Ändert sich die IP eines Adress-Objekts, werden **alle Regeln mit diesem Alias
-  automatisch aktualisiert** (versioniert).
-- **Migrationen & Backup**: Schema-Änderungen laufen über **Alembic** (Migrationen in
-  `backend/alembic/`, automatisch beim App-Start; Vor-Alembic-Bestände werden auf die
-  Baseline gestempelt). Tägliche Sicherung: `scripts/backup.sh` (pg_dump, 14 Generationen).
-- **Pagination**: `GET /api/rules` liefert `{total, items}` mit `limit`/`offset`;
-  die Regelliste blättert in 50er-Schritten.
+- **Dashboard** (start page): KPI tiles (rules, open reviews, to implement, expired / expiring within 30 days), rules by status and per component, recent changes.
+- **Validity monitoring**: a daily job deactivates approved rules after `valid_until` expires (with version and comment entries). The recertification page lists expired and soon-expiring rules; *extend* sets a new expiry date without resetting the approval status.
+- **Drift comparison** on the components page: store the device's actual configuration (`PUT /api/components/{id}/actual-config`; a direct device adapter can hook in) → `GET /api/components/{id}/drift` reports **missing** (approved, not implemented), **stale** (implemented, no longer approved) and **unknown** rule IDs (shadow rules). Matching is based on the SR IDs carried by every export.
+- **Object catalog**: reusable address objects (alias → IP/network) and service objects (e.g. HTTPS = TCP/443), selectable in the rule form. Changing the IP of an address object **updates all rules using that alias** (versioned).
+- **Migrations & backup**: schema changes run through **Alembic** (auto-upgrade at startup; pre-Alembic databases are stamped to the baseline). Daily backup: `scripts/backup.sh` (pg_dump, 14 generations).
+- **Pagination**: `GET /api/rules` returns `{total, items}` with `limit`/`offset`.
 
-## ACI Contracts (EPG-basiert)
+## ACI contracts (EPG-based)
 
-Der ACI-Export modelliert Contracts idiomatisch statt „ein Contract pro Regel":
+The ACI export models contracts idiomatically instead of "one contract per rule":
 
-- **EPG-Katalog** (`/api/epgs`, Pflege auf der Objekte-Seite): EPGs mit Tenant,
-  Application Profile und Bridge Domain, plus **Adresse→EPG-Zuordnung** (exakter Treffer
-  oder spezifischstes enthaltendes Netz; `any` → **vzAny**).
-- **Aggregierung**: Quelle → Consumer, Ziel → Provider; alle Regeln eines
-  (Consumer-EPG, Provider-EPG)-Paars werden zu **einem Contract**
-  (`con-<consumer>-to-<provider>`, scope `context`) mit einem Subject je Filter —
-  das vermeidet Contract-/TCAM-Explosion in der Fabric.
-- **Filter-Wiederverwendung**: Dienste werden gegen den Dienst-Objektkatalog aufgelöst
-  (`flt-https` statt Duplikat je Regel) und über alle Contracts dedupliziert.
-- **Service Graph/PBR**: Trägt die Bridge Domain des Provider-EPG ein Anycast Gateway
-  mit PBR, referenziert das Subject dessen Service-Graph-Template (`vzRsSubjGraphAtt`).
-- **EPG-Bindings**: Der APIC-JSON-Export enthält `fvAp`/`fvAEPg` mit
-  `fvRsProv`/`fvRsCons`-Referenzen; SR-IDs stehen in den Subject-Beschreibungen
-  (Rückverfolgbarkeit/Drift). Regeln ohne EPG-Zuordnung fallen auf Einzel-Contracts
-  zurück und werden in den Warnungen ausgewiesen (sichtbar im YAML-Export).
+- **EPG catalog** (maintained on the objects page): EPGs with tenant, application profile and bridge domain, plus an **address→EPG mapping** (exact match or most specific containing network; `any` → **vzAny**). Multiple addresses can be assigned to the same EPG (comma-separated bulk entry in the form).
+- **Aggregation**: source → consumer, target → provider; all rules of a (consumer EPG, provider EPG) pair become **one contract** with one subject per filter — avoiding contract/TCAM explosion in the fabric.
+- **Filter reuse**: services are resolved against the service object catalog (`flt-https` instead of one duplicate per rule) and deduplicated across contracts.
+- **Service graph / PBR**: if the provider EPG's bridge domain carries an anycast gateway with PBR, the subject references its service graph template.
+- **EPG bindings**: the APIC JSON export contains `fvAp`/`fvAEPg` with provider/consumer references; SR IDs are kept in subject descriptions for traceability/drift. Rules without an EPG mapping fall back to single contracts and are listed in the warnings.
 
-## Host-Firewall-Export
+## Host firewall export
 
-Auf der Export-Seite (Abschnitt „Host-Firewall für einen Ziel-Server") erzeugt Permitra
-für eine **Ziel-IP** die lokalen Firewall-Regeln des Servers
-(`GET /api/export/host/{debian|redhat|sles}?ip=`): Grundlage sind alle freigegebenen
-permit-Regeln, deren Ziel die IP abdeckt (exakt, per Netz-Containment oder via `any` –
-gekennzeichnet). Formate: **Debian** = nftables-Regelwerk (default drop, loopback,
-established/related, ICMP), **RedHat** = firewalld-Skript mit Rich Rules + `--reload`,
-**SLES** = iptables-Skript (Hinweis: SLES 15 nutzt firewalld → RedHat-Export). Jede
-Regelzeile trägt die SR-ID als Kommentar; IPv6-Quellen werden korrekt behandelt
-(`ip6 saddr` / `family="ipv6"` / `ip6tables`).
+For a **target IP**, Permitra generates the server's local firewall rules (`GET /api/export/host/{debian|redhat|sles}?ip=`), based on all approved permit rules whose destination covers the IP. Formats: **Debian** = nftables ruleset (default drop, loopback, established/related, ICMP), **RedHat** = firewalld script with rich rules, **SLES** = iptables script. Every line carries the SR ID as a comment; IPv6 sources are handled correctly.
 
-## Pfad-Analyse (visuelle Ansicht)
+## Capirca/Aerleon integration
 
-Menüpunkt „Pfad-Analyse" (`GET /api/rules/path-analysis?src=&dst=`): Zeigt für ein
-Quell-/Ziel-IP-Paar als Fluss-Diagramm (Quelle → Komponenten → Ziel), **ob die
-Kommunikation möglich ist** und **für welche Protokolle/Ports** (Schnittmenge der
-freigegebenen permit-Regeln über alle zu passierenden Komponenten). Je Komponente
-werden die Regeln angezeigt, die den Verkehr dort ermöglichen (verlinkt, mit Status,
-deny- und „via any"-Kennzeichnung); Komponenten ohne passende freigegebene Regel
-werden rot markiert und in der Bewertung benannt.
+The built-in [Aerleon](https://github.com/aerleon/aerleon) integration (the maintained Apache-2.0 fork of Google's Capirca) translates Permitra rules into Capirca policies: aliases/IPs become network objects, services become service objects (TCP/UDP is split per protocol), rules become terms with their SR ID as the term name; zone-based targets (SRX, Palo Alto) get one filter per zone pair. Endpoints: `GET /api/export/aerleon/{target}` with targets `cisco`, `ciscoasa`, `juniper`, `srx`, `paloalto`, `iptables` — and `policy`, which emits definitions + policy as YAML for existing Capirca/Aerleon pipelines. Check Point and ACI intentionally keep their specialized exporters (Capirca does not cover them).
 
-**Mehr-Hop-Topologie**: Die Hops sind geordnet (quellseitige Komponenten → beidseitige →
-zielseitige, abgeleitet aus der Adress-Zuordnung). Liegt eine Adresse im Netz eines ACI
-Anycast Gateways mit **PBR**, erscheint der Check Point Cluster als zusätzlicher Hop
-(„via PBR", mit Gateway-Name) und wird im Urteil mitgeprüft.
+## Path analysis (visual view)
 
-## Schnellstart (lokal, ohne Docker)
+The analysis page shows, for a source/destination pair, **whether communication is possible** and **for which protocols/ports** (intersection of approved permit rules across all components on the path), as a flow diagram (source → components → destination). Hops are ordered by north-south tier; if an address lies in the network of an ACI anycast gateway with **PBR**, the Check Point cluster appears as an additional hop ("via PBR"). Components without a matching approved rule are marked red and named in the verdict. A single address (IP, CIDR or hostname fragment) can also be searched on its own → all inbound/outbound rules, including network overlap for IPv4 and IPv6; matches that only occur via `any` are set apart.
+
+## Security zones
+
+The security zones page combines: a **zone overview** (per zone: BSI documentation, networks, P-A-P classification, rule count, attached firewall clusters, intra-zonal ACI), a **north-south diagram** following the BSI P-A-P model (packet filter – application level gateway – packet filter: external band on top, P-A-P layer with the firewall clusters and DMZ/transfer zones in the middle, internal zones below), and the **communication matrix**.
+
+- **BSI documentation per zone**: owner (person/team) and protection level per protection goal (**confidentiality, integrity, availability** — each normal/high/very high); the overall protection level follows the maximum principle. Maintained via an edit dialog in the overview, shown as a badge column and in the diagram tooltips.
+- **BSI principle (hard-enforced)**: a zone transition is always a firewall — Cisco ACI alone is not sufficient (not a firewall by BSI definition). A cross-zone rule whose components are all of type ACI is rejected with HTTP 422; ACI contracts remain the tool *within* a zone.
+- **Zone attachment**: which firewall clusters a zone is attached to is maintained explicitly (checkbox multi-select; ACI cannot be selected).
+
+## Zone communication matrix
+
+The matrix governs, per directed zone pair, whether security rules are allowed at all:
+
+- **Allow** — rules permitted (enforcement between zones is always a firewall); `Temp` flag supported.
+- **Block** — creating/changing a rule between these zones is rejected with HTTP 422; the rule form shows the verdict live.
+- **Intra-zone** (diagonal) — allowed; ACI is the tool of choice here.
+- **Unmaintained relationships** — behaviour is configurable (see settings): legacy `permit` with a hint, or **default-deny** following the least-privilege principle.
+
+**Matrix changes are batch requests**: architects collect changes in edit mode (including new zones) and submit them as one request; **two different change approvers** must approve (four-eyes principle, requesters cannot approve their own requests). Every request is versioned with full history.
+
+## Security components
+
+Management of the firewall clusters and ACI fabrics rules are implemented on — name, type (Check Point / Juniper SRX / Cisco ACI), location, management address, north-south tier, active flag. The components page also documents **communication links** between components (with a link type shown on the line, e.g. "OSPF routing", "BGP peering", "PBR service graph") in an SVG topology diagram, and **ACI anycast gateways** (tenant, VRF, bridge domain, gateway IP) with optional **policy-based redirect** to a Check Point cluster (service graph template, node IP/MAC, health group — with plausibility checks).
+
+## Approvals page (change approvers)
+
+Change approvers land on a focused approvals page after login: open rule reviews and open zone/network batch requests with direct approve/reject actions, the 1/2 approval state, and a lock against approving twice yourself. Their navigation is slimmed down to what decisions require.
+
+## Settings (admin area)
+
+- **Least privilege / default-deny** (`zone_matrix_default`): behaviour for zone relationships without a matrix entry. `permit` = allowed with a hint (legacy behaviour, default), `deny` = rules are rejected (422) until the relationship is explicitly set to Allow via a matrix request with two approvals — BSI recommendation, active in the demo dataset. API: `GET/PUT /api/settings`.
+
+## User management, email & sign-in security
+
+- **Admin area** (`/admin`, role admin): create/update/deactivate users, assign roles, trigger password resets. New users without a password receive an **activation link** (valid 72h) — by email if SMTP is configured; the link is also shown to the admin.
+- **Email delivery** (foundation for future notifications), disabled while `SMTP_HOST` is empty:
+
+  ```bash
+  SMTP_HOST=… SMTP_PORT=587 SMTP_USER=… SMTP_PASSWORD=… SMTP_FROM=…
+  PERMITRA_BASE_URL=https://permitra.example.org   # base for links in emails
+  ```
+
+- **Forgot password** on the login page (reset link, valid 2h; responses never reveal whether an account exists). Account page: change password.
+- **2FA (TOTP)**: self-service on the account page (secret for authenticator apps, activation by code); login then asks for the code as a second factor. Implemented per RFC 6238 without extra dependencies.
+- **Passkeys (WebAuthn)**: registration on the account page, passwordless sign-in on the login page. Requires HTTPS (or localhost); configured via `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (default derived from `PERMITRA_BASE_URL`).
+
+## Change management integration (optional)
+
+Permitra sends a JSON webhook on approval events (fire-and-forget, never blocks):
+
+```bash
+CHANGE_WEBHOOK_URL=https://instance.service-now.com/api/x_permitra/change   # empty = off
+CHANGE_WEBHOOK_TOKEN=…   # optional, sent as "Authorization: Bearer"
+```
+
+Events: `rule.submitted`, `rule.approved`, `rule.rejected`, `zone_change.approved`, `zone_change.rejected`. Payload: `{"event": …, "source": "permitra", "timestamp": …, "data": {…}}` — for rules this includes rule ID, zones, addresses, services, components and `change_id`; for batch requests the batch ID and individual changes. A ServiceNow adapter can create the change ticket and write the ticket number back into `change_id` via `PUT /api/rules/{id}`. Implementation: `backend/app/change_management.py`. The complete functionality is also available as a REST API (`/docs`) for CMDB/ticket integrations.
+
+## Quick start (local, without Docker)
 
 ```bash
 # 1. Backend
 python3 -m venv .venv
-.venv/bin/pip install -r backend/requirements.txt openpyxl
+.venv/bin/pip install -r backend/requirements.txt
 cd backend
-../.venv/bin/python -m uvicorn app.main:app --port 8000   # API auf :8000, legt SQLite + Demo-User an
+../.venv/bin/python -m uvicorn app.main:app --port 8000   # API on :8000, creates SQLite + demo users
 
-# 2. Demo-Daten erzeugen (11 Zonen, Matrix, ~100 Regeln) – empfohlen zum Testen
-cd backend
+# 2. Generate demo data (11 zones, matrix, ~100 rules) – recommended for testing
 ../.venv/bin/python seed_demo.py --wipe
 
-#    Alternativ: echte Excel-Daten importieren
-../.venv/bin/python import_excel.py ../data/AP0400Sicherheitsregeln.xlsx   # Regeln
-../.venv/bin/python import_zones.py ../data/AP0400_Zonenmatrix.xlsx        # Zonen + Matrix
-
 # 3. Frontend
-cd frontend
+cd ../frontend
 npm install
-npm run dev                                               # UI auf http://localhost:5173
+npm run dev                                               # UI on http://localhost:5173
 ```
 
-**Demo-Logins:** `architekt/architekt123`, `betrieb/betrieb123`, `admin/admin123`
-API-Dokumentation (Swagger): http://localhost:8000/docs
+**Demo logins:** `architekt`, `betrieb`, `approver`, `approver2`, `admin` — password is the username + `123`.
+API documentation (Swagger): http://localhost:8000/docs
 
-## Schnellstart (Docker Compose)
+## Quick start (Docker Compose)
 
 ```bash
 docker compose up --build
-# UI: http://localhost:8080  (PostgreSQL, Backend und Frontend inklusive)
+# UI: http://localhost:8080  (PostgreSQL, backend and frontend included)
 
-# Demo-Daten in den laufenden Stack (11 Zonen, Matrix, ~100 Regeln):
+# Seed demo data into the running stack:
 docker compose exec backend python seed_demo.py --wipe
-
-# Alternativ: Excel-Import in den laufenden Stack
-docker compose exec backend python import_excel.py /data/AP0400Sicherheitsregeln.xlsx
-docker compose exec backend python import_zones.py /data/AP0400_Zonenmatrix.xlsx
 ```
 
-### Demo-Datensatz (`backend/seed_demo.py`)
+### Demo dataset (`backend/seed_demo.py`)
 
-Deterministisch (fester Seed), komplett fiktiv (Netze aus `10.10.0.0/16`, Hosts `*.demo.local`):
-11 Zonen (INET, DMZ-WEB, VPN, PROD-APP, PROD-DB, TEST, DEV, CICD, SHARED, MGMT, MON) mit
-vollständiger Allow/Block-Matrix, ~100 Regeln über alle Workflow-Status (freigegeben,
-im Review mit Kommentaren, Entwurf, abgelehnt, deaktiviert), Firewall-Regeln zwischen
-Zonen (Juniper/Check Point), ACI-Regeln intra-zonal, plus zwei bewusst überlappende
-Regeln (SR00101/SR00102) zum Testen der Konflikt-Warnungen.
+Deterministic (fixed seed), entirely fictional (networks from `10.10.0.0/16`, hosts `*.demo.local`): 11 zones with a complete allow/block matrix and BSI documentation (owner, C/I/A), ~100 rules across all workflow states, firewall rules between zones (Juniper/Check Point), intra-zonal ACI rules, two deliberately overlapping rules (SR00101/SR00102) for testing conflict warnings, and one rule (SR00103) spanning all three components.
 
-## Sicherheitszonen
+## Example workflow
 
-Die Seite „Sicherheitszonen" bündelt drei Sichten: **Zonen-Übersicht** mit
-Firewall-Erreichbarkeit (`GET /api/zones/overview`: je Zone die Firewall-Cluster aus
-ihren aktiven Regeln; Zonen ohne Firewall-Anbindung werden rot markiert), eine
-**bipartite Grafik** (Firewall-Cluster oben, Zonen darunter, Linien = erreichbar über)
-und die **Kommunikationsmatrix** (unten).
+1. An **architect** creates a rule (ID assigned automatically, e.g. `SR00855`): source `10.0.1.0/24`, target `192.168.1.0/24`, service `TCP/443`, justification "HTTPS for web servers". Permitra validates CIDR/ports/IDs, derives zones and components, checks the zone matrix and warns about **conflicts** (overlapping networks/ports, duplicates, permit/deny shadowing).
+2. The rule is **submitted for review** → a **change approver** reviews, comments and approves (or rejects).
+3. **Operations** exports the configuration with a syntax preview (Juniper set commands, Check Point mgmt_cli/API, ACI APIC JSON/YAML, Capirca targets, CSV/JSON) and applies it in the vendor tools.
+4. Operations sets the **implementation status** per component to *implemented*. Drift comparison verifies the result.
 
-Die Grafik ist eine **Nord-Süd-Sicht nach dem BSI P-A-P-Modell** (Paketfilter –
-Application-Level-Gateway – Paketfilter): oben das Band „Extern (Nord)" mit dem Internet,
-in der Mitte die **P-A-P-Ebene** mit den Firewall-Clustern (nach Nord-Süd-Ebene sortiert)
-und den DMZ-/Transferzonen, unten „Intern (Süd)" mit den Zonen unterhalb der
-P-A-P-Struktur. Jede Zone trägt eine **P-A-P-Einstufung** (`extern` | `pap` | `intern`,
-Feld `pap_level`, änderbar über die Übersichtstabelle bzw.
-`PUT /api/zones/{name}/pap-level`).
+Example export files are provided under [`examples/`](examples/).
 
-**BSI-Prinzip** (hart durchgesetzt): Der Übergang zwischen Sicherheitszonen ist immer
-eine Firewall — Cisco ACI ist als Sicherheitskomponente für den Zonenübergang nicht
-ausreichend (keine Firewall nach BSI-Definition). Eine zonenübergreifende Regel, deren
-Komponenten ausschließlich vom Typ ACI sind, wird mit HTTP 422 abgelehnt; ACI Contracts
-bleiben das Mittel innerhalb einer Zone. Im Demo-Bestand ist zudem ein externer
-**Provider-Firewall-Cluster** modelliert (BGP-Peering an FW-Cluster-BER), über den die
-Zone INET erreichbar ist.
-
-## Zonen & Zonen-Kommunikationsmatrix
-
-Sicherheitszonen sind eigene Entitäten (`/api/zones`) und im Regelformular als Dropdown
-auswählbar. Die **Zonen-Kommunikationsmatrix** (Menüpunkt „Zonen-Matrix", importiert aus
-„AP0400_AOKMeinLeben_Kommunikationsmatrix") regelt je Richtungspaar, ob Sicherheitsregeln
-überhaupt zulässig sind:
-
-- **Allow** – Regeln erlaubt; die Durchsetzung zwischen Zonen erfolgt immer per Firewall,
-  daher wird kein Durchsetzungselement unterschieden (die FW/ACI-Angaben aus dem Excel
-  werden beim Import ignoriert, `Temp` bleibt als Kennzeichen erhalten)
-- **Block** – das Anlegen/Ändern einer Regel zwischen diesen Zonen wird mit HTTP 422
-  abgelehnt; das Regelformular zeigt die Bewertung live beim Auswählen der Zonen
-- **Intra-Zone** (Diagonale „–") – erlaubt; innerhalb einer Zone kommt ACI zum Einsatz.
-  Nennt eine zonenübergreifende Regel ACI als Plattform, gibt es einen Hinweis.
-- **Nicht gepflegte** Zonen/Beziehungen (Altdaten) – erlaubt, aber mit Hinweis in der
-  Konfliktanzeige
-
-Architekten/Admins pflegen die Matrix per Klick auf eine Zelle (wechselt Allow ↔ Block),
-legen neue Zonen an und löschen Zonen (nur wenn keine
-Regel sie verwendet; Matrix-Einträge werden mitgelöscht); API: `GET/POST /api/zones`,
-`DELETE /api/zones/{name}`, `GET /api/zones/matrix`, `PUT /api/zones/matrix/{von}/{nach}`,
-`GET /api/zones/check?source=&destination=&platforms=`.
-
-## Sicherheitskomponenten
-
-Menüpunkt „Komponenten" (`/api/components`): Verwaltungstabelle der Firewall-Cluster und
-ACI-Fabrics, auf denen Regeln umgesetzt werden — mit Name, Typ (Check Point / Juniper SRX /
-Cisco ACI), Standort/Zone, Management-Adresse, Beschreibung und aktiv/inaktiv-Status.
-Anlegen/Bearbeiten/Löschen für Architekten, Betrieb und Admins; Namen sind eindeutig.
-Der Demo-Seed legt zwei Beispiel-Cluster an: **FW-Cluster-FFM** (Check Point, Zone FFM)
-und **FW-Cluster-BER** (Juniper SRX, Zone BER).
-
-### Kommunikationsbeziehungen (Topologie)
-
-Auf der Komponenten-Seite werden die direkten Kommunikationsbeziehungen zwischen den
-Komponenten dokumentiert (`GET/POST /api/components/links`, ungerichtet, mit
-Beschreibung – z.B. „ACI-Fabric-FFM ↔ FW-Cluster-FFM: PBR Service Graph" und
-„FW-Cluster-FFM ↔ FW-Cluster-BER: Standort-Transit"). Eine **SVG-Topologie-Grafik**
-zeigt die Komponenten als typ-farbige Knoten mit ihren Verbindungen (Tooltip mit
-Details); darunter Tabelle und Formular zur Pflege. Duplikate und Selbstbezüge werden
-abgelehnt.
-
-### ACI Anycast Gateways (mit PBR)
-
-Auf derselben Seite werden **Cisco ACI Anycast Gateway**-Konfigurationen dokumentiert
-(`/api/aci-gateways`): Tenant, VRF, Bridge Domain, Anycast-Gateway-IP (validiert, z.B.
-`10.10.30.1/24`) und zugehörige Sicherheitszone. Optional je Gateway eine
-**PBR-Anbindung (Policy-Based Redirect)** an einen Check Point Cluster aus der
-Komponenten-Tabelle: Ziel-Firewall, PBR-Node-IP/-MAC (validiert), Service-Graph-Template
-und Health Group. Plausibilitätsprüfungen: PBR-Ziel muss vom Typ Check Point sein,
-bei aktiviertem PBR sind Ziel-Firewall und Node-IP Pflicht, und eine Komponente, die
-als PBR-Ziel referenziert wird, kann nicht gelöscht werden. Der Demo-Seed dokumentiert
-drei Gateways: GW-PROD-APP und GW-PROD-DB (PBR über FW-Cluster-FFM, `SG-CHKP-FFM`)
-sowie GW-SHARED (ohne PBR).
-
-## Adress-Suche
-
-Menüpunkt „Adress-Suche" (`GET /api/rules/ip-search?q=`, `GET /api/rules/path-search?src=&dst=`):
-
-- **Eine Adresse** (IP, CIDR-Netz oder Hostname-Fragment) eingeben → alle Regeln, in denen
-  sie als **Quelle (ausgehend)** bzw. **Ziel (eingehend)** vorkommt – inklusive
-  Netz-Überlappung (`10.40.105.13` findet auch `10.40.105.0/24`) für IPv4 und IPv6.
-- **Quelle und Ziel** eingeben → alle Regeln, die Verkehr zwischen beiden abdecken.
-- Treffer, die nur über ein `any` zustande kommen, werden abgesetzt (ausgegraut,
-  „nur über any") und nach den direkten Treffern einsortiert; die getroffenen
-  Adresseinträge werden gelb hervorgehoben.
-
-## Beispiel-Workflow
-
-1. **Architekt** legt eine Regel an (ID wird automatisch vergeben, z.B. `SR00855` (5-stellig, bis 99999 Regeln)):
-   Quelle `10.0.1.0/24`, Ziel `192.168.1.0/24`, Dienst `TCP/443`, Anlass „Erlaubt HTTPS-Verkehr für Webserver“.
-   Die Anwendung prüft dabei: gültige CIDR/Hostnamen, Ports 1–65535, keine doppelten IDs, Gültigkeitszeitraum – und warnt bei **Konflikten** (überlappende Netze/Ports, Duplikate, permit/deny-Shadowing).
-2. Regel **zum Review einreichen** → **Betrieb** prüft, kommentiert und gibt frei (oder lehnt ab).
-3. Betrieb **exportiert** die Konfiguration mit Syntax-Vorschau:
-   - Juniper: `set security policies from-zone trust to-zone untrust policy HTTPS-Webserver match … then permit` (inkl. Address-Book und Applications)
-   - Check Point: `mgmt_cli`-Skript oder Management-API-JSON
-   - ACI: APIC-JSON (`fvTenant`/`vzFilter`/`vzBrCP`) oder YAML
-   - außerdem CSV (Spalten wie die bisherige Kommunikationsmatrix) und JSON
-4. Betrieb setzt den **Umsetzungsstatus** je Plattform auf „umgesetzt“.
-
-Beispiel-Exportdateien liegen unter [`examples/`](examples/).
-
-## Projektstruktur
+## Project structure
 
 ```
 backend/
   app/
-    main.py            FastAPI-App, CORS, Startup (Tabellen + Demo-User)
-    models.py          SQLAlchemy-Modelle (Rule, RuleVersion, Comment, User)
-    schemas.py         Pydantic-Schemas (Eingabe-Validierung / Ausgabe getrennt)
-    validation.py      Plausibilitätsprüfung (CIDR, Ports, Protokolle)
-    conflicts.py       Konflikt-Erkennung (Overlap, Duplikat, Shadowing)
-    auth.py            JWT-Auth, PBKDF2-Passworthashes, Rollen-Dependency
-    routers/           REST-Endpunkte (auth, rules, export, users)
-    exporters/         juniper.py, checkpoint.py, aci.py, generic.py (CSV/JSON)
-  import_excel.py      Import der bestehenden Kommunikationsmatrix
-  tests/               pytest (Exporter, Validierung, Konflikte)
+    main.py            FastAPI app, CORS, startup (migrations + demo users)
+    models.py          SQLAlchemy models (rules, zones, components, users, …)
+    schemas.py         Pydantic schemas (input validation / output separated)
+    validation.py      plausibility checks (CIDR, ports, protocols)
+    conflicts.py       conflict detection (overlap, duplicate, shadowing)
+    zone_check.py      zone derivation and matrix checks
+    component_resolution.py  automatic component resolution
+    auth.py            JWT auth, PBKDF2 password hashes, role dependency
+    totp.py            TOTP two-factor (RFC 6238, stdlib only)
+    mailer.py          optional SMTP delivery (activation/reset mails)
+    change_management.py  optional change-management webhook
+    settings.py        Permitra settings (admin area)
+    routers/           REST endpoints
+    exporters/         juniper, checkpoint, aci, aerleon_export, hostfw, generic
+  alembic/             database migrations (auto-run at startup)
+  seed_demo.py         deterministic demo dataset
+  tests/               pytest
 frontend/
-  src/pages/           RuleList (Filter/Suche), RuleForm, RuleDetail (Review,
-                       Historie, Kommentare), ExportPage (Vorschau + Highlighting)
-deploy/k8s/            Kubernetes-Manifeste
-docs/DEPLOYMENT.md     Deployment-Plan (Docker/Kubernetes, Härtung)
-examples/              Generierte Beispiel-Exporte
-data/                  Original-Excel (für den Import)
+  src/pages/           React pages (rules, zones, networks, components, admin, …)
+  src/i18n.jsx         bilingual UI (German/English, toggle in the top bar)
+deploy/k8s/            Kubernetes manifests
+docs/DEPLOYMENT.md     deployment guide (Docker/Kubernetes, hardening)
+website/               static project website (permitra.de)
+examples/              generated example exports
 ```
 
-## Wichtige API-Endpunkte
+## Key API endpoints
 
-| Methode & Pfad | Zweck |
+| Method & path | Purpose |
 |---|---|
-| `POST /api/auth/login` | Login (OAuth2-Form), liefert JWT |
-| `GET /api/rules?q=&source=&destination=&port=&protocol=&status=&platform=` | Suche/Filter |
-| `POST /api/rules` · `PUT /api/rules/{id}` | Anlegen/Ändern (Architekt), versioniert |
-| `POST /api/rules/{id}/submit|approve|reject|deactivate` | Review-Workflow |
-| `PUT /api/rules/{id}/impl-status` | Umsetzungsstatus je Plattform (Betrieb) |
-| `GET /api/rules/{id}/conflicts` | Konflikt-Warnungen |
-| `GET /api/export/{fmt}?ids=&only_approved=&download=` | `csv`, `json`, `juniper`, `checkpoint-cli`, `checkpoint-api`, `aci-json`, `aci-yaml` |
+| `POST /api/auth/login` | Login (OAuth2 form, optional `otp` field), returns JWT |
+| `GET /api/rules?q=&source=&destination=&port=&protocol=&status=&component=&impl=&vrf=` | Search/filter with pagination |
+| `POST /api/rules` · `PUT /api/rules/{id}` | Create/update (architect), versioned |
+| `POST /api/rules/{id}/submit\|approve\|reject\|deactivate` | Review workflow |
+| `PUT /api/rules/{id}/impl-status` | Implementation status per component (operations) |
+| `GET /api/rules/{id}/conflicts` | Conflict warnings |
+| `GET /api/zones/…` | Zones, overview, matrix, batch requests, network mapping |
+| `GET /api/export/{fmt}` | `csv`, `json`, `juniper`, `checkpoint-cli`, `checkpoint-api`, `aci-json`, `aci-yaml` |
+| `GET /api/export/aerleon/{target}` | Capirca/Aerleon targets incl. `policy` YAML |
+| `GET /api/export/host/{os}?ip=` | Host firewall config for a target server |
 
 ## Tests
 
@@ -327,62 +227,12 @@ data/                  Original-Excel (für den Import)
 cd backend && ../.venv/bin/python -m pytest tests/
 ```
 
-## Ausblick (vorbereitet, nicht im Prototyp)
+## Roadmap
 
-- **LDAP/AD**: `auth.py` kapselt die Anmeldung an einer Stelle – dort kann statt der lokalen
-  Passwortprüfung ein LDAP-Bind erfolgen (z.B. `ldap3`), Rollen über AD-Gruppen gemappt werden.
-- **ServiceNow-Change-Tickets**: Der generische Change-Management-Webhook (siehe unten) liefert
-  die Ereignisse; ein ServiceNow-Adapter (Scripted REST API/MID-Server) erzeugt daraus das
-  Change-Ticket und schreibt die Ticket-Nummer per `PUT /api/rules/{id}` in `change_id` zurück.
+Tracked as GitLab issues: email notifications, ServiceNow adapter, configurable mandatory fields, rule rollback, risk hints (any-to-any, risky services), SIEM audit log export, AD/LDAP sign-in, read-only API tokens for automation (Ansible/Terraform). Multi-environment support (overlapping IP ranges per environment, e.g. IT/OT) is fully built and currently dormant behind a single default environment.
 
-## Einstellungen (Admin-Bereich)
+## License
 
-- **Minimalprinzip / default-deny** (`zone_matrix_default`): Verhalten für Zonen-Beziehungen
-  ohne Matrix-Eintrag. `permit` = erlaubt mit Hinweis (Bestandsverhalten), `deny` = Regeln
-  werden abgelehnt (422), bis die Beziehung per Matrixantrag (zwei Freigaben) explizit auf
-  Allow gesetzt ist — BSI-Empfehlung, im Demo-Datensatz aktiv. Pflege im Admin-Bereich,
-  API `GET/PUT /api/settings`; die Matrix kennzeichnet ungepflegte Zellen entsprechend.
-
-## Benutzerverwaltung, E-Mail & Anmeldesicherheit
-
-- **Admin-Bereich** (`/admin`, Rolle admin): Benutzer anlegen/ändern/deaktivieren, Rollen
-  vergeben, Passwort-Resets anstoßen. Neue Benutzer ohne Passwort erhalten einen
-  **Aktivierungslink** (72h gültig) – per Mail, falls SMTP konfiguriert; der Link wird dem
-  Admin zusätzlich angezeigt.
-- **E-Mail-Versand** (Basis für spätere Benachrichtigungen), aus solange SMTP_HOST leer:
-
-  ```bash
-  SMTP_HOST=… SMTP_PORT=587 SMTP_USER=… SMTP_PASSWORD=… SMTP_FROM=…
-  PERMITRA_BASE_URL=https://permitra.example.org   # Basis für Links in Mails
-  ```
-
-- **Passwort vergessen** auf der Login-Seite (Reset-Link, 2h gültig; Antwort verrät nie,
-  ob ein Konto existiert). Konto-Seite (`/account`): Passwort ändern.
-- **2FA (TOTP)**: Self-Service auf der Konto-Seite (Secret für Authenticator-Apps,
-  Aktivierung per Code); der Login fragt den Code danach als zweiten Faktor ab.
-- **Passkeys (WebAuthn)**: Registrierung auf der Konto-Seite, Anmeldung ohne Passwort auf
-  der Login-Seite. Erfordert HTTPS (bzw. localhost); Konfiguration über
-  `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (Default: aus `PERMITRA_BASE_URL` abgeleitet).
-
-## Change-Management-Integration (optional)
-
-Permitra sendet bei Freigabe-Ereignissen einen JSON-Webhook (fire-and-forget, blockiert nie):
-
-```bash
-CHANGE_WEBHOOK_URL=https://instanz.service-now.com/api/x_permitra/change   # leer = aus
-CHANGE_WEBHOOK_TOKEN=…   # optional, wird als "Authorization: Bearer" gesendet
-```
-
-Ereignisse: `rule.submitted`, `rule.approved`, `rule.rejected`,
-`zone_change.approved`, `zone_change.rejected`. Payload:
-`{"event": …, "source": "permitra", "timestamp": …, "data": {…}}` –
-bei Regeln u.a. `rule_id`, Zonen, Adressen, Dienste, Komponenten, `change_id`,
-bei Sammelanträgen `batch_id` und die Einzeländerungen. Implementierung:
-`backend/app/change_management.py`.
-- **CMDB/Ticket-Integration**: Die komplette Funktionalität ist als REST-API verfügbar (`/docs`).
-
-## Lizenz
-
-Permitra ist Open Source und steht unter der [Apache License 2.0](LICENSE).
+Permitra is open source under the [Apache License 2.0](LICENSE).
 
 Copyright 2026 Lars Vonhof-Hunold

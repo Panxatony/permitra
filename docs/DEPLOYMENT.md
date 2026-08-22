@@ -1,51 +1,49 @@
-# Permitra – Deployment-Plan
+# Permitra – Deployment Guide
 
-## Variante A: Docker Compose (empfohlen für den Prototyp / kleine Teams)
+## Option A: Docker Compose (recommended for the prototype / small teams)
 
-**Komponenten:** PostgreSQL 16, FastAPI-Backend (uvicorn), Frontend (nginx mit statischem Build + API-Proxy).
+**Components:** PostgreSQL 16, FastAPI backend (uvicorn), frontend (nginx with static build + API proxy).
 
 ```bash
-# .env anlegen (nicht einchecken!)
+# Create .env (do not commit!)
 cat > .env <<'EOF'
-DB_PASSWORD=<starkes-passwort>
-SECRET_KEY=<langer-zufallsstring>   # z.B. openssl rand -hex 32
+DB_PASSWORD=<strong-password>
+SECRET_KEY=<long-random-string>   # e.g. openssl rand -hex 32
 EOF
 
 docker compose up --build -d
-docker compose exec backend python import_excel.py /data/AP0400Sicherheitsregeln.xlsx
+docker compose exec backend python seed_demo.py --wipe   # optional demo data
 ```
 
-- UI/API erreichbar auf Port **8080** (nginx proxied `/api` zum Backend; Backend und DB sind nicht direkt exponiert).
-- Datenhaltung im Volume `pgdata`.
-- **Backup:** `docker compose exec db pg_dump -U permitra permitra > backup.sql` (per Cron).
-- **Update:** `git pull && docker compose up --build -d` – das Schema wird beim Start angelegt;
-  für spätere Schema-Änderungen Alembic-Migrationen ergänzen.
+- UI/API reachable on port **8080** (nginx proxies `/api` to the backend; backend and DB are not exposed directly). Override with `FRONTEND_PORT`.
+- Data is stored in the `pgdata` volume.
+- **Backup:** `scripts/backup.sh` (pg_dump, 14 generations) via cron, or `docker compose exec db pg_dump -U permitra permitra > backup.sql`.
+- **Update:** `git pull && docker compose up --build -d` — schema changes run automatically via Alembic migrations at startup.
+- **Optional environment variables** (see README for details): `SMTP_*` + `PERMITRA_BASE_URL` (email delivery and links), `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (passkeys/WebAuthn), `CHANGE_WEBHOOK_URL`/`CHANGE_WEBHOOK_TOKEN` (change management webhook).
 
-## Variante B: Kubernetes
+## Option B: Kubernetes
 
-Manifeste unter `deploy/k8s/permitra.yaml` (Namespace, Secret, Postgres-StatefulSet mit PVC,
-Backend-Deployment mit Readiness-Probe auf `/api/health`, Frontend-Deployment, Ingress).
+Manifests under `deploy/k8s/permitra.yaml` (namespace, secret, Postgres StatefulSet with PVC, backend deployment with readiness probe on `/api/health`, frontend deployment, ingress).
 
 ```bash
-# Images bauen und pushen
+# Build and push images
 docker build -t $REGISTRY/permitra-backend:latest backend/
 docker build -t $REGISTRY/permitra-frontend:latest frontend/
 docker push $REGISTRY/permitra-backend:latest
 docker push $REGISTRY/permitra-frontend:latest
 
-# REGISTRY/Hostnamen + Secrets in permitra.yaml anpassen, dann:
+# Adjust REGISTRY/hostnames + secrets in permitra.yaml, then:
 kubectl apply -f deploy/k8s/permitra.yaml
 ```
 
-Für Produktion empfohlen: verwalteter PostgreSQL-Dienst oder Operator (z.B. CloudNativePG)
-statt des einfachen StatefulSets, TLS am Ingress (cert-manager), NetworkPolicies.
+Recommended for production: a managed PostgreSQL service or operator (e.g. CloudNativePG) instead of the simple StatefulSet, TLS at the ingress (cert-manager), NetworkPolicies.
 
-## Härtung (vor Produktivbetrieb)
+## Hardening (before production use)
 
-1. **SECRET_KEY** setzen (JWT-Signierung) und Demo-Benutzer entfernen bzw. Passwörter ändern
-   (`seed.py` legt sie nur an, wenn die Benutzertabelle leer ist).
-2. **TLS** terminieren (Reverse-Proxy/Ingress); HTTP nur intern.
-3. **CORS** in `backend/app/main.py` auf die echte Frontend-Origin einschränken.
-4. **LDAP/AD-Anbindung** statt lokaler Konten (Erweiterungspunkt: `auth.py`).
-5. Datenbank-Zugang nur aus dem Backend-Netz; regelmäßige Dumps.
-6. Audit: Versionshistorie ist fachlich vorhanden; zusätzlich zentrale API-Logs sammeln.
+1. Set a strong **SECRET_KEY** (JWT signing) and remove the demo users or change their passwords (`seed.py` only creates them when the user table is empty).
+2. Terminate **TLS** (reverse proxy/ingress); HTTP internal only. Passkeys/WebAuthn require HTTPS.
+3. Restrict **CORS** in `backend/app/main.py` to the real frontend origin.
+4. Enable **2FA/passkeys** for accounts, or connect **LDAP/AD** instead of local accounts (extension point: `auth.py`).
+5. Database access only from the backend network; regular dumps.
+6. **Rate limiting** at the reverse proxy (see the public demo: strict limit on `/api/auth/login`, moderate limit on `/api/`).
+7. Audit: the version history covers the application level; additionally collect central API logs.
