@@ -31,7 +31,7 @@ router = APIRouter(prefix="/api/components", tags=["components"])
 
 
 def get_component_or_404(db: Session, component_id: int) -> SecurityComponent:
-    component = db.query(SecurityComponent).get(component_id)
+    component = db.get(SecurityComponent, component_id)
     if not component:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Komponente nicht gefunden")
     return component
@@ -87,7 +87,7 @@ def create_link(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Eine Komponente spricht nicht mit sich selbst")
     a, b = sorted((payload.component_a_id, payload.component_b_id))
     for cid in (a, b):
-        if not db.query(SecurityComponent).get(cid):
+        if not db.get(SecurityComponent, cid):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Komponente {cid} nicht gefunden")
     existing = (
         db.query(ComponentLink)
@@ -109,7 +109,7 @@ def delete_link(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    link = db.query(ComponentLink).get(link_id)
+    link = db.get(ComponentLink, link_id)
     if not link:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Beziehung nicht gefunden")
     db.delete(link)

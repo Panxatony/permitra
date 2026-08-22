@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ..auth import create_token, get_current_user, hash_password, verify_password
 from ..database import get_db
 from .. import mailer, totp
-from ..models import Passkey, User
+from ..models import Passkey, User, utcnow
 from ..schemas import Token, UserOut
 from .users_router import consume_token, issue_token
 
@@ -25,6 +25,20 @@ def _login_ok(user: User) -> Token:
     return Token(access_token=create_token(user), user=UserOut.model_validate(user))
 
 
+# Brute-Force-Schutz: nach LOGIN_MAX_FAILS Fehlversuchen Konto für LOGIN_LOCK_MINUTES sperren
+LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "5"))
+LOGIN_LOCK_MINUTES = int(os.environ.get("LOGIN_LOCK_MINUTES", "15"))
+
+
+def _register_failure(db: Session, user: User) -> None:
+    from datetime import timedelta
+    user.failed_logins = (user.failed_logins or 0) + 1
+    if user.failed_logins >= LOGIN_MAX_FAILS:
+        user.locked_until = utcnow() + timedelta(minutes=LOGIN_LOCK_MINUTES)
+        user.failed_logins = 0
+    db.commit()
+
+
 @router.post("/login", response_model=Token)
 async def login(
     request: Request,
@@ -32,7 +46,18 @@ async def login(
     db: Session = Depends(get_db),
 ):
     user = db.query(User).filter(User.username == form.username).first()
+    # Kontosperre prüfen (fail-secure; identische Meldung, kein Enumerieren)
+    if user and user.locked_until is not None:
+        locked_until = user.locked_until
+        if locked_until.tzinfo is None:
+            from datetime import timezone
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if locked_until > utcnow():
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
+                                "Konto vorübergehend gesperrt – bitte später erneut versuchen")
     if not user or not verify_password(form.password, user.password_hash):
+        if user:
+            _register_failure(db, user)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Benutzername oder Passwort falsch")
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN,
@@ -43,7 +68,13 @@ async def login(
         if not otp:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_required")
         if not totp.verify(user.totp_secret, otp):
+            _register_failure(db, user)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_invalid")
+    # Erfolg: Fehlversuchszähler und Sperre zurücksetzen
+    if user.failed_logins or user.locked_until:
+        user.failed_logins = 0
+        user.locked_until = None
+        db.commit()
     return _login_ok(user)
 
 
@@ -80,6 +111,8 @@ def set_password(payload: dict, db: Session = Depends(get_db)):
     user.password_hash = hash_password(password)
     user.is_active = True
     user.token_valid_from = utcnow()  # Passwortänderung entzieht bestehende Tokens
+    user.failed_logins = 0
+    user.locked_until = None
     db.commit()
     return {"detail": ("Konto aktiviert – du kannst dich jetzt anmelden"
                        if purpose == "activate" else "Passwort geändert"),

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,12 +31,22 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# CORS-Origins konfigurierbar (PERMITRA_CORS_ORIGINS, kommagetrennt).
+# Default: nur lokale Entwicklungs-Origins. In Produktion die echte Frontend-URL
+# setzen; leer/"*" wird bewusst NICHT als Wildcard akzeptiert (credentials=True).
+_cors_env = os.environ.get("PERMITRA_CORS_ORIGINS", "").strip()
+CORS_ORIGINS = (
+    [o.strip() for o in _cors_env.split(",") if o.strip() and o.strip() != "*"]
+    if _cors_env
+    else ["http://localhost:5173", "http://localhost:8080", "http://localhost:3000"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:8080", "http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(auth_router.router)

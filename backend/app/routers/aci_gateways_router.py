@@ -16,7 +16,7 @@ def to_out(gw: AciGateway) -> AciGatewayOut:
 
 
 def get_gateway_or_404(db: Session, gateway_id: int) -> AciGateway:
-    gateway = db.query(AciGateway).get(gateway_id)
+    gateway = db.get(AciGateway, gateway_id)
     if not gateway:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ACI Gateway nicht gefunden")
     return gateway
@@ -26,7 +26,7 @@ def validate_pbr_target(db: Session, payload: AciGatewayCreate):
     """PBR-Ziel muss eine existierende Check Point Komponente sein."""
     if not payload.pbr_component_id:
         return
-    component = db.query(SecurityComponent).get(payload.pbr_component_id)
+    component = db.get(SecurityComponent, payload.pbr_component_id)
     if not component:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "PBR-Ziel-Komponente nicht gefunden")
     if component.type != ComponentType.checkpoint:

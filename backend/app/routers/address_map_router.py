@@ -54,7 +54,7 @@ def delete_mapping(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    mapping = db.query(AddressComponentMap).get(mapping_id)
+    mapping = db.get(AddressComponentMap, mapping_id)
     if not mapping:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Zuordnung nicht gefunden")
     db.delete(mapping)

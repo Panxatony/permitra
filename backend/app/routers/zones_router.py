@@ -72,7 +72,7 @@ def update_network(
     """Netzwerk-Zuordnung ändern. Beschreibungs-Änderungen wirken sofort;
     CIDR-/Zonen-Änderungen sind sicherheitsrelevant und laufen als Antrag über
     den Freigabe-Workflow (zwei Change Approver)."""
-    network = db.query(ZoneNetwork).get(network_id)
+    network = db.get(ZoneNetwork, network_id)
     if not network:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Netzwerk-Zuordnung nicht gefunden")
     from ..component_resolution import normalize_ip
@@ -410,7 +410,7 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             ))
             continue
         if item.get("type") in ("net_update", "net_delete"):
-            network = db.query(ZoneNetwork).get(item.get("network_id") or 0)
+            network = db.get(ZoneNetwork, item.get("network_id") or 0)
             if not network:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Netzwerk-Zuordnung nicht gefunden")
             if _pending_net_conflict(db, network.cidr, network.id):
@@ -581,21 +581,34 @@ def list_changes(db: Session = Depends(get_db), _: User = Depends(get_current_us
 
 
 def _decide_change(db: Session, change_id: int, user: User, approve: bool, comment: str):
-    """Entscheidet den GESAMTEN Sammelantrag, zu dem der Eintrag gehört."""
-    change = db.query(ZonePolicyChange).get(change_id)
+    """Entscheidet den GESAMTEN Sammelantrag, zu dem der Eintrag gehört.
+
+    Die Batch-Zeilen werden für die Dauer der Entscheidung gesperrt
+    (SELECT … FOR UPDATE, auf SQLite No-op), damit zwei parallele Freigaben
+    nicht beide als 'erste Freigabe' durchlaufen (Vermeidung von TOCTOU)."""
+    change = db.get(ZonePolicyChange, change_id)
     if not change:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Antrag nicht gefunden")
-    if change.status != "pending":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Antrag ist bereits '{change.status}'")
     if change.batch_id:
         batch = (
             db.query(ZonePolicyChange)
             .filter(ZonePolicyChange.batch_id == change.batch_id,
                     ZonePolicyChange.status == "pending")
+            .with_for_update()
             .all()
         )
     else:
-        batch = [change]
+        batch = (
+            db.query(ZonePolicyChange)
+            .filter(ZonePolicyChange.id == change.id)
+            .with_for_update()
+            .all()
+        )
+    # Nach der Sperre erneut prüfen (der Status kann sich zwischen Lesen und
+    # Sperren geändert haben)
+    if not batch or change.status != "pending":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Antrag ist bereits '{change.status}'")
     # Vier-Augen-Prinzip ausnahmslos – auch Admins können eigene Anträge nicht
     # selbst freigeben (BSI: Funktionstrennung)
     if any(c.requested_by == user.username for c in batch):
@@ -661,7 +674,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                     db.add(ZoneNetwork(cidr=item.to_zone, zone_id=zone.id, vrf_id=vrf.id,
                                        description=extra.get("description", ""), source="manual"))
             elif item.change_type in ("net_update", "net_delete"):
-                network = db.query(ZoneNetwork).get(extra.get("network_id") or 0)
+                network = db.get(ZoneNetwork, extra.get("network_id") or 0)
                 if not network:
                     continue  # Zuordnung wurde zwischenzeitlich entfernt
                 if item.change_type == "net_delete":

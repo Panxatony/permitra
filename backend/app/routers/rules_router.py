@@ -49,13 +49,19 @@ RULE_ID_RE = re.compile(r"^SR(\d+)$")
 
 
 def next_rule_id(db: Session) -> str:
-    """Nächste freie SR-Nummer, 5-stellig aufgefüllt (z.B. SR00855) – bis 99999 Regeln."""
-    max_num = 0
-    for (rid,) in db.query(Rule.rule_id).all():
-        m = RULE_ID_RE.match(rid)
-        if m:
-            max_num = max(max_num, int(m.group(1)))
-    return f"SR{max_num + 1:05d}"
+    """Nächste freie SR-Nummer, 5-stellig aufgefüllt (z.B. SR00855).
+
+    Max-Aggregat in der DB (SUBSTR+CAST) statt Laden aller Regeln – skaliert
+    auch bei zehntausenden Regeln. Kollisionen bei paralleler Anlage fängt der
+    Unique-Constraint mit Retry im Aufrufer ab."""
+    from sqlalchemy import Integer, cast, func
+
+    max_num = (
+        db.query(func.max(cast(func.substr(Rule.rule_id, 3), Integer)))
+        .filter(Rule.rule_id.like("SR%"))
+        .scalar()
+    ) or 0
+    return f"SR{int(max_num) + 1:05d}"
 
 
 def get_rule_or_404(db: Session, rule_id: str) -> Rule:

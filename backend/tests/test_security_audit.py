@@ -128,3 +128,37 @@ def test_impl_status_rejects_unknown_component(db):
     # gültig
     r = set_impl_status("SR00001", {"FW-A": "umgesetzt"}, db, ops)
     assert r.impl_status["FW-A"] == "umgesetzt"
+
+
+# --- M2: Login-Lockout ------------------------------------------------------
+
+def test_login_lockout(db, monkeypatch):
+    import app.routers.auth_router as ar
+    monkeypatch.setattr(ar, "LOGIN_MAX_FAILS", 3)
+    monkeypatch.setattr(ar, "LOGIN_LOCK_MINUTES", 15)
+    u = make_user(db, "target", Role.architect)
+    # 3 Fehlversuche -> Konto gesperrt
+    for _ in range(3):
+        ar._register_failure(db, u)
+    db.refresh(u)
+    from datetime import timezone
+    locked = u.locked_until
+    if locked.tzinfo is None:
+        locked = locked.replace(tzinfo=timezone.utc)
+    assert locked is not None and locked > utcnow()
+    assert u.failed_logins == 0  # Zähler nach Sperre zurückgesetzt
+
+
+# --- M4: next_rule_id per SQL-Aggregat --------------------------------------
+
+def test_next_rule_id_uses_max(db):
+    from app.routers.rules_router import next_rule_id
+    fw = SecurityComponent(name="FW", type=ComponentType.juniper)
+    db.add(fw); db.flush()
+    for rid in ("SR00001", "SR00042", "SR00007"):
+        db.add(Rule(rule_id=rid, vrf_id=1, name=rid, components=[fw],
+                    source=[{"ip": "10.0.0.1", "alias": ""}], destination=[{"ip": "10.0.0.2", "alias": ""}],
+                    services=[{"protocol": "TCP", "port": "443"}], action=RuleAction.permit,
+                    status=RuleStatus.approved))
+    db.commit()
+    assert next_rule_id(db) == "SR00043"

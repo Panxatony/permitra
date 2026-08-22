@@ -114,6 +114,10 @@ def update_user(
     # Deaktivierung und Rollenwechsel entziehen bestehende Tokens sofort
     if payload.is_active is False or payload.role is not None:
         user.token_valid_from = utcnow()
+    # Reaktivierung durch den Admin hebt eine Kontosperre auf
+    if payload.is_active is True:
+        user.failed_logins = 0
+        user.locked_until = None
     db.commit()
     db.refresh(user)
     return user

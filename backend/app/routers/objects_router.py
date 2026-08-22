@@ -112,7 +112,7 @@ def update_address(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    obj = db.query(AddressObject).get(object_id)
+    obj = db.get(AddressObject, object_id)
     if not obj:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Adress-Objekt nicht gefunden")
     old_ip = obj.ip
@@ -135,7 +135,7 @@ def delete_address(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    obj = db.query(AddressObject).get(object_id)
+    obj = db.get(AddressObject, object_id)
     if not obj:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Adress-Objekt nicht gefunden")
     db.delete(obj)
@@ -174,7 +174,7 @@ def delete_service(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    obj = db.query(ServiceObject).get(object_id)
+    obj = db.get(ServiceObject, object_id)
     if not obj:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Dienst-Objekt nicht gefunden")
     db.delete(obj)

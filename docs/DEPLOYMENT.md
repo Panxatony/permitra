@@ -42,8 +42,8 @@ Recommended for production: a managed PostgreSQL service or operator (e.g. Cloud
 
 1. **SECRET_KEY is mandatory** — the app refuses to start without it (fail-secure). Generate with `openssl rand -hex 32`. Do **not** set `PERMITRA_DEMO`; leave it unset in production so no known demo accounts are created — instead a single `admin` with a random password is created on first start and printed once to the log (change it immediately). `PERMITRA_DEV=1` is for local development only (random per-process key).
 2. Terminate **TLS** (reverse proxy/ingress); HTTP internal only. Passkeys/WebAuthn require HTTPS.
-3. Restrict **CORS** in `backend/app/main.py` to the real frontend origin.
+3. Restrict **CORS** via `PERMITRA_CORS_ORIGINS` (comma-separated) to the real frontend origin; a wildcard is intentionally rejected (credentials are enabled).
 4. Enable **2FA/passkeys** for accounts, or connect **LDAP/AD** instead of local accounts (extension point: `auth.py`).
 5. Database access only from the backend network; regular dumps.
-6. **Rate limiting** at the reverse proxy (see the public demo: strict limit on `/api/auth/login`, moderate limit on `/api/`).
+6. **Rate limiting**: the app locks an account for `LOGIN_LOCK_MINUTES` (default 15) after `LOGIN_MAX_FAILS` (default 5) failed logins; additionally rate-limit at the reverse proxy (see the public demo: strict limit on `/api/auth/login`, moderate limit on `/api/`).
 7. Audit: the version history covers the application level; additionally collect central API logs.

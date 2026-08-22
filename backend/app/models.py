@@ -370,6 +370,10 @@ class User(Base):
     # nicht mehr (gesetzt bei Deaktivierung, Passwortwechsel/-reset)
     token_valid_from: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
+    # Brute-Force-Schutz: Fehlversuchszähler und zeitbasierte Kontosperre
+    failed_logins: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
 
     passkeys: Mapped[list["Passkey"]] = relationship(back_populates="user",
                                                     cascade="all, delete-orphan")

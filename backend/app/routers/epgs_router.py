@@ -79,7 +79,7 @@ def delete_epg(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    epg = db.query(Epg).get(epg_id)
+    epg = db.get(Epg, epg_id)
     if not epg:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "EPG nicht gefunden")
     used = db.query(AddressEpgMap).filter(AddressEpgMap.epg_id == epg_id).count()
@@ -100,7 +100,7 @@ def upsert_map(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    if not db.query(Epg).get(payload.epg_id):
+    if not db.get(Epg, payload.epg_id):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "EPG nicht gefunden")
     norm = normalize_ip(payload.ip)
     if norm is None:
@@ -124,7 +124,7 @@ def delete_map(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    mapping = db.query(AddressEpgMap).get(mapping_id)
+    mapping = db.get(AddressEpgMap, mapping_id)
     if not mapping:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Zuordnung nicht gefunden")
     db.delete(mapping)

@@ -40,7 +40,7 @@ def delete_vrf(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.admin)),
 ):
-    vrf = db.query(Vrf).get(vrf_id)
+    vrf = db.get(Vrf, vrf_id)
     if not vrf:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "VRF nicht gefunden")
     rules = db.query(Rule).filter(Rule.vrf_id == vrf_id).count()
