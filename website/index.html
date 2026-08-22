@@ -65,6 +65,13 @@
   .stack { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1rem; }
   .pill { background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: .25rem .85rem; font-size: .85rem; font-weight: 600; color: var(--muted); }
 
+  .bsi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+  .bsi-col { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.2rem; }
+  .bsi-col h3 { font-size: 1rem; margin-bottom: .6rem; }
+  .bsi-col ul { margin: 0 0 0 1.1rem; padding: 0; color: var(--muted); font-size: .9rem; display: flex; flex-direction: column; gap: .45rem; }
+  .bsi-ok { border-top: 4px solid var(--good); }
+  .bsi-part { border-top: 4px solid #d9a63e; }
+  .bsi-open { border-top: 4px solid #c65b5b; }
   footer { padding: 2.2rem 0 2.8rem; color: var(--muted); font-size: .88rem; }
   footer .wrap { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 </style>
@@ -258,6 +265,57 @@
         </p>
       </div>
     </div>
+  </div>
+</section>
+
+<section id="bsi">
+  <div class="wrap">
+    <h2><span class="lang-de">BSI-Anforderungen: Was Permitra abdeckt – und was (noch) nicht</span><span class="lang-en">BSI requirements: what Permitra covers – and what it does not (yet)</span></h2>
+    <p class="lede">
+      <span class="lang-de">Permitra orientiert sich an den Anforderungen des BSI IT-Grundschutz an
+      Sicherheitszonen und Regelwerks-Dokumentation. Hier der ehrliche Stand:</span>
+      <span class="lang-en">Permitra follows the German BSI IT-Grundschutz requirements for security
+      zones and rule documentation. Here is the honest status:</span>
+    </p>
+    <div class="bsi-grid">
+      <div class="bsi-col bsi-ok">
+        <h3>✅ <span class="lang-de">Adressiert</span><span class="lang-en">Covered</span></h3>
+        <ul>
+          <li><span class="lang-de">Zonen-Dokumentation: Name, Zweck, Verantwortlicher, Schutzbedarf je Schutzziel (C/I/A, Maximumprinzip), P-A-P-Einstufung</span><span class="lang-en">Zone documentation: name, purpose, owner, protection level per goal (C/I/A, maximum principle), P-A-P classification</span></li>
+          <li><span class="lang-de">Zonenübergänge nur über Firewalls – hart erzwungen (ACI nur intra-zonal)</span><span class="lang-en">Zone transitions only via firewalls – hard-enforced (ACI intra-zone only)</span></li>
+          <li><span class="lang-de">Minimalprinzip: Allow/Block-Matrix, optional default-deny für ungepflegte Beziehungen</span><span class="lang-en">Least privilege: allow/block matrix, optional default-deny for unmaintained relationships</span></li>
+          <li><span class="lang-de">Generierter Zonenplan und Komponenten-Topologie</span><span class="lang-en">Generated zone diagram and component topology</span></li>
+          <li><span class="lang-de">Regelwerk mit eindeutigen IDs, dienst-genauen Regeln, Versionshistorie und personengebundenen Freigaben</span><span class="lang-en">Rule set with unique IDs, service-precise rules, version history and person-attributed approvals</span></li>
+          <li><span class="lang-de">Mehrstufige Freigabe mit Vier-Augen-Prinzip (zwei Approver für Zonen-/Matrix-/Netzwerk-Änderungen)</span><span class="lang-en">Multi-stage approval with the four-eyes principle (two approvers for zone/matrix/network changes)</span></li>
+          <li><span class="lang-de">Auswirkungsanalyse: Matrix-Änderungen zeigen betroffene Regeln; Allow→Block setzt freigegebene Regeln in den Review</span><span class="lang-en">Impact analysis: matrix changes show affected rules; allow→block resets approved rules to review</span></li>
+          <li><span class="lang-de">Temporäre Regeln: automatische Deaktivierung nach Ablauf, Rezertifizierung</span><span class="lang-en">Temporary rules: automatic deactivation on expiry, recertification</span></li>
+          <li><span class="lang-de">Soll-Ist-Abgleich (Drift) gegen Gerätekonfigurationen</span><span class="lang-en">Drift comparison against device configurations</span></li>
+        </ul>
+      </div>
+      <div class="bsi-col bsi-part">
+        <h3>🟡 <span class="lang-de">Teilweise</span><span class="lang-en">Partially</span></h3>
+        <ul>
+          <li><span class="lang-de">Begründung, Verantwortlicher und Gültigkeit je Regel: Felder vorhanden, aber noch nicht als Pflicht erzwingbar</span><span class="lang-en">Justification, owner and validity per rule: fields exist but cannot yet be enforced as mandatory</span></li>
+          <li><span class="lang-de">Monitoring/Logging: lückenlose Historie und vollständige REST-API, aber noch kein dediziertes SIEM-Audit-Log</span><span class="lang-en">Monitoring/logging: complete history and full REST API, but no dedicated SIEM audit log yet</span></li>
+          <li><span class="lang-de">Benachrichtigungen: E-Mail-Fundament (Aktivierung/Reset) steht, Workflow-Notifications folgen</span><span class="lang-en">Notifications: email foundation (activation/reset) exists, workflow notifications to follow</span></li>
+          <li><span class="lang-de">Change-Management: generischer Webhook vorhanden, konkreter ServiceNow-Adapter offen</span><span class="lang-en">Change management: generic webhook available, concrete ServiceNow adapter open</span></li>
+        </ul>
+      </div>
+      <div class="bsi-col bsi-open">
+        <h3>🔴 <span class="lang-de">Nicht adressiert</span><span class="lang-en">Not covered</span></h3>
+        <ul>
+          <li><span class="lang-de">Risikoanalyse/Risikomatrix und Warnungen bei riskanten Regeln (any-to-any, riskante Dienste)</span><span class="lang-en">Risk analysis/risk matrix and warnings for risky rules (any-to-any, risky services)</span></li>
+          <li><span class="lang-de">Rollback auf frühere Regel-Versionen (Snapshots existieren bereits)</span><span class="lang-en">Rollback to earlier rule versions (snapshots already exist)</span></li>
+          <li><span class="lang-de">AD/LDAP-Anmeldung (lokale Konten mit 2FA/Passkeys vorhanden)</span><span class="lang-en">AD/LDAP sign-in (local accounts with 2FA/passkeys available)</span></li>
+          <li><span class="lang-de">Nutzungsbasierte Erkennung veralteter Regeln (Hit-Counter der Geräte) – erfordert Geräte-Adapter</span><span class="lang-en">Usage-based detection of stale rules (device hit counters) – requires device adapters</span></li>
+          <li><span class="lang-de">Bewusste Grenzen: Permitra schreibt nie selbst auf Geräte; Router/Switches mit ACLs und reine FQDN-Regeln sind nicht abgebildet</span><span class="lang-en">Deliberate limits: Permitra never writes to devices itself; routers/switches with ACLs and pure FQDN rules are not modelled</span></li>
+        </ul>
+      </div>
+    </div>
+    <p class="lede" style="margin-top: 1rem; font-size: .9rem;">
+      <span class="lang-de">Die offenen Punkte sind als Work Items im Projekt-Backlog erfasst und werden schrittweise umgesetzt.</span>
+      <span class="lang-en">The open items are tracked as work items in the project backlog and are being implemented step by step.</span>
+    </p>
   </div>
 </section>
 
