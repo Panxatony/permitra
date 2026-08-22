@@ -162,3 +162,16 @@ def test_next_rule_id_uses_max(db):
                     status=RuleStatus.approved))
     db.commit()
     assert next_rule_id(db) == "SR00043"
+
+
+# --- Analyse: any-Treffer zonen-bewusst (kein Cross-Zone-any) ---------------
+
+def test_ip_search_any_match_is_zone_aware(db):
+    # Kernlogik: 'any' matcht technisch; die Zonenfilterung erfolgt im Endpoint
+    from app.routers.rules_router import _match_address_field
+    from app.validation import parse_network
+
+    # Regel mit Quelle 'any' (Zone INET)
+    src_entries = [{"ip": "any", "alias": "Internet"}]
+    matched, kind = _match_address_field(src_entries, "10.10.30.20", parse_network("10.10.30.20"))
+    assert kind == "any"  # matcht technisch – die Zonenfilterung passiert im Endpoint

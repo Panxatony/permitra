@@ -344,11 +344,35 @@ def ip_search(
     net = parse_network(q.strip())
     outgoing, incoming = [], []
     rule_query = db.query(Rule).order_by(Rule.rule_id.desc())
+    vrf_id = None
     if vrf:
-        rule_query = rule_query.filter(Rule.vrf_id == get_vrf(db, vrf).id)
+        vrf_obj = get_vrf(db, vrf)
+        vrf_id = vrf_obj.id
+        rule_query = rule_query.filter(Rule.vrf_id == vrf_obj.id)
+    # Zone der gesuchten Adresse ermitteln – ein reiner "any"-Treffer wird
+    # verworfen, wenn die Adresse einer anderen Zone angehört als die Regelseite
+    # (z.B. eine PROD-Adresse ist keine Quelle einer INET→…-Regel mit Quelle any)
+    from ..zone_check import zone_for_ip
+    from ..models import ZoneNetwork as _ZN
+
+    searched_zone = None
+    if net is not None:
+        nets = db.query(_ZN)
+        if vrf_id is not None:
+            nets = nets.filter(_ZN.vrf_id == vrf_id)
+        z = zone_for_ip(q.strip(), nets.all())
+        searched_zone = z.name.upper() if z else None
+
     for rule in rule_query.all():
-        for field, bucket in (("source", outgoing), ("destination", incoming)):
+        for field, bucket, rule_zone in (
+            ("source", outgoing, rule.source_zone),
+            ("destination", incoming, rule.destination_zone),
+        ):
             matched, kind = _match_address_field(getattr(rule, field), q, net)
+            # Nur-über-any-Treffer über Zonengrenzen hinweg herausfiltern
+            if kind == "any" and searched_zone and rule_zone \
+                    and searched_zone != rule_zone.strip().upper():
+                kind = None
             if kind:
                 bucket.append(
                     {
