@@ -7,7 +7,8 @@ import hashlib
 import secrets
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from .. import audit
 from sqlalchemy.orm import Session
 
 from ..auth import API_TOKEN_PREFIX, require_roles
@@ -38,6 +39,7 @@ def create_token(
     payload: dict,
     db: Session = Depends(get_db),
     admin: User = Depends(require_roles(Role.admin)),
+    request: Request = None,
 ):
     """Erzeugt einen read-only Token. Der Klartext wird NUR hier zurückgegeben."""
     name = (payload.get("name") or "").strip()
@@ -60,6 +62,8 @@ def create_token(
     db.add(token)
     db.commit()
     db.refresh(token)
+    audit.record(db, "admin", "apitoken.created", actor=admin.username, object=token.name,
+                 source_ip=audit.client_ip(request))
     return {**_out(token), "token": raw,
             "detail": "Token wird nur jetzt angezeigt – bitte sicher hinterlegen."}
 
@@ -68,10 +72,13 @@ def create_token(
 def revoke_token(
     token_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.admin)),
+    admin: User = Depends(require_roles(Role.admin)),
+    request: Request = None,
 ):
     token = db.get(ApiToken, token_id)
     if not token:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Token nicht gefunden")
     token.revoked = True
     db.commit()
+    audit.record(db, "admin", "apitoken.revoked", actor=admin.username, object=token.name,
+                 source_ip=audit.client_ip(request))

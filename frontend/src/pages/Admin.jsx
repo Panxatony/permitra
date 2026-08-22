@@ -287,7 +287,7 @@ export default function Admin() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>{t('Zeitpunkt')}</th><th>{t('Ereignis')}</th><th>{t('Objekt')}</th><th>{t('Von')}</th><th>{t('Details')}</th></tr>
+              <tr><th>{t('Zeitpunkt')}</th><th>{t('Ereignis')}</th><th>{t('Objekt')}</th><th>{t('Von')}</th><th>{t('Quell-IP')}</th><th>{t('Details')}</th></tr>
             </thead>
             <tbody>
               {audit.map((e, i) => (
@@ -296,6 +296,7 @@ export default function Admin() {
                   <td><code>{e.event}</code></td>
                   <td>{e.object}</td>
                   <td>{e.actor || '–'}</td>
+                  <td className="small">{e.source_ip || '–'}</td>
                   <td className="small">{e.detail || (e.status || '')}</td>
                 </tr>
               ))}

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from .. import audit
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
@@ -115,6 +116,7 @@ def host_export(
 
 @router.get("/{fmt}", response_class=PlainTextResponse)
 def export(
+    request: Request,
     fmt: str,
     ids: str | None = Query(None, description="Kommagetrennte Rule-IDs; leer = alle passenden"),
     component_id: int | None = Query(None, description="Nur Regeln dieser Komponente exportieren"),
@@ -123,7 +125,7 @@ def export(
     platform_filter: bool = Query(True, description="Nur Regeln, deren Plattform zum Format passt"),
     download: bool = False,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
     if fmt not in FORMATS:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unbekanntes Format '{fmt}'")
@@ -162,4 +164,8 @@ def export(
         content = aci.export_json(rules, db) if fmt == "aci-json" else aci.export_yaml(rules, db)
     else:
         content = export_fn(rules)
+    audit.record(db, "export", "export.rules", actor=user.username,
+                 object=fmt, detail=f"{len(rules)} Regel(n)"
+                 + (f", app_id={app_id}" if app_id else ""),
+                 source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type=media_type, headers=headers)

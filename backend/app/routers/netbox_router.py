@@ -3,7 +3,9 @@ die Zonen-Registry durch Architekt/Betrieb über den Freigabe-Workflow."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from fastapi import Request
 from ..auth import require_roles
+from .. import audit
 from ..database import get_db
 from ..models import NetboxConfig, NetboxPrefix, Role, User, ZoneNetwork
 
@@ -28,7 +30,7 @@ def get_config(db: Session = Depends(get_db), _: User = Depends(require_roles(Ro
 
 @router.put("/config")
 def set_config(payload: dict, db: Session = Depends(get_db),
-               _: User = Depends(require_roles(Role.admin))):
+               admin: User = Depends(require_roles(Role.admin)), request: Request = None):
     """URL/Token/TLS speichern. Ein leeres Token-Feld lässt das gespeicherte unverändert."""
     from ..netbox import encrypt_token, get_config as _get
 
@@ -43,6 +45,8 @@ def set_config(payload: dict, db: Session = Depends(get_db),
     if cfg.id is None:
         db.add(cfg)
     db.commit()
+    audit.record(db, "admin", "netbox.config", actor=admin.username, object=cfg.url,
+                 source_ip=audit.client_ip(request))
     return _config_out(cfg)
 
 
@@ -59,10 +63,14 @@ def test(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.adm
 
 
 @router.post("/import")
-def run_import(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin))):
+def run_import(db: Session = Depends(get_db), admin: User = Depends(require_roles(Role.admin)),
+               request: Request = None):
     from ..netbox import import_prefixes
     try:
-        return import_prefixes(db)
+        result = import_prefixes(db)
+        audit.record(db, "admin", "netbox.import", actor=admin.username,
+                     detail=f"{result.get('fetched', 0)} Prefixe", source_ip=audit.client_ip(request))
+        return result
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
     except Exception as exc:

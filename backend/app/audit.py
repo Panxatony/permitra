@@ -25,6 +25,17 @@ from .models import AuditEvent, Rule, RuleVersion, User, ZonePolicyChange, utcno
 log = logging.getLogger("permitra.audit")
 
 
+def client_ip(request) -> str:
+    """Quell-IP eines Requests: erster Hop aus X-Forwarded-For (hinter dem
+    Reverse-Proxy), sonst die direkte Peer-Adresse."""
+    if request is None:
+        return ""
+    fwd = request.headers.get("x-forwarded-for", "")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
 def record(db: Session, category: str, event: str, actor: str = "", object: str = "",
            detail: str = "", source_ip: str = "", extra: dict | None = None) -> None:
     """Schreibt EINEN Audit-Eintrag in den persistenten Append-only-Store und

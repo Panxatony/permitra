@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import create_token, get_current_user, hash_password, verify_password
 from ..database import get_db
-from .. import mailer, totp
+from .. import audit, mailer, totp
 from ..models import Passkey, User, utcnow
 from ..schemas import Token, UserOut
 from .users_router import consume_token, issue_token
@@ -53,13 +53,20 @@ async def login(
             from datetime import timezone
             locked_until = locked_until.replace(tzinfo=timezone.utc)
         if locked_until > utcnow():
+            audit.record(db, "auth", "auth.login_locked", actor=form.username,
+                         source_ip=audit.client_ip(request))
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
                                 "Konto vorübergehend gesperrt – bitte später erneut versuchen")
     if not user or not verify_password(form.password, user.password_hash):
         if user:
             _register_failure(db, user)
+        audit.record(db, "auth", "auth.login_failed", actor=form.username,
+                     source_ip=audit.client_ip(request),
+                     detail="Konto gesperrt" if (user and user.locked_until) else "")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Benutzername oder Passwort falsch")
     if not user.is_active:
+        audit.record(db, "auth", "auth.login_denied", actor=user.username,
+                     source_ip=audit.client_ip(request), detail="Konto deaktiviert")
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             "Konto ist deaktiviert bzw. noch nicht aktiviert")
     if user.totp_enabled:
@@ -69,12 +76,16 @@ async def login(
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_required")
         if not totp.verify(user.totp_secret, otp):
             _register_failure(db, user)
+            audit.record(db, "auth", "auth.login_failed", actor=user.username,
+                         source_ip=audit.client_ip(request), detail="2FA-Code falsch")
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_invalid")
     # Erfolg: Fehlversuchszähler und Sperre zurücksetzen
     if user.failed_logins or user.locked_until:
         user.failed_logins = 0
         user.locked_until = None
         db.commit()
+    audit.record(db, "auth", "auth.login", actor=user.username,
+                 source_ip=audit.client_ip(request))
     return _login_ok(user)
 
 
@@ -114,7 +125,7 @@ def forgot_password(payload: dict, db: Session = Depends(get_db)):
 
 
 @router.post("/set-password")
-def set_password(payload: dict, db: Session = Depends(get_db)):
+def set_password(request: Request, payload: dict, db: Session = Depends(get_db)):
     """Passwort über Aktivierungs- oder Reset-Link setzen; aktiviert das Konto."""
     password = payload.get("password") or ""
     if len(password) < 8:
@@ -127,6 +138,8 @@ def set_password(payload: dict, db: Session = Depends(get_db)):
     user.failed_logins = 0
     user.locked_until = None
     db.commit()
+    audit.record(db, "auth", "auth.activated" if purpose == "activate" else "auth.password_reset",
+                 actor=user.username, source_ip=audit.client_ip(request))
     return {"detail": ("Konto aktiviert – du kannst dich jetzt anmelden"
                        if purpose == "activate" else "Passwort geändert"),
             "username": user.username}
@@ -134,6 +147,7 @@ def set_password(payload: dict, db: Session = Depends(get_db)):
 
 @router.post("/change-password")
 def change_password(
+    request: Request,
     payload: dict,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -147,6 +161,8 @@ def change_password(
     user.password_hash = hash_password(new)
     user.token_valid_from = utcnow()  # entzieht andere bestehende Sitzungen
     db.commit()
+    audit.record(db, "auth", "auth.password_changed", actor=user.username,
+                 source_ip=audit.client_ip(request))
     # Frisches Token für die aktuelle Sitzung, damit sie nicht selbst abläuft
     return {"detail": "Passwort geändert", "access_token": create_token(user)}
 
@@ -172,6 +188,7 @@ def totp_enable(payload: dict, db: Session = Depends(get_db), user: User = Depen
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Code ist ungültig")
     user.totp_enabled = True
     db.commit()
+    audit.record(db, "auth", "auth.totp_enabled", actor=user.username)
     return {"detail": "Zwei-Faktor-Authentifizierung aktiviert"}
 
 
@@ -182,6 +199,7 @@ def totp_disable(payload: dict, db: Session = Depends(get_db), user: User = Depe
     user.totp_enabled = False
     user.totp_secret = None
     db.commit()
+    audit.record(db, "auth", "auth.totp_disabled", actor=user.username)
     return {"detail": "Zwei-Faktor-Authentifizierung deaktiviert"}
 
 

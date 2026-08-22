@@ -10,7 +10,9 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from fastapi import Request
 from ..auth import hash_password, require_roles
+from .. import audit
 from ..database import get_db
 from .. import mailer
 from ..models import AuthToken, Passkey, Role, User, utcnow
@@ -60,9 +62,10 @@ def list_users(db: Session = Depends(get_db), _: User = Depends(require_roles(Ro
 
 @router.post("", status_code=201)
 def create_user(
+    request: Request,
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.admin)),
+    admin: User = Depends(require_roles(Role.admin)),
 ):
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status.HTTP_409_CONFLICT, "Benutzername bereits vergeben")
@@ -79,6 +82,8 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    audit.record(db, "admin", "user.created", actor=admin.username, object=user.username,
+                 detail=f"Rolle {user.role.value}", source_ip=audit.client_ip(request))
 
     result = {"user": UserOut.model_validate(user).model_dump()}
     if not with_password:
@@ -95,6 +100,7 @@ def create_user(
 
 @router.put("/{username}", response_model=UserOut)
 def update_user(
+    request: Request,
     username: str,
     payload: UserUpdate,
     db: Session = Depends(get_db),
@@ -120,6 +126,11 @@ def update_user(
         user.locked_until = None
     db.commit()
     db.refresh(user)
+    changed = {f: getattr(payload, f) for f in ("role", "is_active", "email", "full_name")
+               if getattr(payload, f) is not None}
+    audit.record(db, "admin", "user.updated", actor=admin.username, object=username,
+                 detail=str({k: (v.value if hasattr(v, "value") else v) for k, v in changed.items()}),
+                 source_ip=audit.client_ip(request))
     return user
 
 
@@ -145,6 +156,7 @@ def send_reset(
 
 @router.delete("/{username}", status_code=204)
 def delete_user(
+    request: Request,
     username: str,
     db: Session = Depends(get_db),
     admin: User = Depends(require_roles(Role.admin)),
@@ -158,3 +170,5 @@ def delete_user(
     db.query(Passkey).filter(Passkey.user_id == user.id).delete()
     db.delete(user)
     db.commit()
+    audit.record(db, "admin", "user.deleted", actor=admin.username, object=username,
+                 source_ip=audit.client_ip(request))

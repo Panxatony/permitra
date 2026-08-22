@@ -285,6 +285,7 @@ const EN = {
     '(last 50 events; full log via the /api/audit-log API for SIEM)',
   'Ereignis': 'Event',
   'Objekt': 'Object',
+  'Quell-IP': 'Source IP',
   'Details': 'Details',
   'Keine Einträge.': 'No entries.',
   'Benutzerverwaltung – weitere Permitra-Einstellungen folgen hier.':
