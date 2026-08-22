@@ -45,6 +45,48 @@ def _bump(sev: str, schutzbedarf: str) -> str:
     return [k for k, v in _SEV_ORDER.items() if v == level][0]
 
 
+def _segments(port_spec: str) -> list[tuple[int, int]]:
+    """Zerlegt eine Port-Angabe in Zahlenbereiche.
+
+    Erlaubt sind Einzelports ("443"), Bereiche ("20-25") und Listen davon
+    ("22,8000-8080"). Nicht-numerische Angaben wie "any" ergeben nichts –
+    sie werden an anderer Stelle bewertet."""
+    ranges: list[tuple[int, int]] = []
+    for teil in (port_spec or "").split(","):
+        teil = teil.strip()
+        if not teil:
+            continue
+        try:
+            if "-" in teil:
+                lo_s, hi_s = teil.split("-", 1)
+                lo, hi = int(lo_s.strip()), int(hi_s.strip())
+                if lo > hi:            # verdrehte Angabe tolerieren
+                    lo, hi = hi, lo
+            else:
+                lo = hi = int(teil)
+        except ValueError:
+            continue                   # "any", "http" o.ä. – hier nicht auswertbar
+        ranges.append((lo, hi))
+    return ranges
+
+
+def risky_ports_in(port_spec: str) -> list[tuple[str, str]]:
+    """Alle riskanten Ports, die eine Port-Angabe abdeckt – als (Port, Label).
+
+    Entscheidend für Bereiche und Listen: "20-25" enthält FTP (21) und Telnet
+    (23), "22,23" enthält Telnet. Zuvor wurde nur auf exakte Einzelports
+    geprüft, sodass gerade die weit gefassten Regeln – die am ehesten auffallen
+    sollten – gar keinen Hinweis erzeugten."""
+    ranges = _segments(port_spec)
+    if not ranges:
+        return []
+    treffer = [
+        (port, label) for port, label in RISKY_PORTS.items()
+        if any(lo <= int(port) <= hi for lo, hi in ranges)
+    ]
+    return sorted(treffer, key=lambda t: int(t[0]))
+
+
 def _is_any(entries) -> bool:
     return any((e.get("ip") or "").strip().lower() == "any" for e in entries or [])
 
@@ -94,13 +136,13 @@ def assess_rule(db: Session, rule) -> dict:
     exposed = src_any or (src_zone and src_zone.pap_level in UNTRUSTED_PAP)
     for svc in rule.services or []:
         port = (svc.get("port") or "").strip()
-        label = RISKY_PORTS.get(port)
-        if not label and "-" not in port and "," not in port and port not in RISKY_PORTS:
-            continue
-        if label:
+        for hit_port, label in risky_ports_in(port):
             base = "hoch" if exposed else "mittel"
+            # Bei Bereichen/Listen die konkrete Fundstelle mitnennen, sonst
+            # sucht der Prüfer in "20-25" vergeblich nach dem Problem.
+            wo = f"Port {hit_port} in {port}" if hit_port != port else f"Port {port}"
             findings.append({"severity": _bump(base, schutzbedarf), "code": "risky-service",
-                             "detail": f"Riskanter Dienst {label} (Port {port})"
+                             "detail": f"Riskanter Dienst {label} ({wo})"
                                        + (" aus exponierter Quelle" if exposed else "")})
 
     # 4) Dienst 'any' zonenübergreifend
