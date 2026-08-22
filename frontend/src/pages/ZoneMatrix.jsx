@@ -172,48 +172,56 @@ function ZoneReachability({ overview }) {
   placeFwRow(southFws, y + LABEL_H + northRowH + papZonesH)
   y += papH
 
-  // Band 3: Intern (Süd) – Spalten-Layout für klare Anbindungs-Zuordnung:
-  // Zonen mit genau EINER Firewall stehen direkt untereinander unter ihrem
-  // Cluster; Zonen mit mehreren (oder ohne) Anbindungen mittig untereinander.
+  // Band 3: Intern (Süd), vertikal zweigeteilt:
+  // OBEN die Zonen mit mehreren (oder ohne) Firewall-Anbindungen – nah an den
+  // Clustern, mit aufgefächerten Kanten; DARUNTER die Spalten der Zonen mit
+  // genau einer Firewall, direkt unter ihrem Cluster (gerade Spine-Verbindung).
   const intern = byLevel('intern')
   const southIds = new Set(southFws.map((f) => f.id))
-  const columns = {}  // fwId | 'multi' -> Zonen
+  const columns = {}  // fwId -> Zonen (genau eine Anbindung)
+  const multi = []    // mehrere oder keine Anbindungen
   intern.forEach((z) => {
     const attached = z.firewalls.filter((f) => southIds.has(f.id))
-    const key = attached.length === 1 ? attached[0].id : 'multi'
-    ;(columns[key] = columns[key] || []).push(z)
+    if (attached.length === 1) {
+      ;(columns[attached[0].id] = columns[attached[0].id] || []).push(z)
+    } else {
+      multi.push(z)
+    }
   })
   Object.values(columns).forEach((list) => list.sort((a, b) => a.name.localeCompare(b.name)))
+  multi.sort((a, b) => a.name.localeCompare(b.name))
 
-  // x der Mittel-Spalte: größte Lücke zwischen den belegten Firewall-Spalten
-  const usedXs = southFws.filter((f) => columns[f.id]).map((f) => fwX[f.id]).sort((a, b) => a - b)
-  let multiX = W / 2
-  if (usedXs.length) {
-    const edges = [70, ...usedXs, W - 70]
-    let best = 0
-    for (let i = 0; i < edges.length - 1; i += 1) {
-      if (edges[i + 1] - edges[i] > best) {
-        best = edges[i + 1] - edges[i]
-        multiX = (edges[i] + edges[i + 1]) / 2
-      }
-    }
-  }
+  const S_ROW = BOX_H + 18
 
-  const S_ROW = BOX_H + 18  // enger gestapelt (Spine-Optik unter dem Cluster)
+  // Oberer Bereich: Mehrfach-Zonen in den LÜCKEN zwischen den Firewall-Spalten,
+  // damit die Spine-Linien der Spalten nicht durch die Boxen laufen
+  const colXs = southFws.map((f) => fwX[f.id]).sort((a, b) => a - b)
+  const slotEdges = [70, ...colXs, W - 70]
+  const slots = []
+  for (let i = 0; i < slotEdges.length - 1; i += 1) slots.push((slotEdges[i] + slotEdges[i + 1]) / 2)
+  const multiRows = []
+  for (let i = 0; i < multi.length; i += slots.length) multiRows.push(multi.slice(i, i + slots.length))
+  multiRows.forEach((row, ri) => {
+    row.forEach((z, i) => {
+      const idx = row.length >= slots.length
+        ? i
+        : Math.min(slots.length - 1, Math.round((i + 0.5) * (slots.length / row.length) - 0.5))
+      zonePos[z.name] = { x: slots[idx], y: y + LABEL_H + ri * S_ROW + S_ROW / 2 }
+    })
+  })
+  const multiH = multiRows.length * S_ROW + (multiRows.length ? 10 : 0)
+
+  // Unterer Bereich: Spalten unter den Firewalls
   let maxColumn = 0
   southFws.forEach((f) => {
     const list = columns[f.id] || []
     list.forEach((z, i) => {
-      zonePos[z.name] = { x: fwX[f.id], y: y + LABEL_H + i * S_ROW + S_ROW / 2 }
+      zonePos[z.name] = { x: fwX[f.id], y: y + LABEL_H + multiH + i * S_ROW + S_ROW / 2 }
     })
     maxColumn = Math.max(maxColumn, list.length)
   })
-  ;(columns.multi || []).forEach((z, i) => {
-    zonePos[z.name] = { x: multiX, y: y + LABEL_H + i * S_ROW + S_ROW / 2 }
-  })
-  maxColumn = Math.max(maxColumn, (columns.multi || []).length)
 
-  const internH = LABEL_H + Math.max(maxColumn, 1) * S_ROW + PAD
+  const internH = LABEL_H + multiH + Math.max(maxColumn, multiRows.length ? 0 : 1) * S_ROW + PAD
   bands.push({ key: 'intern', label: 'Intern (Süd) — unterhalb der P-A-P-Struktur', y, h: internH })
   y += internH
   const H = y

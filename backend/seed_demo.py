@@ -342,8 +342,8 @@ def seed(wipe: bool):
     zones["SHARED"].components = [fw_ffm, fw_ber]
     # Administration/Jump-Hosts erreichen alle drei Standort-Cluster
     zones["MGMT"].components = [fw_ber, fw_ffm, fw_ffm_dc]
-    # Audit/SIEM sammelt von allen Firewalls (inkl. Provider-Cluster)
-    zones["AUDIT"].components = [fw_ber, fw_ffm, fw_ffm_dc, components["FW-Cluster-Provider"]]
+    # Audit/SIEM sammelt von allen internen Firewall-Clustern
+    zones["AUDIT"].components = [fw_ber, fw_ffm, fw_ffm_dc]
     # Internet ("any") erreicht die Umgebung über den Provider-Cluster
     db.add(AddressComponentMap(
         ip="any", alias="Internet", vrf_id=vrf_it.id,
