@@ -166,7 +166,7 @@ function ZoneReachability({ overview }) {
                   + (z.has_firewall ? '' : ' zone-box-warn')}>
                 <title>{(z.has_firewall
                   ? `${z.name}: erreichbar über ${z.firewalls.map((f) => f.name).join(', ')}`
-                  : `${z.name}: keine Firewall-Anbindung über aktive Regeln dokumentiert`)
+                  : `${z.name}: kein Firewall-Cluster angebunden („Angebunden an“ pflegen)`)
                   + `\nSchutzbedarf: ${SB_LABEL(z)}`
                   + (z.owner ? `\nVerantwortlich: ${z.owner}` : '')}</title>
               </rect>
