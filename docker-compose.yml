@@ -51,6 +51,12 @@ services:
       - ./data:/data:ro
 
   frontend:
+    environment:
+      # Kommagetrennte IPs/CIDRs eines vorgelagerten Reverse-Proxys. Nur von
+      # diesen Adressen wird X-Forwarded-For ausgewertet – die Quell-IP landet
+      # im Audit-Log und wäre sonst vom Client frei erfindbar. Leer lassen,
+      # wenn der Container direkt veröffentlicht ist.
+      PERMITRA_TRUSTED_PROXIES: ${PERMITRA_TRUSTED_PROXIES:-}
     build: ./frontend
     ports:
       - "${FRONTEND_PORT:-8080}:80"

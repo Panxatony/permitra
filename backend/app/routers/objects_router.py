@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_roles
 from ..database import get_db
-from ..models import AddressObject, Role, Rule, RuleVersion, ServiceObject, User
+from ..models import AddressObject, Role, Rule, RuleVersion, ServiceObject, User, active_rules
 from ..validation import validate_ip_entry, validate_service
 
 router = APIRouter(prefix="/api/objects", tags=["objects"])
@@ -56,7 +56,7 @@ class ServiceObjectOut(ServiceObjectIn):
 def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: str) -> int:
     """Zieht die neue IP in alle Regel-Einträge mit diesem Alias nach."""
     changed = 0
-    for rule in db.query(Rule).all():
+    for rule in active_rules(db).all():
         touched = False
         for field in ("source", "destination"):
             entries = getattr(rule, field) or []

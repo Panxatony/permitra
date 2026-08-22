@@ -11,7 +11,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from .models import Rule, RuleStatus, SecurityComponent, Zone
+from .models import Rule, RuleStatus, SecurityComponent, Zone, active_rules
 from .zone_check import zone_ref
 
 BAND_LABELS = {
@@ -32,7 +32,7 @@ def _fw_id(name: str) -> str:
 
 def build_mermaid(db: Session, generated_at: str = "") -> str:
     zones = db.query(Zone).order_by(Zone.sort_order, Zone.name).all()
-    rules = db.query(Rule).filter(Rule.status != RuleStatus.deactivated).all()
+    rules = active_rules(db).filter(Rule.status != RuleStatus.deactivated).all()
 
     # Intra-zonale ACI-Segmentierung je Zone (wie in der Zonen-Übersicht:
     # abgeleitet aus den aktiven Regeln der Zone)

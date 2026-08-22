@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_roles
 from ..database import get_db
 from ..models import (
+    active_rules,
     Comment,
     Role,
     ZoneNetwork,
@@ -247,7 +248,7 @@ def overview(db: Session = Depends(get_db), _: User = Depends(get_current_user))
     (abgeleitet aus den aktiven Regeln der Zone). ACI-Komponenten werden getrennt
     ausgewiesen – sie sind kein Zonenübergang im Sinne der BSI-Definition."""
     zones = db.query(Zone).order_by(Zone.sort_order, Zone.name).all()
-    rules = db.query(Rule).filter(Rule.status != RuleStatus.deactivated).all()
+    rules = active_rules(db).filter(Rule.status != RuleStatus.deactivated).all()
     firewalls_total = db.query(SecurityComponent).filter(
         SecurityComponent.type != "aci"
     ).count()
@@ -406,6 +407,8 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             zone = find_zone(db, name)
             if not zone:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{name}' nicht gefunden")
+            # Bewusst inklusive gelöschter Regeln: sie verweisen weiterhin auf
+            # diese Zone, ihre Historie bliebe sonst ohne Bezug interpretierbar.
             used = db.query(Rule).filter(
                 (Rule.source_zone.ilike(zone_ref(zone))) | (Rule.destination_zone.ilike(zone_ref(zone)))
             ).count()
@@ -566,7 +569,7 @@ def _affected_rules(db: Session, from_zone: str, to_zone: str, statuses=None):
     von Matrix-Änderungen auf Allow -> Block)."""
     statuses = statuses or (RuleStatus.approved, RuleStatus.in_review, RuleStatus.draft)
     return (
-        db.query(Rule)
+        active_rules(db)
         .filter(Rule.source_zone.ilike(from_zone), Rule.destination_zone.ilike(to_zone),
                 Rule.status.in_(statuses))
         .order_by(Rule.rule_id)
@@ -687,6 +690,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                 zone = find_zone(db, item.from_zone)
                 if zone:
                     # Erneute Integritätsprüfung zum Anwendungszeitpunkt (fail-secure)
+                    # Bewusst inklusive gelöschter Regeln (siehe oben)
                     used = db.query(Rule).filter(
                         (Rule.source_zone.ilike(zone.name)) | (Rule.destination_zone.ilike(zone.name))
                     ).count()

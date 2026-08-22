@@ -22,6 +22,22 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+def active_rules(db):
+    """Basisabfrage für alle NICHT gelöschten Regeln.
+
+    Gelöscht wird per Soft-Delete (`Rule.deleted_at`), damit die Historie als
+    Compliance-Nachweis erhalten bleibt. Genau deshalb muss jede fachliche
+    Abfrage gelöschte Regeln ausschließen: Sie behalten ihren letzten Status
+    (typisch `approved`) und würden sonst weiterwirken – etwa als vermeintlich
+    erlaubender Treffer in der Pfad-Analyse oder als „fehlend" im Soll-Ist-
+    Abgleich, der dann den Rückbau rückgängig machen ließe.
+
+    Bewusste Ausnahmen sind Schutzabfragen vor dem Löschen einer Zone oder
+    eines VRF: Dort zählen gelöschte Regeln mit, weil sie weiterhin darauf
+    verweisen. Diese Stellen sind im Code als solche gekennzeichnet."""
+    return db.query(Rule).filter(Rule.deleted_at.is_(None))
+
+
 class Role(str, enum.Enum):
     architect = "architect"            # plant und beantragt
     operations = "operations"          # setzt um (Umsetzungsstatus, Export, Drift)

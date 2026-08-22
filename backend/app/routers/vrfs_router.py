@@ -43,6 +43,8 @@ def delete_vrf(
     vrf = db.get(Vrf, vrf_id)
     if not vrf:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "VRF nicht gefunden")
+    # Bewusst inklusive gelöschter Regeln: Rule.vrf_id ist ein Fremdschlüssel,
+    # ein Löschen des VRF würde sie verwaisen lassen.
     rules = db.query(Rule).filter(Rule.vrf_id == vrf_id).count()
     nets = db.query(ZoneNetwork).filter(ZoneNetwork.vrf_id == vrf_id).count()
     if rules or nets:

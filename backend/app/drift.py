@@ -14,7 +14,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from .models import ComponentActualConfig, Rule, RuleStatus, SecurityComponent
+from .models import ComponentActualConfig, Rule, RuleStatus, SecurityComponent, active_rules
 
 RULE_ID_RE = re.compile(r"\bSR\d{3,6}\b")
 
@@ -40,19 +40,27 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
 
     actual_ids = set(RULE_ID_RE.findall(config.content))
 
+    # Gelöschte Regeln ausschließen: sie behalten ihren Status (meist approved)
+    # und würden sonst als "fehlend" gemeldet – der Betrieb bekäme die Anweisung,
+    # eine bewusst gelöschte Regel auf dem Gerät wieder anzulegen.
     assigned = (
-        db.query(Rule)
+        active_rules(db)
         .filter(Rule.components.any(SecurityComponent.id == component.id))
         .all()
     )
     approved = {r.rule_id: r for r in assigned if r.status == RuleStatus.approved}
+    # Für die Einordnung dessen, was auf dem Gerät liegt, zählen auch gelöschte
+    # Regeln: eine gelöschte Regel, die noch auf der Firewall steht, ist ein
+    # Rückbau-Fall ("abzubauen") – nicht eine unbekannte Fremdregel.
     all_rules = {r.rule_id: r for r in db.query(Rule).all()}
 
     missing = [rule_brief(r) for rid, r in sorted(approved.items()) if rid not in actual_ids]
     stale = [
         rule_brief(all_rules[rid])
         for rid in sorted(actual_ids)
-        if rid in all_rules and all_rules[rid].status != RuleStatus.approved
+        if rid in all_rules
+        and (all_rules[rid].deleted_at is not None
+             or all_rules[rid].status != RuleStatus.approved)
     ]
     unknown = sorted(rid for rid in actual_ids if rid not in all_rules)
 

@@ -14,6 +14,7 @@ from ..zone_check import check_zone_pair, resolve_zone_for_entries
 from ..database import get_db
 from ..exporters.generic import rule_to_dict
 from ..models import (
+    active_rules,
     AddressComponentMap,
     Comment,
     ComponentType,
@@ -64,8 +65,12 @@ def next_rule_id(db: Session) -> str:
     return f"SR{int(max_num) + 1:05d}"
 
 
-def get_rule_or_404(db: Session, rule_id: str) -> Rule:
-    rule = db.query(Rule).filter(Rule.rule_id == rule_id).first()
+def get_rule_or_404(db: Session, rule_id: str, include_deleted: bool = False) -> Rule:
+    """Holt eine Regel. Gelöschte (Soft-Delete) gelten als nicht vorhanden –
+    sonst blieben sie über /rules/{id} les-, änder- und erneut freigebbar.
+    Nur delete_rule selbst braucht sie, um doppeltes Löschen zu erkennen."""
+    q = db.query(Rule) if include_deleted else active_rules(db)
+    rule = q.filter(Rule.rule_id == rule_id).first()
     if not rule:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Regel {rule_id} nicht gefunden")
     return rule
@@ -266,7 +271,7 @@ def list_rules(
         # q-Treffer aus SQL beibehalten; zusätzlich Regeln aufnehmen, deren Adressen passen
         sql_ids = {r.id for r in rules}
         extra = [
-            r for r in db.query(Rule).order_by(Rule.rule_id.desc()).all()
+            r for r in active_rules(db).order_by(Rule.rule_id.desc()).all()
             if r.id not in sql_ids and (entry_match(r.source, q) or entry_match(r.destination, q))
         ]
         rules = sorted(rules + extra, key=lambda r: r.rule_id, reverse=True)
@@ -346,7 +351,7 @@ def ip_search(
     """Alle Regeln, in denen die IP / das Netz als Quelle (ausgehend) oder Ziel (eingehend) vorkommt."""
     net = parse_network(q.strip())
     outgoing, incoming = [], []
-    rule_query = db.query(Rule).order_by(Rule.rule_id.desc())
+    rule_query = active_rules(db).order_by(Rule.rule_id.desc())
     vrf_id = None
     if vrf:
         vrf_obj = get_vrf(db, vrf)
@@ -415,7 +420,7 @@ def path_search(
     """Alle Regeln, die Verkehr von src nach dst abdecken (Quelle UND Ziel treffen)."""
     src_net, dst_net = parse_network(src.strip()), parse_network(dst.strip())
     results = []
-    rule_query = db.query(Rule).order_by(Rule.rule_id.desc())
+    rule_query = active_rules(db).order_by(Rule.rule_id.desc())
     if vrf:
         rule_query = rule_query.filter(Rule.vrf_id == get_vrf(db, vrf).id)
     for rule in rule_query.all():
@@ -518,7 +523,7 @@ def path_analysis(
 
     # Regeln, die den Verkehr src -> dst abdecken (nur im VRF-Kontext)
     matching = []
-    for rule in db.query(Rule).filter(Rule.vrf_id == vrf_obj.id).all():
+    for rule in active_rules(db).filter(Rule.vrf_id == vrf_obj.id).all():
         src_matched, src_kind = _match_address_field(rule.source, src, src_net)
         if not src_kind:
             continue
@@ -725,7 +730,7 @@ def delete_rule(
     from .. import audit
     from ..models import utcnow as _now
 
-    rule = get_rule_or_404(db, rule_id)
+    rule = get_rule_or_404(db, rule_id, include_deleted=True)
     if rule.deleted_at is not None:
         return
     rule.deleted_at = _now()
@@ -1069,8 +1074,8 @@ def add_comment(
 @router.get("/{rule_id}/conflicts", response_model=list[ConflictOut])
 def conflicts(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     rule = get_rule_or_404(db, rule_id)
-    others = db.query(Rule).filter(Rule.status != RuleStatus.deactivated,
-                                   Rule.vrf_id == rule.vrf_id).all()
+    others = active_rules(db).filter(Rule.status != RuleStatus.deactivated,
+                                     Rule.vrf_id == rule.vrf_id).all()
     warnings = find_conflicts(rule, others)
     # Zusätzlich: Verstöße/Hinweise aus der Zonen-Kommunikationsmatrix
     zone_result = check_zone_pair(db, rule.source_zone, rule.destination_zone, rule.platforms or [])
