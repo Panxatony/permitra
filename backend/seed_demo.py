@@ -333,6 +333,8 @@ def seed(wipe: bool):
     zones["DMZ-WEB"].components = [fw_ber, components["FW-Cluster-Provider"]]  # Beispiel: Mehrfach-Anbindung
     # Shared Services (DNS/NTP/Repo) sind von beiden Standorten erreichbar
     zones["SHARED"].components = [fw_ffm, fw_ber]
+    # Administration/Jump-Hosts erreichen alle drei Standort-Cluster
+    zones["MGMT"].components = [fw_ber, fw_ffm, fw_ffm_dc]
     # Internet ("any") erreicht die Umgebung über den Provider-Cluster
     db.add(AddressComponentMap(
         ip="any", alias="Internet", vrf_id=vrf_it.id,
