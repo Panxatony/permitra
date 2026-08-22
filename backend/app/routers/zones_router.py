@@ -250,6 +250,7 @@ def overview(db: Session = Depends(get_db), _: User = Depends(get_current_user))
         result.append(
             {
                 "name": zone.name,
+                "code": zone.code,
                 "description": zone.description,
                 "pap_level": zone.pap_level,
                 "owner": zone.owner,
