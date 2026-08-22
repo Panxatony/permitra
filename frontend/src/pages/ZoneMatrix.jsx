@@ -710,7 +710,7 @@ export default function ZoneMatrix() {
         <span className="badge cell-allow">Allow</span> Regeln erlaubt (Durchsetzung per Firewall)
         <span className="badge cell-block">Block</span> keine Regeln zulässig
         <span className="badge cell-undef">leer</span> nicht gepflegt (Regeln erlaubt, mit Hinweis)
-        <span className="badge cell-self">–</span> Intra-Zone (ACI)
+        <span className="badge cell-self">–</span> gleiche Zone
         {canEdit && <em className="muted"> – Klick auf eine Zelle wechselt Allow ↔ Block</em>}
       </div>
 
