@@ -1,13 +1,13 @@
-"""Optionaler E-Mail-Versand (SMTP) – Basis für Aktivierungs-/Reset-Mails und
-spätere Benachrichtigungen (Reviews, Freigaben, Rezertifizierung).
+"""Optional email delivery (SMTP) - the basis for activation/reset mails and
+later notifications (reviews, approvals, recertification).
 
-Konfiguration über Umgebungsvariablen (leerer SMTP_HOST = Versand aus):
+Configured via environment variables (empty SMTP_HOST = delivery disabled):
   SMTP_HOST, SMTP_PORT (587), SMTP_USER, SMTP_PASSWORD,
-  SMTP_FROM (Absender), SMTP_STARTTLS (true)
-  PERMITRA_BASE_URL  Basis-URL für Links in Mails, z.B. https://demo.permitra.de
+  SMTP_FROM (sender), SMTP_STARTTLS (true)
+  PERMITRA_BASE_URL  base URL for links in mails, e.g. https://demo.permitra.de
 
-Versand läuft fire-and-forget in einem Thread und darf den eigentlichen
-Vorgang nie blockieren; Fehler landen nur im Log."""
+Delivery runs fire-and-forget in a thread and must never block the actual
+operation; errors only end up in the log."""
 from __future__ import annotations
 
 import logging
@@ -47,13 +47,13 @@ def _send(to: str, subject: str, body: str) -> None:
             if user:
                 smtp.login(user, password)
             smtp.send_message(message)
-        log.info("Mail an %s gesendet: %s", to, subject)
-    except Exception as exc:  # Versand darf nie den Vorgang blockieren
-        log.warning("Mail an %s fehlgeschlagen: %s", to, exc)
+        log.info("Mail sent to %s: %s", to, subject)
+    except Exception as exc:  # delivery must never block the operation
+        log.warning("Mail to %s failed: %s", to, exc)
 
 
 def send(to: str, subject: str, body: str) -> bool:
-    """Asynchroner Versand; False, wenn Versand deaktiviert oder keine Adresse."""
+    """Asynchronous delivery; False if delivery is disabled or no address is given."""
     if not enabled() or not (to or "").strip():
         return False
     threading.Thread(target=_send, args=(to.strip(), subject, body), daemon=True).start()
@@ -63,22 +63,22 @@ def send(to: str, subject: str, body: str) -> bool:
 def activation_mail(user, link: str) -> bool:
     return send(
         user.email,
-        "Permitra: Konto aktivieren",
-        f"Hallo {user.full_name or user.username},\n\n"
-        f"für dich wurde ein Permitra-Konto angelegt (Benutzername: {user.username}).\n"
-        f"Bitte setze über folgenden Link dein Passwort und aktiviere damit das Konto:\n\n"
+        "Permitra: activate your account",
+        f"Hello {user.full_name or user.username},\n\n"
+        f"a Permitra account has been created for you (username: {user.username}).\n"
+        f"Use the following link to set your password and activate the account:\n\n"
         f"  {link}\n\n"
-        f"Der Link ist 72 Stunden gültig.\n\nPermitra",
+        f"The link is valid for 72 hours.\n\nPermitra",
     )
 
 
 def reset_mail(user, link: str) -> bool:
     return send(
         user.email,
-        "Permitra: Passwort zurücksetzen",
-        f"Hallo {user.full_name or user.username},\n\n"
-        f"über folgenden Link kannst du ein neues Passwort setzen:\n\n"
+        "Permitra: reset your password",
+        f"Hello {user.full_name or user.username},\n\n"
+        f"use the following link to set a new password:\n\n"
         f"  {link}\n\n"
-        f"Der Link ist 2 Stunden gültig. Falls du das nicht angefordert hast, "
-        f"ignoriere diese Mail.\n\nPermitra",
+        f"The link is valid for 2 hours. If you did not request this, "
+        f"ignore this mail.\n\nPermitra",
     )

@@ -1,9 +1,9 @@
-"""Risikoanalyse für Sicherheitsregeln (Issue #10, BSI Compliance-Checks).
+"""Risk analysis for security rules (issue #10, BSI compliance checks).
 
-Bewertet eine Regel auf typische Risikomuster – nicht blockierend, nur als
-Hinweis. Der Gesamtschweregrad ergibt sich aus dem Muster kombiniert mit dem
-Schutzbedarf der Ziel-Zone (einfache Risikomatrix: je höher der Schutzbedarf
-des Ziels, desto schwerer wiegt ein riskantes Muster)."""
+Assesses a rule against typical risk patterns – non-blocking, purely advisory.
+The overall severity results from the pattern combined with the protection level
+of the destination zone (simple risk matrix: the higher the protection level of
+the destination, the heavier a risky pattern weighs)."""
 from __future__ import annotations
 
 import ipaddress
@@ -12,19 +12,19 @@ from sqlalchemy.orm import Session
 
 from .zone_check import find_zone
 
-# Riskante Dienste (Port -> Bezeichnung), v.a. aus unsicheren Zonen kritisch
+# Risky services (port -> label), critical above all from untrusted zones
 RISKY_PORTS = {
-    "23": "Telnet (unverschlüsselt)",
-    "21": "FTP (unverschlüsselt)",
-    "3389": "RDP (Fernzugriff)",
-    "445": "SMB (Dateifreigabe)",
+    "23": "Telnet (unencrypted)",
+    "21": "FTP (unencrypted)",
+    "3389": "RDP (remote access)",
+    "445": "SMB (file sharing)",
     "139": "NetBIOS",
     "135": "MS-RPC",
-    "3306": "MySQL (DB direkt)",
-    "5432": "PostgreSQL (DB direkt)",
-    "1433": "MSSQL (DB direkt)",
-    "1521": "Oracle (DB direkt)",
-    "5900": "VNC (Fernzugriff)",
+    "3306": "MySQL (direct DB access)",
+    "5432": "PostgreSQL (direct DB access)",
+    "1433": "MSSQL (direct DB access)",
+    "1521": "Oracle (direct DB access)",
+    "5900": "VNC (remote access)",
     "6379": "Redis",
     "9200": "Elasticsearch",
     "2049": "NFS",
@@ -32,59 +32,59 @@ RISKY_PORTS = {
     "512": "rexec", "513": "rlogin", "514": "rsh",
 }
 
-# Als "unsicher"/exponiert geltende Quell-Zonen (Ausgangspunkt riskanter Zugriffe)
-UNTRUSTED_PAP = {"extern"}
+# Source zones considered "untrusted"/exposed (origin of risky access)
+UNTRUSTED_PAP = {"external"}
 
-_SEV_ORDER = {"none": 0, "niedrig": 1, "mittel": 2, "hoch": 3}
-_SB_WEIGHT = {"normal": 0, "hoch": 1, "sehr hoch": 2}
+_SEV_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3}
+_SB_WEIGHT = {"normal": 0, "high": 1, "very high": 2}
 
 
-def _bump(sev: str, schutzbedarf: str) -> str:
-    """Schweregrad nach Schutzbedarf der Ziel-Zone anheben (Risikomatrix)."""
-    level = min(3, _SEV_ORDER[sev] + _SB_WEIGHT.get(schutzbedarf, 0))
-    return [k for k, v in _SEV_ORDER.items() if v == level][0]
+def _bump(sev: str, protection_level: str) -> str:
+    """Raise the severity according to the destination zone's protection level (risk matrix)."""
+    level = min(3, _SEV_ORDER[sev] + _SB_WEIGHT.get(protection_level, 0))
+    return next(k for k, v in _SEV_ORDER.items() if v == level)
 
 
 def _segments(port_spec: str) -> list[tuple[int, int]]:
-    """Zerlegt eine Port-Angabe in Zahlenbereiche.
+    """Splits a port specification into numeric ranges.
 
-    Erlaubt sind Einzelports ("443"), Bereiche ("20-25") und Listen davon
-    ("22,8000-8080"). Nicht-numerische Angaben wie "any" ergeben nichts –
-    sie werden an anderer Stelle bewertet."""
+    Allowed are single ports ("443"), ranges ("20-25") and lists of those
+    ("22,8000-8080"). Non-numeric specifications such as "any" yield nothing –
+    they are assessed elsewhere."""
     ranges: list[tuple[int, int]] = []
-    for teil in (port_spec or "").split(","):
-        teil = teil.strip()
-        if not teil:
+    for part in (port_spec or "").split(","):
+        part = part.strip()
+        if not part:
             continue
         try:
-            if "-" in teil:
-                lo_s, hi_s = teil.split("-", 1)
+            if "-" in part:
+                lo_s, hi_s = part.split("-", 1)
                 lo, hi = int(lo_s.strip()), int(hi_s.strip())
-                if lo > hi:            # verdrehte Angabe tolerieren
+                if lo > hi:            # tolerate a reversed range
                     lo, hi = hi, lo
             else:
-                lo = hi = int(teil)
+                lo = hi = int(part)
         except ValueError:
-            continue                   # "any", "http" o.ä. – hier nicht auswertbar
+            continue                   # "any", "http" etc. – not evaluable here
         ranges.append((lo, hi))
     return ranges
 
 
 def risky_ports_in(port_spec: str) -> list[tuple[str, str]]:
-    """Alle riskanten Ports, die eine Port-Angabe abdeckt – als (Port, Label).
+    """All risky ports covered by a port specification – as (port, label).
 
-    Entscheidend für Bereiche und Listen: "20-25" enthält FTP (21) und Telnet
-    (23), "22,23" enthält Telnet. Zuvor wurde nur auf exakte Einzelports
-    geprüft, sodass gerade die weit gefassten Regeln – die am ehesten auffallen
-    sollten – gar keinen Hinweis erzeugten."""
+    Essential for ranges and lists: "20-25" contains FTP (21) and Telnet (23),
+    "22,23" contains Telnet. Previously only exact single ports were checked, so
+    precisely the broadly scoped rules – the ones that should stand out most –
+    produced no warning at all."""
     ranges = _segments(port_spec)
     if not ranges:
         return []
-    treffer = [
+    hits = [
         (port, label) for port, label in RISKY_PORTS.items()
         if any(lo <= int(port) <= hi for lo, hi in ranges)
     ]
-    return sorted(treffer, key=lambda t: int(t[0]))
+    return sorted(hits, key=lambda t: int(t[0]))
 
 
 def _is_any(entries) -> bool:
@@ -92,7 +92,7 @@ def _is_any(entries) -> bool:
 
 
 def _broadest_prefix(entries):
-    """Kleinste Präfixlänge (breitestes Netz) der Einträge; None bei 'any'/leer."""
+    """Smallest prefix length (broadest network) of the entries; None for 'any'/empty."""
     best = None
     for e in entries or []:
         ip = (e.get("ip") or "").strip()
@@ -108,52 +108,52 @@ def _broadest_prefix(entries):
 
 
 def assess_rule(db: Session, rule) -> dict:
-    """Liefert {level, findings:[{severity, code, detail}]} für eine Regel."""
+    """Returns {level, findings:[{severity, code, detail}]} for a rule."""
     findings: list[dict] = []
     dst_zone = find_zone(db, rule.destination_zone or "")
-    schutzbedarf = dst_zone.schutzbedarf if dst_zone else "normal"
+    protection_level = dst_zone.protection_level if dst_zone else "normal"
 
     src_any = _is_any(rule.source)
     dst_any = _is_any(rule.destination)
 
     # 1) Any-to-Any
     if src_any and dst_any:
-        findings.append({"severity": "hoch", "code": "any-to-any",
-                         "detail": "Quelle und Ziel sind beide 'any' – zu breite Regel"})
+        findings.append({"severity": "high", "code": "any-to-any",
+                         "detail": "Source and destination are both 'any' – the rule is too broad"})
     elif src_any:
-        findings.append({"severity": _bump("mittel", schutzbedarf), "code": "any-source",
-                         "detail": "Quelle ist 'any' – jede Adresse darf zugreifen"})
+        findings.append({"severity": _bump("medium", protection_level), "code": "any-source",
+                         "detail": "Source is 'any' – every address may connect"})
 
-    # 2) Sehr breite Netze (<= /8)
-    for label, entries in (("Quelle", rule.source), ("Ziel", rule.destination)):
+    # 2) Very broad networks (<= /8)
+    for label, entries in (("Source", rule.source), ("Destination", rule.destination)):
         pfx = _broadest_prefix(entries)
         if pfx is not None and pfx <= 8:
-            findings.append({"severity": "mittel", "code": "broad-network",
-                             "detail": f"{label} enthält ein sehr breites Netz (/{pfx})"})
+            findings.append({"severity": "medium", "code": "broad-network",
+                             "detail": f"{label} contains a very broad network (/{pfx})"})
 
-    # 3) Riskante Dienste – aus exponierter Quell-Zone schwerer gewichtet
+    # 3) Risky services – weighted higher when coming from an exposed source zone
     src_zone = find_zone(db, rule.source_zone or "")
     exposed = src_any or (src_zone and src_zone.pap_level in UNTRUSTED_PAP)
     for svc in rule.services or []:
         port = (svc.get("port") or "").strip()
         for hit_port, label in risky_ports_in(port):
-            base = "hoch" if exposed else "mittel"
-            # Bei Bereichen/Listen die konkrete Fundstelle mitnennen, sonst
-            # sucht der Prüfer in "20-25" vergeblich nach dem Problem.
-            wo = f"Port {hit_port} in {port}" if hit_port != port else f"Port {port}"
-            findings.append({"severity": _bump(base, schutzbedarf), "code": "risky-service",
-                             "detail": f"Riskanter Dienst {label} ({wo})"
-                                       + (" aus exponierter Quelle" if exposed else "")})
+            base = "high" if exposed else "medium"
+            # For ranges/lists name the concrete match, otherwise the reviewer
+            # searches "20-25" in vain for the actual problem.
+            where = f"Port {hit_port} in {port}" if hit_port != port else f"Port {port}"
+            findings.append({"severity": _bump(base, protection_level), "code": "risky-service",
+                             "detail": f"Risky service {label} ({where})"
+                                       + (" from an exposed source" if exposed else "")})
 
-    # 4) Dienst 'any' zonenübergreifend
+    # 4) Service 'any' across zone boundaries
     cross = (rule.source_zone or "").upper() != (rule.destination_zone or "").upper()
     if cross and any((s.get("protocol") or "").strip().lower() in ("any", "ip")
                      for s in rule.services or []):
-        findings.append({"severity": "mittel", "code": "any-service",
-                         "detail": "Dienst 'any' bei zonenübergreifender Regel"})
+        findings.append({"severity": "medium", "code": "any-service",
+                         "detail": "Service 'any' on a cross-zone rule"})
 
     level = "none"
     for f in findings:
         if _SEV_ORDER[f["severity"]] > _SEV_ORDER[level]:
             level = f["severity"]
-    return {"level": level, "schutzbedarf_ziel": schutzbedarf, "findings": findings}
+    return {"level": level, "target_protection_level": protection_level, "findings": findings}

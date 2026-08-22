@@ -40,7 +40,7 @@
     "action": "permit",
     "status": "approved",
     "impl_status": {
-      "FW-Cluster-FFM": "neu"
+      "FW-Cluster-FFM": "new"
     },
     "description": "Freischaltung für Backup",
     "justification": "Zugriff Backup auf PROD-APP",
@@ -87,7 +87,7 @@
     "action": "permit",
     "status": "approved",
     "impl_status": {
-      "FW-Cluster-BER": "umgesetzt"
+      "FW-Cluster-BER": "implemented"
     },
     "description": "",
     "justification": "Demo: absichtlich überlappende Regel für Konflikt-Warnung",

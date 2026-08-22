@@ -1,13 +1,13 @@
-"""audit checkpoints (Verankerung des Ketten-Endes)
+"""audit checkpoints (anchoring the end of the chain)
 
 Revision ID: c4f2a8e91d63
 Revises: b7e1c4a9d2f0
 Create Date: 2026-08-22 19:20:00.000000
 
-Die Hash-Kette erkennt Änderungen innerhalb des Bestands, nicht aber das
-Abschneiden der jüngsten Einträge. Prüfpunkte halten den Stand fest und werden
-an das SIEM übermittelt – dort liegen sie außerhalb der Reichweite eines
-Angreifers mit Datenbankzugriff.
+The hash chain detects changes within the existing records, but not the
+truncation of the most recent entries. Checkpoints record the current state and
+are forwarded to the SIEM – there they are beyond the reach of an attacker with
+database access.
 """
 from typing import Sequence, Union
 

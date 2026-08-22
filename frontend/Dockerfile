@@ -9,7 +9,7 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-# Erzeugt beim Start die Vertrauensliste für X-Forwarded-For (Quell-IP im Audit-Log)
+# Generates the trust list for X-Forwarded-For at startup (source IP in the audit log)
 COPY realip-entrypoint.sh /docker-entrypoint.d/20-realip.sh
 RUN chmod +x /docker-entrypoint.d/20-realip.sh
 EXPOSE 80

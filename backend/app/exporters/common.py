@@ -1,15 +1,15 @@
-"""Gemeinsame Helfer für alle Exporter."""
+"""Shared helpers for all exporters."""
 import re
 from dataclasses import dataclass
 
-from ..validation import extract_networks, parse_network
+from ..validation import parse_network
 
 
 @dataclass
 class AddressObject:
-    name: str        # objektfähiger Name, z.B. "net-10-0-1-0-24" oder "host-example-de"
-    cidr: str | None  # "10.0.1.0/24" oder None (any / Hostname ohne IP)
-    raw: str         # Original-Eintrag aus der Regel
+    name: str        # object-safe name, e.g. "net-10-0-1-0-24" or "host-example-de"
+    cidr: str | None  # "10.0.1.0/24" or None (any / hostname without an IP)
+    raw: str         # original entry from the rule
     is_any: bool = False
 
 
@@ -19,9 +19,9 @@ def sanitize_name(text: str, max_len: int = 60) -> str:
 
 
 def parse_address_entries(entries: list, prefix: str) -> list[AddressObject]:
-    """Wandelt strukturierte Adress-Einträge [{"ip": ..., "alias": ...}] in benannte Objekte.
+    """Converts structured address entries [{"ip": ..., "alias": ...}] into named objects.
 
-    Objektname = Alias (sofern gesetzt), sonst generiert aus der IP/dem Netz.
+    Object name = alias (if set), otherwise generated from the IP/network.
     """
     objects: list[AddressObject] = []
     for entry in entries or []:
@@ -35,7 +35,7 @@ def parse_address_entries(entries: list, prefix: str) -> list[AddressObject]:
             continue
         net = parse_network(ip)
         if net is None:
-            # Altdaten-Toleranz: unparsebare Einträge als benanntes Objekt ohne CIDR
+            # Legacy data tolerance: unparsable entries become a named object without CIDR
             objects.append(AddressObject(name=sanitize_name(alias or ip), cidr=None, raw=raw))
             continue
         cidr = str(net)
@@ -45,7 +45,7 @@ def parse_address_entries(entries: list, prefix: str) -> list[AddressObject]:
 
 
 def service_ports(port: str) -> list[str]:
-    """Zerlegt "22/80/443" oder "8000-8080" in einzelne Port-Angaben."""
+    """Splits "22/80/443" or "8000-8080" into individual port specifications."""
     port = (port or "").strip().lower()
     if port in ("", "any") or port.startswith(("icmp", "ping")):
         return []
@@ -53,7 +53,7 @@ def service_ports(port: str) -> list[str]:
 
 
 def split_protocols(protocol: str) -> list[str]:
-    """"TCP/UDP" -> ["tcp", "udp"]; ICMP-Varianten -> ["icmp"]."""
+    """"TCP/UDP" -> ["tcp", "udp"]; ICMP variants -> ["icmp"]."""
     proto = (protocol or "").strip().upper()
     if proto == "ANY":
         return ["tcp", "udp", "icmp"]

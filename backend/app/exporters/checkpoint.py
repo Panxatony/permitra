@@ -1,19 +1,19 @@
-"""Check Point: Export als Management-API-JSON und als mgmt_cli-Skript.
+"""Check Point: export as management API JSON and as an mgmt_cli script.
 
-Das JSON entspricht den Payloads der Web-API (add-host / add-network /
-add-service-tcp / add-access-rule), das Skript nutzt mgmt_cli in einer
-Login-Session mit abschließendem publish.
+The JSON matches the payloads of the web API (add-host / add-network /
+add-service-tcp / add-access-rule); the script uses mgmt_cli inside a login
+session with a concluding publish.
 """
 import json
 
 from ..models import Rule
-from .common import parse_address_entries, sanitize_name, service_ports, split_protocols
+from .common import parse_address_entries, service_ports, split_protocols
 
 ACCESS_LAYER = "Network"
 
 
 def _network_objects(rule: Rule) -> tuple[list[dict], list[str], list[str]]:
-    """Liefert (Objekt-Definitionen, Quell-Namen, Ziel-Namen)."""
+    """Returns (object definitions, source names, destination names)."""
     objects, src_names, dst_names = [], [], []
     for field, names in (("source", src_names), ("destination", dst_names)):
         for obj in parse_address_entries(getattr(rule, field), "net"):
@@ -50,7 +50,7 @@ def _service_objects(rule: Rule) -> tuple[list[dict], list[str]]:
 
 
 def rule_payload(rule: Rule) -> dict:
-    """Payload für add-access-rule (Management API)."""
+    """Payload for add-access-rule (management API)."""
     _, src_names, dst_names = _network_objects(rule)
     _, svc_names = _service_objects(rule)
     return {
@@ -67,7 +67,7 @@ def rule_payload(rule: Rule) -> dict:
 
 
 def export_api_json(rules: list[Rule]) -> str:
-    """Management-API-kompatibles JSON: Objekte + Regeln."""
+    """Management-API-compatible JSON: objects + rules."""
     all_objects, access_rules = [], []
     seen = set()
     for rule in rules:
@@ -85,11 +85,11 @@ def export_api_json(rules: list[Rule]) -> str:
 
 
 def export_cli(rules: list[Rule]) -> str:
-    """mgmt_cli-Skript für die Umsetzung auf dem Management-Server."""
+    """mgmt_cli script for the rollout on the management server."""
     lines = [
         "#!/bin/bash",
-        "# Permitra Export – Check Point mgmt_cli",
-        f"# Regeln: {', '.join(r.rule_id for r in rules)}",
+        "# Permitra export – Check Point mgmt_cli",
+        f"# Rules: {', '.join(r.rule_id for r in rules)}",
         "set -e",
         'mgmt_cli login user "$CP_USER" password "$CP_PASSWORD" > session.txt',
         "",

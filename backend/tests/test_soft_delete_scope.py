@@ -1,16 +1,16 @@
-"""Gelöschte Regeln dürfen nirgends mehr fachlich wirken.
+"""Deleted rules must no longer take effect anywhere.
 
-Regeln werden per Soft-Delete entfernt (`deleted_at`), damit die Historie als
-Compliance-Nachweis erhalten bleibt. Der Status bleibt dabei stehen – meist
-`approved`. Genau deshalb muss jede Abfrage sie ausschließen; sonst wirkt eine
-gelöschte Regel weiter:
+Rules are removed via soft delete (`deleted_at`) so that the history is
+preserved as compliance evidence. The status stays as it was - usually
+`approved`. That is exactly why every query has to exclude them; otherwise a
+deleted rule keeps taking effect:
 
-  * die Pfad-Analyse meldet Verkehr als erlaubt, den es nicht mehr gibt,
-  * der Soll-Ist-Abgleich fordert, sie auf dem Gerät wieder anzulegen,
-  * der Zonenplan (BSI-Nachweis) leitet Segmentierung aus ihr ab.
+  * the path analysis reports traffic as allowed that no longer exists,
+  * the target/actual comparison demands recreating it on the device,
+  * the zone plan (BSI evidence) derives segmentation from it.
 
-Die vorherige Testsuite hat diese Lücken nicht bemerkt, weil sie den
-`deleted_at`-Filter nirgends geprüft hat.
+The previous test suite did not notice these gaps because it never checked the
+`deleted_at` filter anywhere.
 """
 import pytest
 from fastapi import HTTPException
@@ -67,7 +67,7 @@ def make_rule(db, rule_id, deleted=False, status=RuleStatus.approved):
     return r
 
 
-# ---------- zentrale Abfrage ----------
+# ---------- central query ----------
 
 def test_active_rules_excludes_deleted(db):
     make_rule(db, "SR00001")
@@ -77,19 +77,19 @@ def test_active_rules_excludes_deleted(db):
 
 
 def test_deleted_rule_keeps_its_status_for_the_record(db):
-    """Der Soft-Delete verändert den Status bewusst nicht – genau deshalb
-    braucht es den Filter überall."""
+    """The soft delete deliberately does not change the status - which is
+    exactly why the filter is needed everywhere."""
     r = make_rule(db, "SR00009", deleted=True)
     assert r.status == RuleStatus.approved and r.deleted_at is not None
 
 
-# ---------- Soll-Ist-Abgleich ----------
+# ---------- Target/actual comparison ----------
 
 def test_drift_does_not_demand_recreating_a_deleted_rule(db):
-    """Der gefährlichste Fall: der Betrieb bekäme sonst die Anweisung, eine
-    bewusst gelöschte Regel auf der Firewall wieder anzulegen."""
-    make_rule(db, "SR00010")                 # aktiv, nicht auf dem Gerät
-    make_rule(db, "SR00011", deleted=True)   # gelöscht, nicht auf dem Gerät
+    """The most dangerous case: operations would otherwise be instructed to
+    recreate a deliberately deleted rule on the firewall."""
+    make_rule(db, "SR00010")                 # active, not on the device
+    make_rule(db, "SR00011", deleted=True)   # deleted, not on the device
     comp = db.get(SecurityComponent, 1)
     db.add(ComponentActualConfig(component_id=1, content="set security policies SR00099"))
     db.commit()
@@ -97,12 +97,13 @@ def test_drift_does_not_demand_recreating_a_deleted_rule(db):
     result = analyze_drift(db, comp)
     missing = {r["rule_id"] for r in result["missing"]}
     assert "SR00010" in missing
-    assert "SR00011" not in missing, "gelöschte Regel wird zum Wiederanlegen gefordert"
+    assert "SR00011" not in missing, "a deleted rule is demanded to be recreated"
 
 
 def test_drift_reports_deleted_rule_left_on_device_as_stale(db):
-    """Umkehrprobe: liegt die gelöschte Regel noch auf dem Gerät, muss sie als
-    abzubauen erkannt werden – vorher galt sie als 'bekannt' und fiel durch."""
+    """Reverse check: if the deleted rule is still on the device, it has to be
+    recognised as to be rolled back - before it counted as 'known' and slipped
+    through."""
     make_rule(db, "SR00012", deleted=True)
     comp = db.get(SecurityComponent, 1)
     db.add(ComponentActualConfig(component_id=1, content="set security policies SR00012"))
@@ -110,11 +111,11 @@ def test_drift_reports_deleted_rule_left_on_device_as_stale(db):
 
     result = analyze_drift(db, comp)
     stale_ids = {s["rule_id"] for s in result["stale"]}
-    assert "SR00012" in stale_ids, "gelöschte Regel auf dem Gerät nicht als Rückbau erkannt"
+    assert "SR00012" in stale_ids, "deleted rule on the device not recognised as a rollback"
     assert "SR00012" not in result["unknown"]
 
 
-# ---------- Zonenplan / BSI-Nachweis ----------
+# ---------- Zone plan / BSI evidence ----------
 
 def test_zoneplan_ignores_deleted_rules(db):
     from app.zoneplan import build_mermaid
@@ -124,10 +125,10 @@ def test_zoneplan_ignores_deleted_rules(db):
     assert "SR00020" not in diagram
 
 
-# ---------- Objekt-Katalog ----------
+# ---------- Object catalog ----------
 
 def test_ip_change_does_not_touch_deleted_rules(db):
-    """Eine Adressänderung darf nicht in gelöschte Regeln zurückschreiben."""
+    """An address change must not write back into deleted rules."""
     from app.routers.objects_router import propagate_ip_change
 
     active = make_rule(db, "SR00030")
@@ -137,15 +138,15 @@ def test_ip_change_does_not_touch_deleted_rules(db):
     db.commit()
 
     propagate_ip_change(db, obj, "10.0.0.5", "pruefer")
-    db.commit()          # der Router committet nach dem Nachziehen
+    db.commit()          # the router commits after propagating the change
     db.refresh(active)
     db.refresh(deleted)
-    assert active.source[0]["ip"] == "10.0.0.9", "aktive Regel wurde nicht nachgezogen"
-    assert deleted.source[0]["ip"] == "10.0.0.5", "gelöschte Regel wurde verändert"
-    assert deleted.version == 1, "gelöschte Regel wurde fortgeschrieben"
+    assert active.source[0]["ip"] == "10.0.0.9", "the active rule was not updated"
+    assert deleted.source[0]["ip"] == "10.0.0.5", "the deleted rule was modified"
+    assert deleted.version == 1, "the deleted rule was carried forward"
 
 
-# ---------- Zugriff über die Regel-ID ----------
+# ---------- Access via the rule ID ----------
 
 def test_deleted_rule_is_not_retrievable(db):
     from app.routers.rules_router import get_rule_or_404
@@ -157,8 +158,8 @@ def test_deleted_rule_is_not_retrievable(db):
 
 
 def test_delete_handler_can_still_see_deleted_rule(db):
-    """Gegenprobe: das Löschen selbst muss den Zustand erkennen können,
-    sonst wäre doppeltes Löschen nicht abfangbar."""
+    """Counter-check: the deletion itself has to be able to see the state,
+    otherwise a double deletion could not be caught."""
     from app.routers.rules_router import get_rule_or_404
 
     make_rule(db, "SR00041", deleted=True)
@@ -166,11 +167,11 @@ def test_delete_handler_can_still_see_deleted_rule(db):
     assert rule.deleted_at is not None
 
 
-# ---------- Auswirkungsanalyse der Matrix ----------
+# ---------- Impact analysis of the matrix ----------
 
 def test_matrix_impact_ignores_deleted_rules(db):
-    """Eine Matrix-Änderung auf Block darf keine gelöschte Regel in den
-    Review zurückholen."""
+    """A matrix change to block must not pull a deleted rule back into
+    review."""
     from app.routers.zones_router import _affected_rules
 
     make_rule(db, "SR00050")

@@ -1,23 +1,23 @@
 #!/bin/sh
-# Erzeugt die Vertrauensliste für X-Forwarded-For beim Containerstart.
+# Generates the trust list for X-Forwarded-For at container startup.
 #
-# Die Quell-IP landet im revisionssicheren Audit-Log. Ein X-Forwarded-For darf
-# deshalb nur ausgewertet werden, wenn er von einem ausdrücklich benannten
-# Reverse-Proxy stammt – sonst kann jeder Client seine Herkunft frei erfinden.
+# The source IP ends up in the tamper-evident audit log. An X-Forwarded-For may
+# therefore only be evaluated if it comes from an explicitly named reverse
+# proxy – otherwise any client could make up its own origin.
 #
-# PERMITRA_TRUSTED_PROXIES: kommagetrennte IPs/CIDRs des vorgelagerten Proxys.
-#   nicht gesetzt -> kein X-Forwarded-For wird ausgewertet (sicherer Standard)
+# PERMITRA_TRUSTED_PROXIES: comma-separated IPs/CIDRs of the upstream proxy.
+#   not set -> no X-Forwarded-For is evaluated (safe default)
 set -e
 TARGET=/etc/nginx/conf.d/10-realip.conf
 
 if [ -z "${PERMITRA_TRUSTED_PROXIES:-}" ]; then
-  echo "# PERMITRA_TRUSTED_PROXIES nicht gesetzt: X-Forwarded-For wird nicht ausgewertet." > "$TARGET"
-  echo "permitra: kein vertrauenswürdiger Proxy konfiguriert – X-Forwarded-For wird ignoriert"
+  echo "# PERMITRA_TRUSTED_PROXIES not set: X-Forwarded-For is not evaluated." > "$TARGET"
+  echo "permitra: no trusted proxy configured – X-Forwarded-For is ignored"
   exit 0
 fi
 
 : > "$TARGET"
-echo "# Erzeugt aus PERMITRA_TRUSTED_PROXIES – nicht von Hand bearbeiten." >> "$TARGET"
+echo "# Generated from PERMITRA_TRUSTED_PROXIES – do not edit by hand." >> "$TARGET"
 echo "$PERMITRA_TRUSTED_PROXIES" | tr ',' '\n' | while read -r cidr; do
   cidr=$(echo "$cidr" | tr -d '[:space:]')
   [ -n "$cidr" ] || continue
@@ -27,4 +27,4 @@ done
   echo "real_ip_header X-Forwarded-For;"
   echo "real_ip_recursive on;"
 } >> "$TARGET"
-echo "permitra: vertraue X-Forwarded-For von: $PERMITRA_TRUSTED_PROXIES"
+echo "permitra: trusting X-Forwarded-For from: $PERMITRA_TRUSTED_PROXIES"

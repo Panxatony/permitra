@@ -11,18 +11,18 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import Role, User
 
-# Fail-secure: ohne gesetztes SECRET_KEY wird der Start verweigert. Nur im
-# ausdrücklichen Dev-Modus (PERMITRA_DEV=1) ein zufälliges Prozess-Secret –
-# damit lässt sich lokal starten, ausgestellte Tokens überleben aber keinen
-# Neustart. Kein hartkodierter Default (sonst fälschbare Admin-Tokens).
+# Fail-secure: startup is refused unless SECRET_KEY is set. Only in explicit
+# dev mode (PERMITRA_DEV=1) a random per-process secret is used - this allows
+# local startup, but issued tokens do not survive a restart. No hardcoded
+# default (that would allow forged admin tokens).
 SECRET_KEY = os.environ.get("SECRET_KEY", "").strip()
 if not SECRET_KEY:
     if os.environ.get("PERMITRA_DEV") == "1":
         SECRET_KEY = secrets.token_hex(32)
     else:
         raise RuntimeError(
-            "SECRET_KEY ist nicht gesetzt – Start verweigert (fail-secure). "
-            "Setze SECRET_KEY (z.B. `openssl rand -hex 32`) oder PERMITRA_DEV=1 für lokale Entwicklung."
+            "SECRET_KEY is not set – startup refused (fail-secure). "
+            "Set SECRET_KEY (e.g. `openssl rand -hex 32`) or PERMITRA_DEV=1 for local development."
         )
 ALGORITHM = "HS256"
 TOKEN_LIFETIME_HOURS = int(os.environ.get("TOKEN_LIFETIME_HOURS", "8"))
@@ -37,7 +37,7 @@ def hash_password(password: str, salt: str | None = None) -> str:
 
 
 def verify_password(password: str, stored: str) -> bool:
-    salt, _, digest = stored.partition("$")
+    salt, _, _digest = stored.partition("$")
     return secrets.compare_digest(hash_password(password, salt), stored)
 
 
@@ -52,28 +52,28 @@ def create_token(user: User) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-API_TOKEN_PREFIX = "pat_"
+API_TOKEN_PREFIX = "pat_"  # noqa: S105 - identifying prefix of a token, not a secret
 
 
 def _service_principal_from_pat(request, token: str, db: Session) -> User:
-    """Validiert einen read-only API-Token und liefert einen (nicht persistierten)
-    Service-Principal. Nur GET-Zugriffe sind erlaubt (fail-secure)."""
+    """Validates a read-only API token and returns a (non-persisted)
+    service principal. Only GET access is permitted (fail-secure)."""
     from .models import ApiToken
 
     if request is not None and request.method not in ("GET", "HEAD", "OPTIONS"):
         raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            "API-Token sind read-only – nur lesende Zugriffe erlaubt")
+                            "API tokens are read-only – only read access is permitted")
     digest = hashlib.sha256(token.encode()).hexdigest()
     pat = db.query(ApiToken).filter(ApiToken.token_hash == digest).first()
     if not pat or pat.revoked:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API-Token ungültig oder widerrufen")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API token is invalid or revoked")
     if pat.expires_at is not None:
         exp = pat.expires_at
         if exp.tzinfo is None:
             exp = exp.replace(tzinfo=timezone.utc)
         if exp < datetime.now(timezone.utc):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API-Token ist abgelaufen")
-    # Letzte Nutzung sparsam aktualisieren (nicht bei jedem Request schreiben)
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API token has expired")
+    # Update last usage sparingly (avoid a write on every request)
     now = datetime.now(timezone.utc)
     if pat.last_used_at is None or (now - (pat.last_used_at if pat.last_used_at.tzinfo
                                            else pat.last_used_at.replace(tzinfo=timezone.utc))).total_seconds() > 60:
@@ -87,28 +87,28 @@ def _service_principal_from_pat(request, token: str, db: Session) -> User:
 
 def get_current_user(request: Request = None, token: str = Depends(oauth2_scheme),
                      db: Session = Depends(get_db)) -> User:
-    # Read-only Service-Token (Automatisierung) statt JWT
+    # Read-only service token (automation) instead of a JWT
     if token and token.startswith(API_TOKEN_PREFIX):
         return _service_principal_from_pat(request, token, db)
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.PyJWTError:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token ungültig oder abgelaufen")
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token is invalid or expired") from exc
     user = db.query(User).filter(User.username == payload.get("sub")).first()
     if not user:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Benutzer nicht gefunden")
-    # Fail-secure: deaktivierte Konten haben keinen Zugriff (auch mit gültigem Token)
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
+    # Fail-secure: disabled accounts get no access (even with a valid token)
     if not user.is_active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Konto ist deaktiviert")
-    # Sofortige Rücknahme: Tokens, die vor der letzten Invalidierung (Deaktivierung,
-    # Passwortwechsel/-reset) ausgestellt wurden, gelten nicht mehr
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "The account is deactivated")
+    # Immediate revocation: tokens issued before the last invalidation (deactivation,
+    # password change/reset) are no longer valid
     if user.token_valid_from is not None:
         iat = payload.get("iat")
         valid_from = user.token_valid_from
         if valid_from.tzinfo is None:
             valid_from = valid_from.replace(tzinfo=timezone.utc)
         if iat is None or iat < int(valid_from.timestamp()):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sitzung ist nicht mehr gültig")
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session is no longer valid")
     return user
 
 
@@ -117,7 +117,7 @@ def require_roles(*roles: Role):
         if user.role not in roles and user.role != Role.admin:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                f"Rolle '{user.role.value}' ist für diese Aktion nicht berechtigt",
+                f"Role '{user.role.value}' is not permitted to perform this action",
             )
         return user
 

@@ -1,14 +1,14 @@
-"""E-Mail-Benachrichtigungen für Workflow-Ereignisse (Issue #5).
+"""E-mail notifications for workflow events (issue #5).
 
-Baut auf dem optionalen Mailer auf (SMTP, fire-and-forget). Ohne konfiguriertes
-SMTP passiert nichts. Empfänger werden aus den Benutzerrollen bestimmt; jeder
-Benutzer kann E-Mail-Benachrichtigungen individuell abschalten (notify_email).
+Built on top of the optional mailer (SMTP, fire-and-forget). Without configured
+SMTP nothing happens. Recipients are derived from the user roles; every user can
+turn e-mail notifications off individually (notify_email).
 
-Ereignisse:
-- Regel zum Review eingereicht  -> alle Change Approver
-- Regel freigegeben/abgelehnt   -> Ersteller/Requestor der Regel
-- Regel zur Umsetzung/Rückbau   -> Betrieb
-- Rezertifizierung (Ablauf)     -> Betrieb (Sammelmail)
+Events:
+- rule submitted for review        -> all change approvers
+- rule approved/rejected           -> creator/requestor of the rule
+- rule pending rollout/rollback    -> operations
+- recertification (expiry)         -> operations (digest mail)
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _recipients_by_name(db: Session, *usernames: str) -> list[User]:
 
 
 def _rule_line(rule) -> str:
-    return (f"{rule.rule_id} „{rule.name}“ ({rule.source_zone or '?'} → "
+    return (f"{rule.rule_id} “{rule.name}” ({rule.source_zone or '?'} → "
             f"{rule.destination_zone or '?'})")
 
 
@@ -54,62 +54,62 @@ def _send_each(recipients: list[User], subject: str, body_for) -> int:
 
 
 def rule_submitted(db: Session, rule) -> None:
-    """Regel zum Review eingereicht -> Change Approver informieren."""
+    """Rule submitted for review -> notify the change approvers."""
     if not mailer.enabled():
         return
     link = f"{mailer.base_url()}/rules/{rule.rule_id}"
     _send_each(
         _recipients_by_role(db, Role.change_approver, Role.admin),
-        f"Permitra: Regel {rule.rule_id} wartet auf Freigabe",
-        lambda g: (f"Hallo {g},\n\n{_rule_line(rule)} wurde zum Review eingereicht "
-                   f"und wartet auf deine Freigabe.\n\n  {link}\n\nPermitra"),
+        f"Permitra: rule {rule.rule_id} is waiting for approval",
+        lambda g: (f"Hello {g},\n\n{_rule_line(rule)} has been submitted for review "
+                   f"and is waiting for your approval.\n\n  {link}\n\nPermitra"),
     )
 
 
 def rule_decided(db: Session, rule, approved: bool, decided_by: str, comment: str = "") -> None:
-    """Regel freigegeben/abgelehnt -> Ersteller/Requestor informieren."""
+    """Rule approved/rejected -> notify the creator/requestor."""
     if not mailer.enabled():
         return
     link = f"{mailer.base_url()}/rules/{rule.rule_id}"
-    status = "freigegeben" if approved else "abgelehnt"
-    extra = f"\n\nKommentar: {comment}" if comment else ""
+    status = "approved" if approved else "rejected"
+    extra = f"\n\nComment: {comment}" if comment else ""
     _send_each(
         _recipients_by_name(db, rule.created_by, rule.requestor),
-        f"Permitra: Regel {rule.rule_id} {status}",
-        lambda g: (f"Hallo {g},\n\n{_rule_line(rule)} wurde von {decided_by} {status}."
+        f"Permitra: rule {rule.rule_id} {status}",
+        lambda g: (f"Hello {g},\n\n{_rule_line(rule)} was {status} by {decided_by}."
                    f"{extra}\n\n  {link}\n\nPermitra"),
     )
 
 
 def rule_implementation_pending(db: Session, rule, reason: str) -> None:
-    """Regel zur Umsetzung/Rückbau -> Betrieb informieren."""
+    """Rule pending rollout/rollback -> notify operations."""
     if not mailer.enabled():
         return
     link = f"{mailer.base_url()}/rules/{rule.rule_id}"
     _send_each(
         _recipients_by_role(db, Role.operations, Role.admin),
-        f"Permitra: Regel {rule.rule_id} umzusetzen",
-        lambda g: (f"Hallo {g},\n\n{_rule_line(rule)}: {reason}\n"
-                   f"Bitte auf den Komponenten umsetzen bzw. zurückbauen und den "
-                   f"Umsetzungsstatus pflegen.\n\n  {link}\n\nPermitra"),
+        f"Permitra: rule {rule.rule_id} needs to be implemented",
+        lambda g: (f"Hello {g},\n\n{_rule_line(rule)}: {reason}\n"
+                   f"Roll the rule out on the components or remove it, and update the "
+                   f"implementation status.\n\n  {link}\n\nPermitra"),
     )
 
 
 def recertification_due(db: Session, expired: list, expiring: list) -> None:
-    """Sammelmail an den Betrieb über abgelaufene/ablaufende Regeln."""
+    """Digest mail to operations about expired/expiring rules."""
     if not mailer.enabled() or not (expired or expiring):
         return
     lines = []
     if expired:
-        lines.append("Abgelaufen (automatisch deaktiviert):")
-        lines += [f"  - {_rule_line(r)} (bis {r.valid_until})" for r in expired]
+        lines.append("Expired (automatically disabled):")
+        lines += [f"  - {_rule_line(r)} (until {r.valid_until})" for r in expired]
     if expiring:
-        lines.append("\nLäuft demnächst ab:")
-        lines += [f"  - {_rule_line(r)} (bis {r.valid_until})" for r in expiring]
+        lines.append("\nExpiring soon:")
+        lines += [f"  - {_rule_line(r)} (until {r.valid_until})" for r in expiring]
     body = "\n".join(lines)
     link = f"{mailer.base_url()}/recertification"
     _send_each(
         _recipients_by_role(db, Role.operations, Role.admin),
-        "Permitra: Rezertifizierung – abgelaufene/ablaufende Regeln",
-        lambda g: f"Hallo {g},\n\n{body}\n\nRezertifizierung:\n  {link}\n\nPermitra",
+        "Permitra: recertification – expired/expiring rules",
+        lambda g: f"Hello {g},\n\n{body}\n\nRecertification:\n  {link}\n\nPermitra",
     )

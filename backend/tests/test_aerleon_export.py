@@ -1,4 +1,4 @@
-"""Tests für die Capirca-/Aerleon-Anbindung (Regeln -> Policy -> native Konfiguration)."""
+"""Tests for the Capirca/Aerleon integration (rules -> policy -> native configuration)."""
 import pytest
 
 from app.exporters import aerleon_export
@@ -43,7 +43,7 @@ def rules():
 
 def test_build_policy_objects_and_terms(rules):
     policy, definitions = aerleon_export.build_policy(rules, "cisco")
-    # Aliasse werden zu Objektnamen, IPs ohne Alias generiert
+    # Aliases become object names, names are generated for IPs without an alias
     assert "NET_MGMT" in definitions["networks"]
     assert "APP20_DEMO_LOCAL" in definitions["networks"]
     assert definitions["networks"]["NET_10_10_30_21"]["values"][0]["address"] == "10.10.30.21/32"
@@ -51,11 +51,11 @@ def test_build_policy_objects_and_terms(rules):
 
     terms = policy["filters"][0]["terms"]
     by_name = {t["name"]: t for t in terms}
-    # tcp:443 + udp:443 -> je Protokoll ein Term (exakte Abbildung)
+    # tcp:443 + udp:443 -> one term per protocol (exact mapping)
     assert "sr0002-tcp" in by_name and "sr0002-udp" in by_name
-    # any-Quelle: Feld weggelassen
+    # any source: field is omitted
     assert "source-address" not in by_name["sr0002-tcp"]
-    # deny + icmp ohne Port
+    # deny + icmp without a port
     assert by_name["sr0003"]["action"] == "deny"
     assert by_name["sr0003"]["protocol"] == "icmp"
     assert "destination-port" not in by_name["sr0003"]
@@ -66,7 +66,7 @@ def test_zone_based_target_groups_by_zone_pair(rules):
     headers = [f["header"]["targets"]["srx"] for f in policy["filters"]]
     assert "from-zone MGMT to-zone PROD-APP" in headers
     assert "from-zone INET to-zone DMZ-WEB" in headers
-    # SR0001 und SR0003 teilen sich das Zonen-Paar
+    # SR0001 and SR0003 share the zone pair
     mgmt = next(f for f in policy["filters"]
                 if f["header"]["targets"]["srx"] == "from-zone MGMT to-zone PROD-APP")
     assert {t["name"] for t in mgmt["terms"]} == {"sr0001", "sr0003"}

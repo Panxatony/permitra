@@ -1,13 +1,14 @@
-"""Verankerung des Ketten-Endes gegen Kürzung (Audit-Befund H2).
+"""Anchoring the end of the chain against truncation (audit finding H2).
 
-Die Hash-Kette erkennt Änderungen und Lücken *innerhalb* des Bestands. Werden
-dagegen die JÜNGSTEN Einträge gelöscht, bleibt der Rest in sich schlüssig – ohne
-festen Bezugspunkt fällt die Kürzung nicht auf. Genau das war die Lücke:
-`verify_chain` meldete nach dem Löschen aller Einträge `ok=True` bei `checked=0`.
+The hash chain detects modifications and gaps *within* the existing records. If
+the NEWEST entries are deleted, however, the remainder stays internally
+consistent - without a fixed reference point the truncation goes unnoticed. That
+was exactly the gap: after deleting all entries, `verify_chain` reported
+`ok=True` with `checked=0`.
 
-Ein Prüfpunkt hält fest, wie weit die Kette reichte. Seine volle Wirkung
-entfaltet er erst außerhalb der Datenbank – deshalb wird er über dieselbe
-zuverlässige Zustellung an das SIEM gegeben.
+A checkpoint records how far the chain reached. It only takes full effect
+outside the database - which is why it is handed to the SIEM over the same
+reliable delivery path.
 """
 import pytest
 from sqlalchemy import create_engine
@@ -33,7 +34,7 @@ def _seed(db, n=5, start=0):
                      object=f"key{i}", detail=f"value{i}", source_ip="203.0.113.1")
 
 
-# ---------- Prüfpunkt anlegen ----------
+# ---------- Creating a checkpoint ----------
 
 def test_checkpoint_records_current_head(db):
     _seed(db, 4)
@@ -65,11 +66,11 @@ def test_new_events_produce_a_new_checkpoint(db):
     assert db.query(AuditCheckpoint).count() == 2
 
 
-# ---------- Der eigentliche Befund: Kürzung ----------
+# ---------- The actual finding: truncation ----------
 
 def test_truncating_the_tail_is_detected(db):
-    """Der Angriff aus dem Audit: die jüngsten Einträge – typischerweise die
-    eigenen Spuren – verschwinden lassen."""
+    """The attack from the audit: make the newest entries - typically one's own
+    traces - disappear."""
     _seed(db, 6)
     audit.create_checkpoint(db)
 
@@ -80,29 +81,29 @@ def test_truncating_the_tail_is_detected(db):
 
     result = audit.verify_chain(db)
     assert result["ok"] is False
-    assert "gekürzt" in result["reason"]
+    assert "truncated" in result["reason"]
 
 
 def test_wiping_the_whole_chain_is_detected(db):
-    """Vorher meldete eine leergeräumte Kette ok=True bei checked=0."""
+    """Previously, a wiped chain reported ok=True with checked=0."""
     _seed(db, 4)
     audit.create_checkpoint(db)
     db.query(AuditEvent).delete()
     db.commit()
 
     result = audit.verify_chain(db)
-    assert result["ok"] is False, "leergeräumte Kette gilt weiterhin als unversehrt"
+    assert result["ok"] is False, "a wiped chain is still considered intact"
     assert result["checked"] == 0
 
 
 def test_recomputed_chain_is_detected_via_anchor(db):
-    """Wer die Kette nach einer Änderung neu berechnet, verschiebt den Head –
-    der Prüfpunkt hält den alten Wert dagegen."""
+    """Recomputing the chain after a modification shifts the head - the
+    checkpoint holds the old value against it."""
     _seed(db, 3)
     audit.create_checkpoint(db)
 
     anchor_event = db.query(AuditEvent).order_by(AuditEvent.id.desc()).first()
-    anchor_event.hash = "f" * 64          # Neuberechnung nachstellen
+    anchor_event.hash = "f" * 64          # simulate a recomputation
     db.commit()
 
     result = audit.verify_chain(db)
@@ -110,8 +111,8 @@ def test_recomputed_chain_is_detected_via_anchor(db):
 
 
 def test_intact_chain_with_anchor_passes(db):
-    """Gegenprobe: unveränderte Kette samt Prüfpunkt bleibt gültig, auch wenn
-    danach weitere Ereignisse hinzukommen."""
+    """Counter-check: an unmodified chain including its checkpoint stays valid,
+    even when further events are added afterwards."""
     _seed(db, 3)
     audit.create_checkpoint(db)
     _seed(db, 2, start=3)
@@ -128,7 +129,7 @@ def test_verify_without_any_checkpoint_still_works(db):
     assert result["ok"] is True and result["anchor"] is None
 
 
-# ---------- Zustellung an das SIEM ----------
+# ---------- Delivery to the SIEM ----------
 
 def test_checkpoint_is_pending_delivery_when_siem_configured(db, monkeypatch):
     monkeypatch.setenv("AUDIT_WEBHOOK_URL", "http://siem.example/ingest")
@@ -171,5 +172,5 @@ def test_checkpoint_needs_no_delivery_without_siem(db, monkeypatch):
     monkeypatch.delenv("AUDIT_SYSLOG_HOST", raising=False)
     _seed(db, 2)
     cp = audit.create_checkpoint(db)
-    assert cp.delivered_at is not None, "ohne SIEM-Ziel gibt es nichts zuzustellen"
+    assert cp.delivered_at is not None, "without a SIEM target there is nothing to deliver"
     assert audit.siem_status(db)["anchors_pending"] == 0

@@ -43,7 +43,7 @@ export default function Dashboard() {
   }, [])
 
   if (error) return <div className="error">{error}</div>
-  if (!data) return <p className="muted">{t('Lade…')}</p>
+  if (!data) return <p className="muted">{t('Loading…')}</p>
 
   const statusMax = Math.max(...STATUS_ORDER.map((s) => data.by_status[s] || 0), 1)
   const compMax = Math.max(...data.components.map((c) => c.rules), 1)
@@ -79,22 +79,22 @@ export default function Dashboard() {
       </div>
 
       <div className="tiles">
-        <Tile value={data.rules_total} label={t('Regeln gesamt')} to="/rules" />
-        <Tile value={data.open_reviews} label={t('Offene Reviews')} to="/rules?status=in_review"
+        <Tile value={data.rules_total} label={t('Total rules')} to="/rules" />
+        <Tile value={data.open_reviews} label={t('Open reviews')} to="/rules?status=in_review"
           tone={data.open_reviews ? 'tone-warn' : ''} />
-        <Tile value={data.to_implement} label={t('Umzusetzen')} to="/rules?impl=pending"
+        <Tile value={data.to_implement} label={t('To implement')} to="/rules?impl=pending"
           tone={data.to_implement ? 'tone-warn' : 'tone-good'} />
-        <Tile value={data.expired} label={t('Abgelaufen')} to="/recertification"
+        <Tile value={data.expired} label={t('Expired')} to="/recertification"
           tone={data.expired ? 'tone-bad' : 'tone-good'} />
-        <Tile value={data.expiring_30d} label={t('Läuft in 30 Tagen ab')} to="/recertification"
+        <Tile value={data.expiring_30d} label={t('Expiring within 30 days')} to="/recertification"
           tone={data.expiring_30d ? 'tone-warn' : ''} />
-        <Tile value={data.zones} label={t('Zonen')} to="/zones" />
-        <Tile value={data.aci_gateways} label={t('ACI Gateways')} to="/components" />
+        <Tile value={data.zones} label={t('Zones')} to="/zones" />
+        <Tile value={data.aci_gateways} label={t('ACI gateways')} to="/components" />
       </div>
 
       <div className="detail-grid">
         <section className="card">
-          <h2>{t('Regeln nach Status')}</h2>
+          <h2>{t('Rules by status')}</h2>
           <BarList
             max={statusMax}
             rows={STATUS_ORDER.map((s) => ({
@@ -107,7 +107,7 @@ export default function Dashboard() {
         </section>
 
         <section className="card">
-          <h2>{t('Regeln je Komponente')}</h2>
+          <h2>{t('Rules per component')}</h2>
           <BarList
             max={compMax}
             rows={data.components.map((c) => ({
@@ -120,11 +120,11 @@ export default function Dashboard() {
         </section>
 
         <section className="card wide">
-          <h2>{t('Letzte Änderungen')}</h2>
+          <h2>{t('Recent changes')}</h2>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>{t('Regel')}</th><th>{t('Änderung')}</th><th>{t('Von')}</th><th>{t('Zeitpunkt')}</th></tr>
+                <tr><th>{t('Rule')}</th><th>{t('Change')}</th><th>{t('By')}</th><th>{t('Time')}</th></tr>
               </thead>
               <tbody>
                 {data.recent_changes.map((c, i) => (

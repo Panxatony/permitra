@@ -1,4 +1,4 @@
-"""Tests für den NetBox-Import (Issue #23)."""
+"""Tests for the NetBox import (issue #23)."""
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app import netbox
 from app.database import Base
-from app.models import NetboxConfig, NetboxPrefix, Vrf, Zone, ZoneNetwork
+from app.models import NetboxConfig, NetboxPrefix, Vrf
 
 
 @pytest.fixture()
@@ -65,11 +65,11 @@ def test_import_prefixes(db, netbox_server):
                         verify_tls=True, statuses="active,reserved"))
     db.commit()
     result = netbox.import_prefixes(db)
-    # Dedupliziert über netbox_id, auch wenn pro Status abgefragt wird
+    # Deduplicated by netbox_id, even though it is queried per status
     assert result["pending"] == 2
     cidrs = {p.cidr for p in db.query(NetboxPrefix).all()}
     assert cidrs == {"10.20.0.0/24", "10.20.1.0/24"}
-    # Idempotent: erneuter Import aktualisiert statt zu duplizieren
+    # Idempotent: a repeated import updates instead of duplicating
     netbox.import_prefixes(db)
     assert db.query(NetboxPrefix).count() == 2
 

@@ -1,14 +1,14 @@
-"""Soll-Ist-Abgleich (Drift Detection) je Komponente.
+"""Target/actual comparison (drift detection) per component.
 
-Soll: alle freigegebenen Regeln, die der Komponente zugeordnet sind.
-Ist:  die hinterlegte Gerätekonfiguration (hochgeladen oder – später – per
-      Geräte-API abgerufen). Der Abgleich arbeitet über die Rule-IDs (SR####),
-      die Permitra in Policy-Namen/Kommentaren aller Exporte mitführt.
+Target: all approved rules assigned to the component.
+Actual: the stored device configuration (uploaded or - later - retrieved via
+        device API). The comparison works on the rule IDs (SR####) that Permitra
+        carries in policy names/comments of every export.
 
-Befunde:
-  - missing:  freigegeben, aber nicht auf dem Gerät (Umsetzung fehlt)
-  - stale:    auf dem Gerät, aber in Permitra nicht (mehr) freigegeben
-  - unknown:  Rule-IDs auf dem Gerät, die Permitra gar nicht kennt (Schatten-Regeln)
+Findings:
+  - missing:  approved, but not on the device (implementation is missing)
+  - stale:    on the device, but no longer approved in Permitra
+  - unknown:  rule IDs on the device that Permitra does not know at all (shadow rules)
 """
 import re
 
@@ -40,18 +40,18 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
 
     actual_ids = set(RULE_ID_RE.findall(config.content))
 
-    # Gelöschte Regeln ausschließen: sie behalten ihren Status (meist approved)
-    # und würden sonst als "fehlend" gemeldet – der Betrieb bekäme die Anweisung,
-    # eine bewusst gelöschte Regel auf dem Gerät wieder anzulegen.
+    # Exclude deleted rules: they keep their status (usually approved) and would
+    # otherwise be reported as "missing" - operations would be instructed to
+    # recreate a deliberately deleted rule on the device.
     assigned = (
         active_rules(db)
         .filter(Rule.components.any(SecurityComponent.id == component.id))
         .all()
     )
     approved = {r.rule_id: r for r in assigned if r.status == RuleStatus.approved}
-    # Für die Einordnung dessen, was auf dem Gerät liegt, zählen auch gelöschte
-    # Regeln: eine gelöschte Regel, die noch auf der Firewall steht, ist ein
-    # Rückbau-Fall ("abzubauen") – nicht eine unbekannte Fremdregel.
+    # For classifying what sits on the device, deleted rules count as well: a
+    # deleted rule still present on the firewall is a removal case ("to be torn
+    # down") - not an unknown third-party rule.
     all_rules = {r.rule_id: r for r in db.query(Rule).all()}
 
     missing = [rule_brief(r) for rid, r in sorted(approved.items()) if rid not in actual_ids]

@@ -19,8 +19,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Bestehende SR-Nummern auf 5 Stellen auffüllen (SR0103 -> SR00103),
-    damit Permitra bis 99999 Regeln unterstützt."""
+    """Pad existing SR numbers to 5 digits (SR0103 -> SR00103),
+    so that Permitra supports up to 99999 rules."""
     import re
 
     connection = op.get_bind()
@@ -36,5 +36,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Kein automatisches Zurückkürzen (5-stellige IDs blieben sonst mehrdeutig)."""
+    """No automatic shortening (5-digit IDs would otherwise stay ambiguous)."""
     pass

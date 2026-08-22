@@ -1,10 +1,10 @@
-"""HTTP-Ebene: Durchsetzung der Rollenrechte über die echte FastAPI-App.
+"""HTTP layer: enforcement of role permissions through the real FastAPI app.
 
-Die übrigen Tests rufen Router-Funktionen direkt auf und übergeben das
-User-Objekt als Parameter – dabei wird die Dependency `require_roles` NIE
-ausgeführt. Fiele sie an einem Endpunkt weg, blieben jene Tests grün.
-Diese Tests gehen deshalb durch die echte HTTP-Schicht inklusive aller
-Dependencies und sichern damit die Rechteprüfung selbst ab.
+The other tests call router functions directly and pass the user object as a
+parameter - and in doing so the `require_roles` dependency is NEVER executed. If
+it were dropped from an endpoint, those tests would stay green. These tests
+therefore go through the real HTTP layer including all dependencies and thereby
+protect the permission check itself.
 """
 import os
 
@@ -16,10 +16,10 @@ from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("PERMITRA_DEV", "1")
 
-from app.auth import hash_password  # noqa: E402
-from app.database import Base, get_db  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models import Role, User, Vrf  # noqa: E402
+from app.auth import hash_password
+from app.database import Base, get_db
+from app.main import app
+from app.models import Role, User, Vrf
 
 
 @pytest.fixture()
@@ -46,9 +46,9 @@ def client():
             db.close()
 
     app.dependency_overrides[get_db] = override_db
-    # Bewusst OHNE `with`: so laufen die Startup-Hooks (Alembic-Migrationen gegen
-    # die echte Datei-DB, Seed, Hintergrund-Jobs) nicht mit. Getestet wird allein
-    # die HTTP-/Dependency-Schicht gegen die In-Memory-DB oben.
+    # Deliberately WITHOUT `with`: this keeps the startup hooks (Alembic migrations
+    # against the real file DB, seeding, background jobs) from running. What is
+    # tested is only the HTTP/dependency layer against the in-memory DB above.
     yield TestClient(app, raise_server_exceptions=False)
     app.dependency_overrides.clear()
 
@@ -64,7 +64,7 @@ def auth(client, username):
     return {"Authorization": f"Bearer {token(client, username)}"}
 
 
-# ---------- Admin-only Endpunkte -------------------------------------------
+# ---------- Admin-only endpoints -------------------------------------------
 
 ADMIN_ONLY_GET = [
     "/api/users",
@@ -78,32 +78,32 @@ ADMIN_ONLY_GET = [
 
 @pytest.mark.parametrize("path", ADMIN_ONLY_GET)
 def test_admin_only_endpoints_reject_other_roles(client, path):
-    """Nicht-Admins dürfen administrative Endpunkte nicht lesen."""
+    """Non-admins must not read administrative endpoints."""
     for user in ("arch", "ops", "appr"):
         r = client.get(path, headers=auth(client, user))
-        assert r.status_code == 403, f"{path} war für {user} erreichbar: {r.status_code}"
+        assert r.status_code == 403, f"{path} was reachable for {user}: {r.status_code}"
 
 
 @pytest.mark.parametrize("path", ADMIN_ONLY_GET)
 def test_admin_only_endpoints_require_authentication(client, path):
-    """Ohne Token gibt es keinen Zugriff."""
+    """Without a token there is no access."""
     r = client.get(path)
-    assert r.status_code == 401, f"{path} ohne Token: {r.status_code}"
+    assert r.status_code == 401, f"{path} without a token: {r.status_code}"
 
 
 @pytest.mark.parametrize("path", ADMIN_ONLY_GET)
 def test_admin_reaches_admin_endpoints(client, path):
-    """Gegenprobe: der Admin kommt durch (sonst prüfen die Tests oben nichts)."""
+    """Counter-check: the admin gets through (otherwise the tests above check nothing)."""
     r = client.get(path, headers=auth(client, "adm"))
-    assert r.status_code == 200, f"{path} für Admin nicht erreichbar: {r.text}"
+    assert r.status_code == 200, f"{path} not reachable for the admin: {r.text}"
 
 
 def test_settings_write_is_admin_only(client):
-    """Einstellungen darf nur der Admin ändern – Lesen ist für alle erlaubt."""
+    """Only the admin may change settings - reading is allowed for everyone."""
     body = {"require_justification": "no"}
     for user in ("arch", "ops", "appr"):
         r = client.put("/api/settings", json=body, headers=auth(client, user))
-        assert r.status_code == 403, f"{user} konnte Einstellungen ändern"
+        assert r.status_code == 403, f"{user} was able to change settings"
     assert client.put("/api/settings", json=body,
                       headers=auth(client, "adm")).status_code == 200
 
@@ -112,17 +112,17 @@ def test_user_creation_is_admin_only(client):
     payload = {"username": "eindringling", "email": "x@example.org", "role": "admin"}
     for user in ("arch", "ops", "appr"):
         r = client.post("/api/users", json=payload, headers=auth(client, user))
-        assert r.status_code == 403, f"{user} konnte einen Benutzer anlegen"
+        assert r.status_code == 403, f"{user} was able to create a user"
 
 
 def test_rule_deletion_is_admin_only(client):
-    """Löschen (Soft-Delete) ist Admins vorbehalten."""
+    """Deletion (soft delete) is reserved for admins."""
     for user in ("arch", "ops", "appr"):
         r = client.delete("/api/rules/SR00001", headers=auth(client, user))
-        assert r.status_code == 403, f"{user} durfte löschen ({r.status_code})"
+        assert r.status_code == 403, f"{user} was allowed to delete ({r.status_code})"
 
 
-# ---------- Read-only API-Token ---------------------------------------------
+# ---------- Read-only API tokens --------------------------------------------
 
 def _create_pat(client) -> str:
     r = client.post("/api/api-tokens", json={"name": "ci-readonly"},
@@ -144,16 +144,16 @@ def test_api_token_allows_reading(client):
     ("delete", "/api/rules/SR00001", None),
 ])
 def test_api_token_cannot_write(client, method, path, body):
-    """Read-only Tokens dürfen ausschließlich lesen – jede Schreiboperation 403."""
+    """Read-only tokens may only read - every write operation yields 403."""
     pat = _create_pat(client)
     headers = {"Authorization": f"Bearer {pat}"}
     call = getattr(client, method)
     r = call(path, json=body, headers=headers) if body is not None else call(path, headers=headers)
-    assert r.status_code == 403, f"{method.upper()} {path} war mit read-only Token möglich"
+    assert r.status_code == 403, f"{method.upper()} {path} was possible with a read-only token"
 
 
 def test_api_token_cannot_reach_admin_endpoints(client):
-    """Der Token-Principal hat operations-Rechte, also keine Admin-GETs."""
+    """The token principal has operations permissions, so no admin GETs."""
     pat = _create_pat(client)
     r = client.get("/api/users", headers={"Authorization": f"Bearer {pat}"})
     assert r.status_code == 403
@@ -165,19 +165,19 @@ def test_revoked_token_is_rejected(client):
     tid = listed[0]["id"]
     assert client.delete(f"/api/api-tokens/{tid}", headers=auth(client, "adm")).status_code == 204
     r = client.get("/api/rules", headers={"Authorization": f"Bearer {pat}"})
-    assert r.status_code == 401, "Widerrufener Token wurde weiter akzeptiert"
+    assert r.status_code == 401, "revoked token was still accepted"
 
 
-# ---------- Token-Robustheit ------------------------------------------------
+# ---------- Token robustness ------------------------------------------------
 
 def test_garbage_and_missing_tokens_are_rejected(client):
     for value in ("Bearer nonsense", "Bearer ", "nonsense", ""):
         r = client.get("/api/users", headers={"Authorization": value})
-        assert r.status_code == 401, f"Ungültiger Header {value!r} ergab {r.status_code}"
+        assert r.status_code == 401, f"invalid header {value!r} yielded {r.status_code}"
 
 
 def test_deactivated_user_cannot_use_existing_token(client, ):
-    """Ein bereits ausgestelltes Token verliert mit der Deaktivierung seine Wirkung."""
+    """An already issued token loses its effect when the account is deactivated."""
     tok = token(client, "arch")
     headers = {"Authorization": f"Bearer {tok}"}
     assert client.get("/api/rules", headers=headers).status_code == 200

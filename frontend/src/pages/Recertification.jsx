@@ -96,7 +96,7 @@ export default function Recertification() {
   return (
     <div>
       <div className="page-head">
-        <h1>{t('Rezertifizierung')}</h1>
+        <h1>{t('Recertification')}</h1>
         <span className="muted">
           Abgelaufene Regeln werden vom System täglich automatisch deaktiviert –
           hier vorher verlängern oder gezielt deaktivieren
@@ -112,7 +112,7 @@ export default function Recertification() {
             <option value={365}>1 Jahr</option>
           </select>
         </label>
-        <button className="btn btn-primary" type="submit">{t('Aktualisieren')}</button>
+        <button className="btn btn-primary" type="submit">{t('Refresh')}</button>
       </form>
 
       {error && <div className="error">{error}</div>}
@@ -121,18 +121,18 @@ export default function Recertification() {
       {data && (
         <div className="search-results">
           <section>
-            <h2>{t('⚠ Abgelaufen')} ({data.expired.length})</h2>
+            <h2>{t('⚠ Expired')} ({data.expired.length})</h2>
             <RuleRows rules={data.expired} onExtend={extend} onDeactivate={deactivate} canAct={canAct} />
           </section>
           <section>
-            <h2>{t('Läuft in')} {data.days} {t('Tagen ab')} ({data.expiring.length})</h2>
+            <h2>{t('Expiring within')} {data.days} {t('days')} ({data.expiring.length})</h2>
             <RuleRows rules={data.expiring} onExtend={extend} onDeactivate={deactivate} canAct={canAct} />
           </section>
           {data.invalid?.length > 0 && (
             <section>
-              <h2>{t('⚠ Unlesbares Ablaufdatum')} ({data.invalid.length})</h2>
+              <h2>{t('⚠ Unreadable expiry date')} ({data.invalid.length})</h2>
               <p className="muted small">
-                {t('Diese Regeln werden von der Ablaufprüfung übersprungen und laufen deshalb nie automatisch aus. Bitte das Gültig-bis-Datum korrigieren.')}
+                {t('These rules are skipped by the expiry check and therefore never expire automatically. Please correct the valid-until date.')}
               </p>
               <RuleRows rules={data.invalid} onExtend={extend} onDeactivate={deactivate} canAct={canAct} />
             </section>

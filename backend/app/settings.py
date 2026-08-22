@@ -1,38 +1,43 @@
-"""Permitra-Einstellungen (settings-Tabelle, Pflege im Admin-Bereich).
+"""Permitra settings (settings table, maintained in the admin area).
 
-Bekannte Schlüssel und erlaubte Werte stehen in KNOWN_SETTINGS; der jeweils
-erste Wert ist der Default, wenn der Schlüssel nicht gesetzt ist."""
+Known keys and their allowed values live in KNOWN_SETTINGS; the first value of
+each entry is the default used when the key is not set."""
 from sqlalchemy.orm import Session
 
 from .models import Setting
 
-# zone_matrix_default: Verhalten für Zonen-Beziehungen OHNE Matrix-Eintrag.
-#   "permit" = erlaubt mit Hinweis (Bestandsverhalten)
-#   "deny"   = Minimalprinzip: Regeln werden abgelehnt, bis die Beziehung
-#              per Matrix-Antrag explizit auf Allow gesetzt ist (BSI-Empfehlung)
+# zone_matrix_default: behaviour for zone relations WITHOUT a matrix entry.
+#   "permit" = allowed with a warning (legacy behaviour)
+#   "deny"   = least privilege: rules are rejected until the relation has been
+#              explicitly set to allow via a matrix request (BSI recommendation)
 KNOWN_SETTINGS = {
     "zone_matrix_default": ("permit", "deny"),
-    # Pflichtfelder für Regeln (BSI-Dokumentationspflichten):
-    # standardmäßig AKTIV (erster Wert = Default), Admin kann sie abschalten
-    "require_justification": ("yes", "no"),   # Begründung
-    "require_requestor": ("yes", "no"),       # Verantwortlicher/Requestor
-    "require_valid_until": ("yes", "no"),     # Ablaufdatum erzwingen
+    # Mandatory rule fields (BSI documentation requirements):
+    # ACTIVE by default (first value = default), admins may turn them off
+    "require_justification": ("yes", "no"),   # justification
+    "require_requestor": ("yes", "no"),       # responsible person / requestor
+    "require_valid_until": ("yes", "no"),     # enforce an expiry date
+    # Interface language of this instance, chosen by the administrator. English
+    # is the source language of the application; German is a translation. The
+    # setting is binding for everyone - there is no per-user override, so
+    # screenshots, training material and support all speak one language.
+    "ui_language": ("en", "de"),
 }
 
 
 def get_setting(db: Session, key: str) -> str:
     allowed = KNOWN_SETTINGS[key]
-    row = db.query(Setting).get(key)
+    row = db.get(Setting, key)
     return row.value if row and row.value in allowed else allowed[0]
 
 
 def set_setting(db: Session, key: str, value: str) -> None:
     if key not in KNOWN_SETTINGS:
-        raise ValueError(f"Unbekannte Einstellung '{key}'")
+        raise ValueError(f"Unknown setting '{key}'")
     if value not in KNOWN_SETTINGS[key]:
-        raise ValueError(f"Ungültiger Wert '{value}' für '{key}' "
-                        f"(erlaubt: {', '.join(KNOWN_SETTINGS[key])})")
-    row = db.query(Setting).get(key)
+        raise ValueError(f"Invalid value '{value}' for '{key}' "
+                        f"(allowed: {', '.join(KNOWN_SETTINGS[key])})")
+    row = db.get(Setting, key)
     if row:
         row.value = value
     else:

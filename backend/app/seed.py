@@ -1,10 +1,9 @@
-"""Erstinitialisierung der Benutzer.
+"""Initial user provisioning.
 
-Sicherheit (fail-secure): Bekannte Demo-Zugangsdaten werden NUR im Demo-Modus
-(PERMITRA_DEMO=1) angelegt. In allen anderen Fällen entsteht bei leerer
-Benutzer-Tabelle ein einziges Admin-Konto mit einem zufälligen Passwort, das
-einmalig ins Log geschrieben wird – so startet keine Produktivinstallation mit
-öffentlich bekannten Credentials."""
+Security (fail-secure): well-known demo credentials are created ONLY in demo mode
+(PERMITRA_DEMO=1). In every other case an empty user table yields a single admin
+account with a random password that is written to the log exactly once – this way
+no production installation ever starts with publicly known credentials."""
 import logging
 import os
 import secrets
@@ -29,7 +28,7 @@ def seed_users():
     try:
         existing = {u.username for u in db.query(User).all()}
         if os.environ.get("PERMITRA_DEMO") == "1":
-            # Demo-/Testbetrieb: bekannte Konten anlegen (nur fehlende)
+            # Demo/test operation: create the well-known accounts (missing ones only)
             for username, password, full_name, role in DEMO_USERS:
                 if username not in existing:
                     db.add(User(username=username, password_hash=hash_password(password),
@@ -38,16 +37,16 @@ def seed_users():
             return
 
         if existing:
-            return  # bereits initialisiert – nichts tun
+            return  # already initialised – nothing to do
 
-        # Produktivstart: Erst-Admin mit zufälligem Passwort (einmalig im Log)
+        # Production start: initial admin with a random password (logged once)
         password = secrets.token_urlsafe(18)
         db.add(User(username="admin", password_hash=hash_password(password),
                     full_name="Administrator", role=Role.admin, is_active=True))
         db.commit()
         log.warning(
-            "Erst-Admin angelegt: Benutzer 'admin', Passwort '%s' – "
-            "bitte umgehend ändern (dieses Passwort wird nur einmal angezeigt).",
+            "Initial admin created: user 'admin', password '%s' – "
+            "change it immediately (this password is shown only once).",
             password,
         )
     finally:

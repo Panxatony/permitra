@@ -1,4 +1,4 @@
-"""Führt eine Pfad-Analyse aus und nimmt das Ergebnis als Screenshot auf."""
+"""Runs a path analysis and captures the result as a screenshot."""
 import json
 import sys
 import time
@@ -36,7 +36,7 @@ with sync_playwright() as p:
     page.goto(f"{BASE}/search", wait_until="networkidle")
     time.sleep(1.5)
     inputs = page.locator("input[type='text'], input:not([type])")
-    # Quelle: Jump-Host (Z100-MGMT) -> Ziel: PROD-APP (Z040)
+    # Source: jump host (Z100-MGMT) -> destination: PROD-APP (Z040)
     page.locator("input").nth(0).fill("10.10.80.10")
     page.locator("input").nth(1).fill("10.10.30.20")
     page.get_by_role("button", name="Analysieren").click()

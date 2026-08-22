@@ -1,10 +1,10 @@
-"""Konflikt-Erkennung: warnt bei Regeln mit überlappenden Netzen, Protokollen und Ports."""
+"""Conflict detection: warns about rules with overlapping networks, protocols and ports."""
 from .models import Rule
 from .validation import parse_network, parse_ports
 
 
 def _entry_networks(entries: list) -> list:
-    """Alle Netze eines Adressfelds; ip='any' => 0.0.0.0/0 und ::/0."""
+    """All networks of an address field; ip='any' => 0.0.0.0/0 and ::/0."""
     networks = []
     for entry in entries or []:
         ip = (entry.get("ip") or "").strip()
@@ -53,7 +53,7 @@ def _ports_overlap(rule_a: Rule, rule_b: Rule) -> bool:
 
 
 def find_conflicts(rule: Rule, others: list[Rule]) -> list[dict]:
-    """Vergleicht eine Regel mit allen anderen und liefert Warnungen."""
+    """Compares a rule against all others and returns warnings."""
     warnings = []
     src_a, dst_a = _entry_networks(rule.source), _entry_networks(rule.destination)
     protos_a = _protocols_of(rule)
@@ -80,13 +80,13 @@ def find_conflicts(rule: Rule, others: list[Rule]) -> list[dict]:
         if rule.action != other.action:
             kind = "shadowing"
             detail = (
-                f"Überlappende Netze/Ports mit entgegengesetzter Aktion "
+                f"Overlapping networks/ports with opposite action "
                 f"({rule.action.value} vs. {other.action.value})"
             )
         elif same:
-            kind, detail = "duplicate", "Identische Quelle, Ziel und Dienste"
+            kind, detail = "duplicate", "Identical source, destination and services"
         else:
-            kind, detail = "overlap", "Überlappende Quell-/Zielnetze bei gleichem Protokoll und überlappenden Ports"
+            kind, detail = "overlap", "Overlapping source/destination networks with the same protocol and overlapping ports"
         warnings.append(
             {"rule_id": rule.rule_id, "other_rule_id": other.rule_id, "kind": kind, "detail": detail}
         )

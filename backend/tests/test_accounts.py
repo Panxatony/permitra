@@ -1,4 +1,4 @@
-"""Tests für Konto-Funktionen: TOTP, Aktivierungs-/Reset-Tokens, Benutzeranlage."""
+"""Tests for account features: TOTP, activation/reset tokens, user creation."""
 import time
 
 import pytest
@@ -30,7 +30,7 @@ def test_totp_roundtrip():
     counter = int(time.time()) // 30
     code = totp._code_at(secret, counter)
     assert totp.verify(secret, code)
-    assert totp.verify(secret, totp._code_at(secret, counter - 1))  # ±1 Fenster
+    assert totp.verify(secret, totp._code_at(secret, counter - 1))  # ±1 window
     assert not totp.verify(secret, "000000") or code == "000000"
     assert not totp.verify(secret, "abc")
     assert not totp.verify("", code)
@@ -48,7 +48,7 @@ def test_issue_and_consume_token(db):
     resolved, purpose = consume_token(db, raw)
     assert resolved.id == user.id and purpose == "reset"
     db.commit()
-    # Einmal-Token: zweite Verwendung schlägt fehl
+    # One-time token: the second use fails
     with pytest.raises(HTTPException):
         consume_token(db, raw)
 

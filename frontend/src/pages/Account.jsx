@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, getUser, passkeyRegister } from '../api'
 import { useLang } from '../i18n'
 
-/* Konto-Seite (alle Rollen): Passwort ändern, 2FA (TOTP) und Passkeys verwalten. */
+/* Account page (all roles): change password, manage 2FA (TOTP) and passkeys. */
 export default function Account() {
   const { t } = useLang()
   const user = getUser()
@@ -44,7 +44,7 @@ export default function Account() {
   const startTotp = () => act(async () => {
     const result = await api.totpSetup()
     setSetup(result)
-    return { detail: t('Secret erzeugt – bitte in der Authenticator-App hinterlegen und mit Code bestätigen.') }
+    return { detail: t('Secret generated – add it to your authenticator app and confirm with a code.') }
   })
 
   const enableTotp = async (e) => {
@@ -57,28 +57,28 @@ export default function Account() {
   }
 
   const disableTotp = () => {
-    const password = window.prompt(t('Zum Deaktivieren bitte das Passwort eingeben:'))
+    const password = window.prompt(t('Enter your password to disable:'))
     if (!password) return
     act(() => api.totpDisable(password))
   }
 
   const addPasskey = async () => {
-    const name = window.prompt(t('Name für den Passkey (z.B. "MacBook Touch ID"):'), 'Passkey')
+    const name = window.prompt(t('Name for the passkey (e.g. "MacBook Touch ID"):'), 'Passkey')
     if (name === null) return
     try {
       setError('')
       await passkeyRegister(name || 'Passkey')
-      setNotice(t('Passkey registriert'))
+      setNotice(t('Passkey registered'))
       load()
     } catch (err) {
-      setError(`${t('Passkey-Registrierung fehlgeschlagen')}: ${err.message}`)
+      setError(`${t('Passkey registration failed')}: ${err.message}`)
     }
   }
 
   return (
     <div>
       <div className="page-head">
-        <h1>{t('Konto & Sicherheit')}</h1>
+        <h1>{t('Account & security')}</h1>
         <span className="muted">{me.username} · {me.full_name} {me.email ? `· ${me.email}` : ''}</span>
       </div>
 
@@ -87,66 +87,66 @@ export default function Account() {
 
       <div className="detail-grid">
         <section className="card">
-          <h2>{t('Benachrichtigungen')}</h2>
+          <h2>{t('Notifications')}</h2>
           <p className="muted small">
-            {t('E-Mail bei Reviews, Freigaben und Rezertifizierung (erfordert eine hinterlegte E-Mail-Adresse).')}
+            {t('Email on reviews, approvals and recertification (requires a stored email address).')}
           </p>
           <label className="checkbox">
             <input type="checkbox" checked={me.notify_email !== false}
               onChange={(e) => act(() => api.setNotifications(e.target.checked)
-                .then((u) => { setMe(u); return { detail: t('Einstellung gespeichert') } }))()} />
-            {t('E-Mail-Benachrichtigungen aktiv')}
+                .then((u) => { setMe(u); return { detail: t('Setting saved') } }))()} />
+            {t('Email notifications enabled')}
           </label>
         </section>
 
         <section className="card">
-          <h2>{t('Passwort ändern')}</h2>
+          <h2>{t('Change password')}</h2>
           <form onSubmit={changePw} className="modal-form">
-            <label>{t('Aktuelles Passwort')}
+            <label>{t('Current password')}
               <input type="password" value={pw.current} required
                 onChange={(e) => setPw({ ...pw, current: e.target.value })} />
             </label>
-            <label>{t('Neues Passwort (min. 8 Zeichen)')}
+            <label>{t('New password (min. 8 characters)')}
               <input type="password" value={pw.next} required minLength={8}
                 onChange={(e) => setPw({ ...pw, next: e.target.value })} />
             </label>
             <div className="actions">
-              <button className="btn btn-primary" type="submit">{t('Ändern')}</button>
+              <button className="btn btn-primary" type="submit">{t('Update')}</button>
             </div>
           </form>
         </section>
 
         <section className="card">
-          <h2>{t('Zwei-Faktor (TOTP)')}</h2>
+          <h2>{t('Two-factor (TOTP)')}</h2>
           {me.totp_enabled ? (
             <>
-              <p>✓ {t('2FA ist aktiviert – beim Login wird zusätzlich ein Code abgefragt.')}</p>
-              <button className="btn btn-ghost" onClick={disableTotp}>{t('Deaktivieren')}</button>
+              <p>✓ {t('2FA is enabled – a code is required at login.')}</p>
+              <button className="btn btn-ghost" onClick={disableTotp}>{t('Deactivate')}</button>
             </>
           ) : setup ? (
             <form onSubmit={enableTotp} className="modal-form">
               <p className="muted small">
-                {t('Secret in der Authenticator-App hinterlegen (QR-Alternative: manuelle Eingabe):')}
+                {t('Add the secret to your authenticator app (manual entry instead of QR):')}
               </p>
               <p><code style={{ userSelect: 'all' }}>{setup.secret}</code></p>
               <p className="muted small" style={{ wordBreak: 'break-all' }}>
                 <code style={{ userSelect: 'all' }}>{setup.otpauth_url}</code>
               </p>
-              <label>{t('Code aus der App')}
+              <label>{t('Code from the app')}
                 <input value={code} inputMode="numeric" pattern="[0-9 ]*" required
                   onChange={(e) => setCode(e.target.value)} placeholder="123456" />
               </label>
               <div className="actions">
-                <button className="btn btn-primary" type="submit">{t('Aktivieren')}</button>
-                <button className="btn btn-ghost" type="button" onClick={() => setSetup(null)}>{t('Abbrechen')}</button>
+                <button className="btn btn-primary" type="submit">{t('Activate')}</button>
+                <button className="btn btn-ghost" type="button" onClick={() => setSetup(null)}>{t('Cancel')}</button>
               </div>
             </form>
           ) : (
             <>
               <p className="muted small">
-                {t('Zusätzlicher Einmal-Code aus einer Authenticator-App (z.B. Google Authenticator, 1Password).')}
+                {t('Additional one-time code from an authenticator app (e.g. Google Authenticator, 1Password).')}
               </p>
-              <button className="btn btn-primary" onClick={startTotp}>{t('2FA einrichten')}</button>
+              <button className="btn btn-primary" onClick={startTotp}>{t('Set up 2FA')}</button>
             </>
           )}
         </section>
@@ -154,7 +154,7 @@ export default function Account() {
         <section className="card">
           <h2>Passkeys</h2>
           <p className="muted small">
-            {t('Anmeldung ohne Passwort (Touch ID, Windows Hello, Sicherheitsschlüssel). Erfordert HTTPS.')}
+            {t('Sign in without a password (Touch ID, Windows Hello, security key). Requires HTTPS.')}
           </p>
           {passkeys.length > 0 && (
             <ul className="plain-list">
@@ -163,17 +163,17 @@ export default function Account() {
                   🔑 {p.name}
                   <span className="muted small"> · {p.created_at?.slice(0, 10)}</span>{' '}
                   <button className="btn btn-ghost" style={{ padding: '.1rem .4rem' }}
-                    onClick={() => act(() => api.deletePasskey(p.id), t('Passkey entfernt'))}>✕</button>
+                    onClick={() => act(() => api.deletePasskey(p.id), t('Passkey removed'))}>✕</button>
                 </li>
               ))}
             </ul>
           )}
           <button className="btn btn-primary" onClick={addPasskey}
             disabled={!window.PublicKeyCredential}>
-            {t('Passkey hinzufügen')}
+            {t('Add passkey')}
           </button>
           {!window.PublicKeyCredential && (
-            <p className="muted small">{t('Dieser Browser unterstützt keine Passkeys.')}</p>
+            <p className="muted small">{t('This browser does not support passkeys.')}</p>
           )}
         </section>
       </div>

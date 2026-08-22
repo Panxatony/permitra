@@ -1,9 +1,9 @@
-"""Juniper SRX: Export als set-Kommandos (CLI-Konfiguration).
+"""Juniper SRX: export as set commands (CLI configuration).
 
-Erzeugt pro Regel:
-  - Address-Book-Einträge in den beteiligten Zonen
-  - Custom Applications (tcp-443, udp-161, ...) für alle Dienste
-  - Eine Security Policy from-zone/to-zone mit match/then
+Produces per rule:
+  - address book entries in the zones involved
+  - custom applications (tcp-443, udp-161, ...) for all services
+  - one security policy from-zone/to-zone with match/then
 """
 from ..models import Rule
 from .common import parse_address_entries, sanitize_name, service_ports, split_protocols
@@ -35,7 +35,7 @@ def export_rule(rule: Rule) -> str:
     sources = parse_address_entries(rule.source, "net")
     destinations = parse_address_entries(rule.destination, "net")
 
-    # Address-Book
+    # Address book
     for zone, objects in ((src_zone, sources), (dst_zone, destinations)):
         for obj in objects:
             if obj.is_any or not obj.cidr:
@@ -44,7 +44,7 @@ def export_rule(rule: Rule) -> str:
                 f"set security zones security-zone {zone} address-book address {obj.name} {obj.cidr}"
             )
 
-    # Custom Applications (Standard-Ports; junos-* Anwendungen bleiben unangetastet)
+    # Custom applications (standard ports; junos-* applications stay untouched)
     apps = _applications(rule)
     for app in apps:
         if app in ("any",) or app.startswith("junos-"):
@@ -69,8 +69,8 @@ def export_rule(rule: Rule) -> str:
 
 def export(rules: list[Rule]) -> str:
     header = [
-        "## Permitra Export – Juniper SRX (set-Kommandos)",
-        f"## Regeln: {', '.join(r.rule_id for r in rules)}",
+        "## Permitra export – Juniper SRX (set commands)",
+        f"## Rules: {', '.join(r.rule_id for r in rules)}",
         "",
     ]
     return "\n".join(header) + "\n\n".join(export_rule(r) for r in rules) + "\n"

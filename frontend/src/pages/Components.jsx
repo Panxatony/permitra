@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
-import { Modal } from '../components/shared'
+import { Modal, StatusBadge} from '../components/shared'
 import { useLang } from '../i18n'
 
 const TYPE_LABELS = { juniper: 'Juniper SRX', checkpoint: 'Check Point', aci: 'Cisco ACI' }
@@ -10,9 +10,9 @@ const EMPTY = {
 }
 
 const NODE_COLORS = {
-  juniper: { fill: '#dbe9ff', stroke: '#1c53b8' },
-  checkpoint: { fill: '#ffe4e0', stroke: '#b83a1c' },
-  aci: { fill: '#e3f5ec', stroke: '#157a52' },
+  juniper: 'fw-juniper',
+  checkpoint: 'fw-checkpoint',
+  aci: 'fw-aci',
 }
 
 const LINK_TYPE_SUGGESTIONS = [
@@ -50,7 +50,7 @@ function TopologySection({ components }) {
     try { await api.deleteComponentLink(link.id); load() } catch (err) { setError(err.message) }
   }
 
-  // Layout in Nord-Süd-Ebenen: kleinere ns_tier oben (nördlich), größere unten (südlich)
+  // Layout in north-south tiers: lower ns_tier at the top (north), higher at the bottom (south)
   const tiers = [...new Set(components.map((c) => c.ns_tier))].sort((a, b) => a - b)
   const rows = tiers.map((t) =>
     components.filter((c) => c.ns_tier === t).sort((a, b) => a.name.localeCompare(b.name)))
@@ -59,7 +59,7 @@ function TopologySection({ components }) {
   const pos = {}
   rows.forEach((row, i) => {
     row.forEach((c, j) => {
-      // Volle Breite nutzen, damit die Verbindungslinien Platz für Beschriftungen haben
+      // Use the full width so the connecting lines have room for their labels
       pos[c.id] = {
         x: 90 + (W - 170) * ((j + 0.5) / row.length),
         y: TOP + i * ROW_H + 30,
@@ -90,18 +90,18 @@ function TopologySection({ components }) {
           {links.map((l) => {
             const a = pos[l.a_id], b = pos[l.b_id]
             if (!a || !b) return null
-            // Linie am Kreisrand beginnen/enden lassen (r=30 + 2px Luft)
+            // Start/end the line at the circle's edge (r=30 + 2px of clearance)
             const dx = b.x - a.x, dy = b.y - a.y
             const dist = Math.hypot(dx, dy) || 1
             const ux = dx / dist, uy = dy / dist
             const R = 32
             const x1 = a.x + ux * R, y1 = a.y + uy * R
             const x2 = b.x - ux * R, y2 = b.y - uy * R
-            // Label senkrecht zur Linie versetzen, damit es weder Linie noch Knoten-Namen überdeckt
+            // Offset the label perpendicular to the line so it covers neither the line nor the node names
             const mx = (x1 + x2) / 2, my = (y1 + y2) / 2
             const nx = -uy, ny = ux
             const lx = mx + nx * 17, ly = my + ny * 17
-            // Auf der Linie steht die Verbindungsart; Details im Tooltip und in der Tabelle
+            // The line carries the link type; details live in the tooltip and the table
             const raw = l.link_type || l.description || ''
             const label = raw.length > 30 ? raw.slice(0, 28) + '…' : raw
             const boxW = label.length * 6.4 + 14
@@ -126,10 +126,10 @@ function TopologySection({ components }) {
           {components.map((c) => {
             const p = pos[c.id]
             if (!p) return null
-            const color = NODE_COLORS[c.type] || { fill: '#eef1f6', stroke: '#66707c' }
+            const cls = NODE_COLORS[c.type] || 'fw-unknown'
             return (
               <g key={c.id}>
-                <circle cx={p.x} cy={p.y} r={30} fill={color.fill} stroke={color.stroke}
+                <circle cx={p.x} cy={p.y} r={30} className={`fw-box ${cls}`}
                   strokeWidth="2.5">
                   <title>{`${c.name} (${TYPE_LABELS[c.type]}) – ${c.location} – Ebene ${c.ns_tier}`}</title>
                 </circle>
@@ -271,7 +271,7 @@ function DriftPanel({ components }) {
                 </div>
                 <div>
                   <h3>Auf dem Gerät, aber nicht (mehr) freigegeben ({report.stale.length})</h3>
-                  <ul>{report.stale.map((r) => <li key={r.rule_id}><strong>{r.rule_id}</strong> <span className="badge status-deactivated">{r.status}</span></li>)}</ul>
+                  <ul>{report.stale.map((r) => <li key={r.rule_id}><strong>{r.rule_id}</strong> <StatusBadge status={r.status} /></li>)}</ul>
                 </div>
                 <div>
                   <h3>Unbekannte Regel-IDs / Schatten-Regeln ({report.unknown.length})</h3>
@@ -356,9 +356,9 @@ export default function Components() {
   return (
     <div>
       <div className="page-head">
-        <h1>{t('Sicherheitskomponenten')}</h1>
+        <h1>{t('Security components')}</h1>
         <span className="muted">Firewall-Cluster und ACI-Fabrics, auf denen die Regeln umgesetzt werden</span>
-        <button className="btn btn-primary head-action" onClick={openCreate}>{t('＋ Neue Komponente')}</button>
+        <button className="btn btn-primary head-action" onClick={openCreate}>{t('＋ New component')}</button>
       </div>
       {error && <div className="error">{error}</div>}
 
@@ -395,7 +395,7 @@ export default function Components() {
       </div>
 
       {showModal && (
-        <Modal title={editId ? t('Komponente bearbeiten') : t('Neue Komponente anlegen')} onClose={close}>
+        <Modal title={editId ? t('Edit component') : t('Create new component')} onClose={close}>
           {modalError && <div className="error">{modalError}</div>}
           <form onSubmit={submit} className="modal-form">
             <div className="grid-2">

@@ -1,15 +1,14 @@
-"""Neubewertung nach dem Umhängen eines Netzes (Audit-Befund H6).
+"""Reassessment after moving a network to another zone (audit finding H6).
 
-Regeln speichern Quell- und Ziel-Zone als abgeleitete Felder. Wird ein Netz in
-eine andere Zone umgehängt, ändert sich die Zonen-Beziehung bestehender Regeln,
-ohne dass die Regel selbst angefasst wurde: Aus einer intra-zonalen Regel kann
-unbemerkt ein Zonenübergang werden – und der wurde weder neu bewertet noch
-angezeigt.
+Rules store source and destination zone as derived fields. When a network is
+moved to a different zone, the zone relation of existing rules changes without
+the rule itself having been touched: an intra-zone rule can silently turn into a
+zone transition - and that was neither reassessed nor displayed.
 
-Geforderte Fachlogik: Nach der Umhängung werden alle betroffenen Regeln neu
-bewertet. Ergibt sich dadurch Allow → Block, gehen sie in den Review und werden
-zur Löschung vorgeschlagen. Die Freigabe bedeutet dann die Löschungsfreigabe –
-die Regel wird deaktiviert und je Komponente auf "zu löschen" gesetzt.
+Required business logic: after the move, all affected rules are reassessed. If
+that turns allow into block, they go into review and are proposed for removal.
+The approval then means approving the removal - the rule is deactivated and set
+to "to remove" per component.
 """
 import pytest
 from sqlalchemy import create_engine
@@ -18,10 +17,10 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models import (
     ComponentType,
+    Role,
     Rule,
     RuleAction,
     RuleStatus,
-    Role,
     SecurityComponent,
     User,
     Vrf,
@@ -48,7 +47,7 @@ def db():
     s.add(Zone(id=1, code="Z010", name="DEV", sort_order=10))
     s.add(Zone(id=2, code="Z020", name="PROD", sort_order=20))
     s.add(Zone(id=3, code="Z030", name="TEST", sort_order=30))
-    # Beide Netze liegen zunächst in DEV -> die Regel ist intra-zonal
+    # Both networks initially sit in DEV -> the rule is intra-zone
     s.add(ZoneNetwork(id=1, zone_id=1, vrf_id=1, cidr="10.0.1.0/24"))
     s.add(ZoneNetwork(id=2, zone_id=1, vrf_id=1, cidr="10.0.2.0/24"))
     s.commit()
@@ -56,8 +55,8 @@ def db():
     s.close()
 
 
-def set_policy(db, von: int, nach: int, policy: ZonePolicyType):
-    db.add(ZonePolicy(from_zone_id=von, to_zone_id=nach, policy=policy))
+def set_policy(db, source: int, target: int, policy: ZonePolicyType):
+    db.add(ZonePolicy(from_zone_id=source, to_zone_id=target, policy=policy))
     db.commit()
 
 
@@ -77,39 +76,39 @@ def make_rule(db, rule_id="SR00001", components=(1,), src="10.0.1.5", dst="10.0.
 
 
 def approver():
-    """Der Approver, der die Netz-Umhängung genehmigt hat."""
+    """The approver who approved the network move."""
     return User(username="appr", role=Role.change_approver, is_active=True)
 
 
-def zweiter_approver():
-    """Vier-Augen: die Löschung gibt jemand anderes frei als derjenige, der
-    den Löschvorschlag durch die Umhängung ausgelöst hat."""
+def second_approver():
+    """Four-eyes principle: the removal is approved by someone other than the
+    person who triggered the removal proposal through the move."""
     return User(username="appr2", role=Role.change_approver, is_active=True)
 
 
-def move(db, network_id: int, ziel_zone_id: int):
-    """Hängt ein Netz um (wie die genehmigte Änderung es tut)."""
+def move(db, network_id: int, target_zone_id: int):
+    """Moves a network to another zone (as the approved change does)."""
     net = db.get(ZoneNetwork, network_id)
-    net.zone_id = ziel_zone_id
+    net.zone_id = target_zone_id
     db.flush()
     return net
 
 
-# ---------- Vorschau vor der Entscheidung ----------
+# ---------- Preview before the decision ----------
 
 def test_preview_shows_consequences_without_changing_anything(db):
-    """Die Approver müssen die Folgen kennen, BEVOR sie zustimmen."""
+    """The approvers must know the consequences BEFORE they agree."""
     set_policy(db, 1, 2, ZonePolicyType.block_all)
     rule = make_rule(db)
 
-    vorschau = _preview_network_move(db, db.get(ZoneNetwork, 2), db.get(Zone, 2), "10.0.2.0/24")
+    preview = _preview_network_move(db, db.get(ZoneNetwork, 2), db.get(Zone, 2), "10.0.2.0/24")
 
-    assert len(vorschau) == 1
-    eintrag = vorschau[0]
-    assert eintrag["rule_id"] == "SR00001"
-    assert eintrag["to_zones"] == ["Z010", "Z020"]
-    assert eintrag["admissible"] is False
-    # Nichts wurde angefasst
+    assert len(preview) == 1
+    entry = preview[0]
+    assert entry["rule_id"] == "SR00001"
+    assert entry["to_zones"] == ["Z010", "Z020"]
+    assert entry["admissible"] is False
+    # Nothing was touched
     db.refresh(rule)
     assert rule.destination_zone == "Z010" and rule.status == RuleStatus.approved
     assert db.get(ZoneNetwork, 2).zone_id == 1
@@ -117,7 +116,7 @@ def test_preview_shows_consequences_without_changing_anything(db):
 
 def test_unrelated_rules_are_not_affected(db):
     make_rule(db, "SR00001")
-    # Regel in einem ganz anderen Netz
+    # Rule in a completely different network
     other = Rule(rule_id="SR00002", vrf_id=1, name="andere",
                  source=[{"ip": "192.168.5.5", "alias": ""}],
                  destination=[{"ip": "192.168.5.6", "alias": ""}],
@@ -126,42 +125,42 @@ def test_unrelated_rules_are_not_affected(db):
     db.add(other)
     db.commit()
 
-    vorschau = _preview_network_move(db, db.get(ZoneNetwork, 2), db.get(Zone, 2), "10.0.2.0/24")
-    assert {e["rule_id"] for e in vorschau} == {"SR00001"}
+    preview = _preview_network_move(db, db.get(ZoneNetwork, 2), db.get(Zone, 2), "10.0.2.0/24")
+    assert {e["rule_id"] for e in preview} == {"SR00001"}
 
 
 def test_wider_rule_network_is_not_touched(db):
-    """Ein weiter gefasstes Regel-Netz bezieht seine Zone anderswoher."""
+    """A more broadly scoped rule network derives its zone from elsewhere."""
     db.add(ZoneNetwork(id=3, zone_id=1, vrf_id=1, cidr="10.0.0.0/16"))
     db.commit()
     make_rule(db, "SR00003", src="10.0.0.0/16", dst="10.0.0.0/16")
 
-    vorschau = _preview_network_move(db, db.get(ZoneNetwork, 2), db.get(Zone, 2), "10.0.2.0/24")
-    assert "SR00003" not in {e["rule_id"] for e in vorschau}
+    preview = _preview_network_move(db, db.get(ZoneNetwork, 2), db.get(Zone, 2), "10.0.2.0/24")
+    assert "SR00003" not in {e["rule_id"] for e in preview}
 
 
-# ---------- Neubewertung nach der Umhängung ----------
+# ---------- Reassessment after the move ----------
 
 def test_rule_becomes_inadmissible_and_is_proposed_for_removal(db):
-    """Der Kern: Allow (intra-zonal) wird durch die Umhängung zu Block."""
+    """The core: allow (intra-zone) turns into block because of the move."""
     set_policy(db, 1, 2, ZonePolicyType.block_all)
     rule = make_rule(db)
 
-    net = move(db, 2, 2)                       # 10.0.2.0/24 nach PROD
-    protokoll = _apply_reassessment(db, net, approver(), "abc12345-9f3e-4c21-b7aa-1122334455")
+    net = move(db, 2, 2)                       # 10.0.2.0/24 to PROD
+    recorded = _apply_reassessment(db, net, approver(), "abc12345-9f3e-4c21-b7aa-1122334455")
     db.commit()
     db.refresh(rule)
 
-    assert rule.status == RuleStatus.in_review, "Regel muss in den Review"
-    assert rule.removal_reason, "Regel muss zur Löschung vorgeschlagen sein"
+    assert rule.status == RuleStatus.in_review, "the rule must go into review"
+    assert rule.removal_reason, "the rule must be proposed for removal"
     assert rule.removal_reason.startswith("Z010 → Z020"), rule.removal_reason
     assert "Block" in rule.removal_reason
     assert rule.source_zone == "Z010" and rule.destination_zone == "Z020"
-    assert protokoll and protokoll[0]["admissible"] is False
+    assert recorded and recorded[0]["admissible"] is False
 
 
 def test_still_allowed_rule_only_gets_its_zones_updated(db):
-    """Bleibt die Beziehung erlaubt, wird nur nachgezogen – kein Review."""
+    """If the relation stays allowed, only the zones are updated - no review."""
     set_policy(db, 1, 2, ZonePolicyType.allow_only)
     rule = make_rule(db)
 
@@ -172,14 +171,14 @@ def test_still_allowed_rule_only_gets_its_zones_updated(db):
 
     assert rule.status == RuleStatus.approved
     assert rule.removal_reason == ""
-    assert rule.destination_zone == "Z020", "Zonen müssen nachgezogen werden"
+    assert rule.destination_zone == "Z020", "the zones must be updated"
 
 
 def test_cross_zone_without_firewall_is_inadmissible(db):
-    """Zonenübergang nur über ACI ist laut BSI unzulässig – das schlägt in der
-    reinen Matrix-Prüfung nicht durch und muss hier greifen."""
+    """A zone transition via ACI alone is inadmissible per BSI - the pure matrix
+    check does not catch this, so it has to bite here."""
     set_policy(db, 1, 2, ZonePolicyType.allow_only)
-    rule = make_rule(db, components=(2,))      # nur ACI
+    rule = make_rule(db, components=(2,))      # ACI only
 
     net = move(db, 2, 2)
     _apply_reassessment(db, net, approver(), "abc12345-9f3e-4c21-b7aa-1122334455")
@@ -187,12 +186,12 @@ def test_cross_zone_without_firewall_is_inadmissible(db):
     db.refresh(rule)
 
     assert rule.status == RuleStatus.in_review
-    assert "Firewall" in rule.removal_reason
+    assert "firewall" in rule.removal_reason
 
 
 def test_rule_side_spanning_two_zones_is_inadmissible(db):
-    """Nach der Umhängung umfasst die Zielseite zwei Zonen – die Regel muss
-    aufgeteilt werden und ist so nicht haltbar."""
+    """After the move the destination side spans two zones - the rule has to be
+    split and is not tenable in this form."""
     set_policy(db, 1, 2, ZonePolicyType.allow_only)
     rule = make_rule(db, dst="10.0.2.7")
     rule.destination = [{"ip": "10.0.1.9", "alias": ""}, {"ip": "10.0.2.7", "alias": ""}]
@@ -204,28 +203,28 @@ def test_rule_side_spanning_two_zones_is_inadmissible(db):
     db.refresh(rule)
 
     assert rule.status == RuleStatus.in_review
-    assert "mehrere Zonen" in rule.removal_reason
+    assert "several zones" in rule.removal_reason
 
 
 def test_history_and_comment_record_the_reason(db):
-    """Der Vorgang muss nachvollziehbar sein – Versionseintrag und Kommentar."""
+    """The operation must be traceable - version entry and comment."""
     from app.models import Comment, RuleVersion
 
     set_policy(db, 1, 2, ZonePolicyType.block_all)
     rule = make_rule(db)
-    vorher = rule.version
+    before = rule.version
 
     net = move(db, 2, 2)
     _apply_reassessment(db, net, approver(), "abc12345-9f3e-4c21-b7aa-1122334455")
     db.commit()
     db.refresh(rule)
 
-    assert rule.version == vorher + 1
+    assert rule.version == before + 1
     version = db.query(RuleVersion).filter(RuleVersion.rule_pk == rule.id,
                                            RuleVersion.version == rule.version).one()
-    assert "umgehängt" in version.change_note
-    kommentar = db.query(Comment).filter(Comment.rule_pk == rule.id).one()
-    assert "abc12345" in kommentar.text
+    assert "moved" in version.change_note
+    comment = db.query(Comment).filter(Comment.rule_pk == rule.id).one()
+    assert "abc12345" in comment.text
 
 
 def test_draft_rules_are_reassessed_too(db):
@@ -251,11 +250,11 @@ def test_deleted_rules_are_ignored(db):
     assert _apply_reassessment(db, net, approver(), "abc12345-9f3e-4c21-b7aa-1122334455") == []
 
 
-# ---------- Der Review führt zur Löschung ----------
+# ---------- The review leads to removal ----------
 
 def test_approving_a_proposed_rule_approves_its_removal(db):
-    """"Freigeben" heißt bei einer zur Löschung vorgeschlagenen Regel: Löschung
-    freigegeben – deaktivieren und auf den Komponenten zurückbauen."""
+    """For a rule proposed for removal, "approve" means: removal approved -
+    deactivate it and roll it back on the components."""
     from app.routers.rules_router import _decide
     from app.schemas import ReviewDecision
 
@@ -265,18 +264,18 @@ def test_approving_a_proposed_rule_approves_its_removal(db):
     _apply_reassessment(db, net, approver(), "abc12345-9f3e-4c21-b7aa-1122334455")
     db.commit()
 
-    _decide(db, "SR00001", zweiter_approver(), ReviewDecision(comment="geprüft"),
+    _decide(db, "SR00001", second_approver(), ReviewDecision(comment="geprüft"),
             RuleStatus.approved, "Freigabe")
     db.refresh(rule)
 
     assert rule.status == RuleStatus.deactivated
-    assert rule.impl_status.get("FW-BER") == "zu löschen"
-    assert rule.removal_reason == "", "der Vorschlag ist entschieden"
+    assert rule.impl_status.get("FW-BER") == "to remove"
+    assert rule.removal_reason == "", "the proposal has been decided"
 
 
 def test_reworking_the_rule_clears_the_proposal(db):
-    """Wird die Regel überarbeitet und besteht die Prüfungen, ist der
-    Löschvorschlag gegenstandslos."""
+    """If the rule is reworked and passes the checks, the removal proposal
+    becomes moot."""
     set_policy(db, 1, 2, ZonePolicyType.block_all)
     rule = make_rule(db)
     net = move(db, 2, 2)
@@ -284,7 +283,7 @@ def test_reworking_the_rule_clears_the_proposal(db):
     db.commit()
     assert rule.removal_reason
 
-    # Netz zurück nach DEV holen und erneut bewerten
+    # Move the network back to DEV and reassess
     move(db, 2, 1)
     _apply_reassessment(db, db.get(ZoneNetwork, 2), approver(), "def67890-9f3e-4c21-b7aa-1122334455")
     db.commit()
@@ -294,34 +293,34 @@ def test_reworking_the_rule_clears_the_proposal(db):
 
 
 def test_reassessment_is_idempotent(db):
-    """Ein zweiter Durchlauf ohne Änderung darf nichts weiter anfassen."""
+    """A second run without any change must not touch anything further."""
     set_policy(db, 1, 2, ZonePolicyType.block_all)
     rule = make_rule(db)
     net = move(db, 2, 2)
     _apply_reassessment(db, net, approver(), "abc12345-9f3e-4c21-b7aa-1122334455")
     db.commit()
-    stand = rule.version
+    state = rule.version
 
-    zweitlauf = reassess_after_network_move(db, net)
-    assert all(not e["zones_changed"] for e in zweitlauf)
+    second_run = reassess_after_network_move(db, net)
+    assert all(not e["zones_changed"] for e in second_run)
     db.refresh(rule)
-    assert rule.version == stand
+    assert rule.version == state
 
 
-# ---------- Verdrahtung: läuft die Neubewertung wirklich bei der Freigabe? ----------
+# ---------- Wiring: does the reassessment really run on approval? ----------
 
 def test_reassessment_runs_through_the_real_approval_flow(db):
-    """Der wichtigste Test: Die Neubewertung muss im echten Freigabe-Ablauf
-    ausgelöst werden, nicht nur als Funktion existieren. Ohne diesen Test
-    bestünde die ganze Datei auch dann, wenn die Verdrahtung fehlte."""
+    """The most important test: the reassessment must be triggered by the real
+    approval flow, not merely exist as a function. Without this test the whole
+    file would still pass even if the wiring were missing."""
     from app.models import ZonePolicyChange
     from app.routers.zones_router import _create_batch, _decide_change
 
     set_policy(db, 1, 2, ZonePolicyType.block_all)
     rule = make_rule(db)
 
-    architekt = User(username="alex", role=Role.architect, is_active=True)
-    _create_batch(db, architekt, [{
+    architect = User(username="alex", role=Role.architect, is_active=True)
+    _create_batch(db, architect, [{
         "type": "net_update", "network_id": 2,
         "cidr": "10.0.2.0/24", "zone": "PROD",
     }], "Netz wandert nach PROD")
@@ -329,38 +328,37 @@ def test_reassessment_runs_through_the_real_approval_flow(db):
 
     _decide_change(db, change.id, approver(), True, "")
     db.refresh(rule)
-    assert rule.status == RuleStatus.approved, "vor der zweiten Freigabe darf nichts passieren"
+    assert rule.status == RuleStatus.approved, "nothing may happen before the second approval"
 
-    ergebnis = _decide_change(db, change.id, zweiter_approver(), True, "")
+    result = _decide_change(db, change.id, second_approver(), True, "")
     db.refresh(rule)
 
-    assert db.get(ZoneNetwork, 2).zone_id == 2, "Umhängung wurde angewendet"
+    assert db.get(ZoneNetwork, 2).zone_id == 2, "the move was applied"
     assert rule.status == RuleStatus.in_review
     assert rule.removal_reason
-    assert "zur Löschung" in (ergebnis.get("detail") or ""), ergebnis
+    assert "for removal" in (result.get("detail") or ""), result
     assert any(e["rule_id"] == "SR00001" and not e["admissible"]
-               for e in ergebnis.get("reassessed", []))
+               for e in result.get("reassessed", []))
 
 
 def test_preview_is_offered_on_the_pending_request(db):
-    """Die Auswirkungsanalyse muss am offenen Antrag hängen, damit die Approver
-    sie sehen – nicht erst nach der Entscheidung."""
-    from app.models import ZonePolicyChange
+    """The impact analysis has to be attached to the pending request so that the
+    approvers see it - not only after the decision."""
     from app.routers.zones_router import _create_batch, list_changes
 
     set_policy(db, 1, 2, ZonePolicyType.block_all)
     make_rule(db)
-    architekt = User(username="alex", role=Role.architect, is_active=True)
-    _create_batch(db, architekt, [{
+    architect = User(username="alex", role=Role.architect, is_active=True)
+    _create_batch(db, architect, [{
         "type": "net_update", "network_id": 2,
         "cidr": "10.0.2.0/24", "zone": "PROD",
     }], "")
 
-    eintraege = list_changes(db=db, _=approver())
-    offen = [e for e in eintraege if e["status"] == "pending"][0]
-    assert offen["affected_count"] == 1
-    assert offen["removal_count"] == 1
-    assert offen["affected_rules"][0]["rule_id"] == "SR00001"
-    assert offen["affected_rules"][0]["admissible"] is False
-    # und der Antrag ist noch nicht angewendet
+    entries = list_changes(db=db, _=approver())
+    pending = next(e for e in entries if e["status"] == "pending")
+    assert pending["affected_count"] == 1
+    assert pending["removal_count"] == 1
+    assert pending["affected_rules"][0]["rule_id"] == "SR00001"
+    assert pending["affected_rules"][0]["admissible"] is False
+    # and the request has not been applied yet
     assert db.get(ZoneNetwork, 2).zone_id == 1

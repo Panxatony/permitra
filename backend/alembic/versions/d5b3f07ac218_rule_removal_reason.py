@@ -1,12 +1,12 @@
-"""rule removal_reason (Löschvorschlag nach Zonen-Neubewertung)
+"""rule removal_reason (removal proposal after zone re-evaluation)
 
 Revision ID: d5b3f07ac218
 Revises: c4f2a8e91d63
 Create Date: 2026-08-22 20:10:00.000000
 
-Wird ein Netz in eine andere Zone umgehängt, können Bestandsregeln dadurch
-unzulässig werden. Sie gehen in den Review und tragen hier die Begründung des
-Löschvorschlags.
+When a network is moved to a different zone, existing rules can become invalid
+as a result. They go into review and carry the justification for the removal
+proposal here.
 """
 from typing import Sequence, Union
 

@@ -1,4 +1,4 @@
-"""TOTP-Zwei-Faktor (RFC 6238) ohne externe Abhängigkeiten."""
+"""TOTP two-factor authentication (RFC 6238) without external dependencies."""
 from __future__ import annotations
 
 import base64
@@ -23,7 +23,7 @@ def _code_at(secret: str, counter: int) -> str:
 
 
 def verify(secret: str, code: str, window: int = 1) -> bool:
-    """Prüft den Code mit ±window Zeitschritten (30s) Toleranz."""
+    """Verifies the code with a tolerance of ±window time steps (30s each)."""
     code = (code or "").strip().replace(" ", "")
     if not secret or not code.isdigit():
         return False

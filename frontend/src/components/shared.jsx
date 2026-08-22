@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLang } from '../i18n'
 import { api } from '../api'
 
-/* Einfaches Overlay: schließt per Backdrop-Klick oder Escape */
+/* Simple overlay: closes on backdrop click or Escape */
 export function Modal({ title, onClose, children }) {
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
@@ -47,7 +47,7 @@ export function PlatformBadges({ platforms }) {
   )
 }
 
-/* Komponenten einer Regel: Name, eingefärbt nach Typ (juniper/checkpoint/aci) */
+/* Components of a rule: name, colored by type (juniper/checkpoint/aci) */
 export function ComponentBadges({ components }) {
   return (
     <span className="platforms">
@@ -61,7 +61,7 @@ export function ComponentBadges({ components }) {
   )
 }
 
-/* Adress-Eintrag {ip, alias} als Text: "alias (ip)" oder nur "ip" */
+/* Address entry {ip, alias} as text: "alias (ip)" or just "ip" */
 export function formatEntry(entry) {
   if (typeof entry === 'string') return entry
   const ip = (entry.ip || '').trim()
@@ -97,7 +97,7 @@ export function ServiceList({ services }) {
   )
 }
 
-/* Einfaches Syntax-Highlighting für die Export-Vorschau */
+/* Simple syntax highlighting for the export preview */
 function tokenize(line, fmt) {
   if (fmt === 'juniper') {
     if (line.startsWith('#')) return [['comment', line]]
@@ -138,8 +138,8 @@ export function Highlighted({ text, fmt }) {
 }
 
 
-/* Löst eine Zonen-Referenz (ID oder Name) auf die Anzeige "ID-Name" auf.
-   Zieht die Zonenliste einmal und liefert eine Label-Funktion. */
+/* Resolves a zone reference (ID or name) to the display form "ID-name".
+   Fetches the zone list once and returns a label function. */
 export function useZoneLabels() {
   const [map, setMap] = useState({})
   useEffect(() => {

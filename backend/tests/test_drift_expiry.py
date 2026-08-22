@@ -1,4 +1,4 @@
-"""Tests für Soll-Ist-Abgleich (Drift) und Gültigkeits-Überwachung."""
+"""Tests for target/actual comparison (drift) and validity monitoring."""
 from datetime import date, timedelta
 
 import pytest
@@ -9,13 +9,13 @@ from app.database import Base
 from app.drift import analyze_drift
 from app.expiry import expire_rules, expiring_rules
 from app.models import (
-    Vrf,
     ComponentActualConfig,
     ComponentType,
     Rule,
     RuleAction,
     RuleStatus,
     SecurityComponent,
+    Vrf,
 )
 
 
@@ -46,14 +46,14 @@ def test_drift_report(db):
     fw = SecurityComponent(name="FW-Test", type=ComponentType.juniper)
     db.add(fw)
     db.flush()
-    make_rule(db, "SR0001", fw, RuleStatus.approved)      # umgesetzt
-    make_rule(db, "SR0002", fw, RuleStatus.approved)      # fehlt auf dem Gerät
-    make_rule(db, "SR0003", fw, RuleStatus.deactivated)   # noch auf dem Gerät (stale)
+    make_rule(db, "SR0001", fw, RuleStatus.approved)      # implemented
+    make_rule(db, "SR0002", fw, RuleStatus.approved)      # missing on the device
+    make_rule(db, "SR0003", fw, RuleStatus.deactivated)   # still on the device (stale)
     db.add(ComponentActualConfig(
         component_id=fw.id,
         content="set security policies policy SR0001 ...\n"
                 "set security policies policy SR0003 ...\n"
-                "set security policies policy SR7777 ...\n",  # Schatten-Regel
+                "set security policies policy SR7777 ...\n",  # shadow rule
     ))
     db.commit()
 
@@ -78,7 +78,7 @@ def test_expiry(db):
     make_rule(db, "SR0010", None, RuleStatus.approved, valid_until=yesterday)
     make_rule(db, "SR0011", None, RuleStatus.approved, valid_until=soon)
     make_rule(db, "SR0012", None, RuleStatus.approved, valid_until=later)
-    make_rule(db, "SR0013", None, RuleStatus.draft, valid_until=yesterday)  # kein Kandidat
+    make_rule(db, "SR0013", None, RuleStatus.draft, valid_until=yesterday)  # not a candidate
     db.commit()
 
     expired, expiring = expiring_rules(db, days=30)
@@ -88,6 +88,6 @@ def test_expiry(db):
     count = expire_rules(db)
     assert count == 1
     assert db.query(Rule).filter(Rule.rule_id == "SR0010").one().status == RuleStatus.deactivated
-    # Kommentar und Versionseintrag wurden erzeugt
+    # A comment and a version entry were created
     rule = db.query(Rule).filter(Rule.rule_id == "SR0010").one()
-    assert any("abgelaufen" in c.text for c in rule.comments)
+    assert any("expired" in c.text for c in rule.comments)

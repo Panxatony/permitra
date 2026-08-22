@@ -1,14 +1,15 @@
-"""Führt beim App-Start Alembic-Migrationen aus.
+"""Runs Alembic migrations on application startup.
 
-Bestehende Installationen aus der Zeit vor Alembic (Tabellen vorhanden, aber keine
-alembic_version) werden einmalig auf die Baseline gestempelt und danach normal migriert.
+Existing installations from before Alembic was introduced (tables present, but no
+alembic_version) are stamped to the baseline once and migrated normally afterwards.
 """
 import os
 
-from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import inspect
+
+from alembic import command
 
 from .database import engine
 
@@ -22,7 +23,7 @@ def alembic_config() -> Config:
 
 
 def base_revision(cfg: Config) -> str:
-    """Erste Revision der Kette (die Baseline)."""
+    """First revision of the chain (the baseline)."""
     script = ScriptDirectory.from_config(cfg)
     return next(rev.revision for rev in script.walk_revisions() if rev.down_revision is None)
 
@@ -32,7 +33,7 @@ def run_migrations() -> None:
     inspector = inspect(engine)
     tables = inspector.get_table_names()
     if "rules" in tables and "alembic_version" not in tables:
-        # Vor-Alembic-Installation: entspricht der Baseline; darauf stempeln,
-        # damit alle späteren Migrationen normal angewendet werden.
+        # Pre-Alembic installation: matches the baseline, so stamp it there
+        # to let all later migrations be applied normally.
         command.stamp(cfg, base_revision(cfg))
     command.upgrade(cfg, "head")

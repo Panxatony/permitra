@@ -1,8 +1,9 @@
-# Test- und Prüfwerkzeuge (nicht im Laufzeit-Image, nur für CI und lokale Entwicklung)
+# Test and linting tools (not part of the runtime image, only for CI and local development)
 -r requirements.txt
 
 pytest>=8.3
 pytest-cov>=6.0
-httpx>=0.28          # TestClient für HTTP-/Autorisierungstests
+httpx2>=2.12         # TestClient for the HTTP/authorization tests
+                     # (starlette deprecates plain httpx here)
 ruff>=0.8            # Linting
-pip-audit>=2.7       # bekannte Schwachstellen in Abhängigkeiten
+pip-audit>=2.7       # known vulnerabilities in the dependencies

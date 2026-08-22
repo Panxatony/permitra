@@ -1,4 +1,4 @@
-"""Tests für Einstellungen und das Minimalprinzip (default-deny) der Zonen-Matrix."""
+"""Tests for settings and the least-privilege principle (default-deny) of the zone matrix."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -26,7 +26,7 @@ def db():
 
 
 def test_setting_default_and_update(db):
-    assert get_setting(db, "zone_matrix_default") == "permit"  # Bestandsverhalten
+    assert get_setting(db, "zone_matrix_default") == "permit"  # existing behaviour
     set_setting(db, "zone_matrix_default", "deny")
     assert get_setting(db, "zone_matrix_default") == "deny"
     assert all_settings(db)["zone_matrix_default"] == "deny"
@@ -37,7 +37,7 @@ def test_setting_default_and_update(db):
 
 
 def test_permit_keeps_legacy_behaviour(db):
-    result = check_zone_pair(db, "MGMT", "TEST", [])  # ungepflegtes Paar
+    result = check_zone_pair(db, "MGMT", "TEST", [])  # unmaintained pair
     assert result.allowed and result.policy == "undefined"
 
 
@@ -50,9 +50,9 @@ def test_default_deny_blocks_unmaintained_pairs(db):
 
 def test_default_deny_keeps_explicit_and_intra(db):
     set_setting(db, "zone_matrix_default", "deny")
-    assert check_zone_pair(db, "MGMT", "PROD", []).allowed          # explizit Allow
+    assert check_zone_pair(db, "MGMT", "PROD", []).allowed          # explicitly allow
     assert check_zone_pair(db, "PROD", "PROD", []).allowed          # intra
-    assert not check_zone_pair(db, "PROD", "MGMT", []).allowed      # Gegenrichtung ungepflegt
+    assert not check_zone_pair(db, "PROD", "MGMT", []).allowed      # reverse direction unmaintained
 
 
 def test_default_deny_blocks_unknown_zone(db):
@@ -61,10 +61,10 @@ def test_default_deny_blocks_unknown_zone(db):
     assert not result.allowed
 
 
-def test_zone_schutzbedarf_maximum(db):
+def test_zone_protection_level_maximum(db):
     zone = db.query(Zone).filter(Zone.name == "MGMT").one()
-    assert zone.schutzbedarf == "normal"
-    zone.cia_i = "hoch"
-    assert zone.schutzbedarf == "hoch"
-    zone.cia_a = "sehr hoch"
-    assert zone.schutzbedarf == "sehr hoch"
+    assert zone.protection_level == "normal"
+    zone.cia_i = "high"
+    assert zone.protection_level == "high"
+    zone.cia_a = "very high"
+    assert zone.protection_level == "very high"

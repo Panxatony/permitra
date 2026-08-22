@@ -4,9 +4,9 @@ import { useLang } from '../i18n'
 
 const ROLES = ['architect', 'operations', 'change_approver', 'admin']
 
-/* Admin-Bereich: Permitra-Einstellungen – im ersten Schritt die Benutzerverwaltung.
-   Neue Benutzer ohne Passwort erhalten einen Aktivierungslink (Mail, falls SMTP
-   konfiguriert; der Link wird zusätzlich angezeigt). */
+/* Admin area: Permitra settings - user management as the first step.
+   New users without a password receive an activation link (by email if SMTP is
+   configured; the link is also shown on screen). */
 export default function Admin() {
   const { t } = useLang()
   const me = getUser()
@@ -61,22 +61,22 @@ export default function Admin() {
   }
 
   const remove = (u) => {
-    if (!window.confirm(`${t('Benutzer löschen?')} (${u.username})`)) return
-    act(() => api.deleteUser(u.username), t('Benutzer gelöscht'))
+    if (!window.confirm(`${t('Delete user?')} (${u.username})`)) return
+    act(() => api.deleteUser(u.username), t('User deleted'))
   }
 
   return (
     <div>
       <div className="page-head">
         <h1>{t('Administration')}</h1>
-        <span className="muted">{t('Benutzerverwaltung – weitere Permitra-Einstellungen folgen hier.')}</span>
+        <span className="muted">{t('User management – more Permitra settings will follow here.')}</span>
       </div>
 
       {error && <div className="error">{error}</div>}
       {notice && <div className="infobox">{notice}</div>}
       {link && (
         <div className="infobox">
-          {t('Link (falls keine Mail ankommt, manuell übermitteln):')}{' '}
+          {t('Link (share manually if no mail arrives):')}{' '}
           <code style={{ userSelect: 'all', wordBreak: 'break-all' }}>{link}</code>
         </div>
       )}
@@ -85,8 +85,8 @@ export default function Admin() {
         <table>
           <thead>
             <tr>
-              <th>{t('Benutzername')}</th><th>{t('Name')}</th><th>E-Mail</th>
-              <th>{t('Rolle')}</th><th>{t('Status')}</th><th>2FA</th><th></th>
+              <th>{t('Username')}</th><th>{t('Name')}</th><th>E-Mail</th>
+              <th>{t('Role')}</th><th>{t('Status')}</th><th>2FA</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -97,13 +97,13 @@ export default function Admin() {
                 <td>{u.email}</td>
                 <td>
                   <select value={u.role} disabled={u.username === me.username}
-                    onChange={(e) => act(() => api.updateUser(u.username, { role: e.target.value }), t('Rolle geändert'))}>
+                    onChange={(e) => act(() => api.updateUser(u.username, { role: e.target.value }), t('Role changed'))}>
                     {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </td>
                 <td>
                   <span className={`badge ${u.is_active ? 'status-approved' : 'status-deactivated'}`}>
-                    {u.is_active ? t('aktiv') : t('inaktiv')}
+                    {u.is_active ? t('active') : t('inactive')}
                   </span>
                 </td>
                 <td>{u.totp_enabled ? '✓' : '–'}</td>
@@ -112,13 +112,13 @@ export default function Admin() {
                     <>
                       <button className="btn btn-ghost"
                         onClick={() => act(() => api.updateUser(u.username, { is_active: !u.is_active }),
-                          u.is_active ? t('Konto deaktiviert') : t('Konto aktiviert'))}>
-                        {u.is_active ? t('Deaktivieren') : t('Aktivieren')}
+                          u.is_active ? t('Account deactivated') : t('Account activated'))}>
+                        {u.is_active ? t('Deactivate') : t('Activate')}
                       </button>
                       <button className="btn btn-ghost" onClick={() => act(() => api.sendReset(u.username))}>
-                        {t('Passwort-Reset')}
+                        {t('Password reset')}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => remove(u)}>{t('Löschen')}</button>
+                      <button className="btn btn-ghost" onClick={() => remove(u)}>{t('Delete')}</button>
                     </>
                   )}
                 </td>
@@ -129,42 +129,54 @@ export default function Admin() {
       </div>
 
       <section className="card" style={{ margin: '1rem 0' }}>
-        <h3>{t('Einstellungen')}</h3>
+        <h3>{t('Settings')}</h3>
         <label style={{ maxWidth: '640px' }}>
-          {t('Zonen-Matrix: Verhalten für ungepflegte Zonen-Beziehungen')}
-          <select value={settings.zone_matrix_default || 'permit'}
-            onChange={(e) => act(() => api.updateSettings({ zone_matrix_default: e.target.value })
-              .then((s) => { setSettings(s); return { detail: t('Einstellung gespeichert') } }))}>
-            <option value="permit">{t('default-permit – erlaubt mit Hinweis (Bestandsverhalten)')}</option>
-            <option value="deny">{t('default-deny – Minimalprinzip: Regeln erst nach expliziter Matrix-Freigabe (BSI-Empfehlung)')}</option>
+          {t('Interface language')}
+          <select value={settings.ui_language || 'en'}
+            onChange={(e) => act(() => api.updateSettings({ ui_language: e.target.value })
+              .then((s) => { setSettings(s); window.location.reload(); return {} }))}>
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
           </select>
         </label>
         <p className="muted small">
-          {t('Bei default-deny werden neue Regeln für Zonen-Beziehungen ohne Matrix-Eintrag abgelehnt, bis die Beziehung per Matrixantrag (zwei Freigaben) auf Allow gesetzt ist.')}
+          {t('Applies to everyone using this instance. The page reloads after the change.')}
         </p>
-        <h4 style={{ margin: '1rem 0 .4rem' }}>{t('Pflichtfelder für Regeln')}</h4>
+        <label style={{ maxWidth: '640px', marginTop: '1rem', display: 'block' }}>
+          {t('Zone matrix: behaviour for unmaintained zone relationships')}
+          <select value={settings.zone_matrix_default || 'permit'}
+            onChange={(e) => act(() => api.updateSettings({ zone_matrix_default: e.target.value })
+              .then((s) => { setSettings(s); return { detail: t('Setting saved') } }))}>
+            <option value="permit">{t('default-permit – allowed with a hint (legacy behaviour)')}</option>
+            <option value="deny">{t('default-deny – least privilege: rules only after explicit matrix approval (BSI recommendation)')}</option>
+          </select>
+        </label>
         <p className="muted small">
-          {t('Standardmäßig aktiv (BSI-Dokumentationspflichten) – hier lassen sie sich bei Bedarf deaktivieren.')}
+          {t('With default-deny, new rules for zone relationships without a matrix entry are rejected until the relationship is set to Allow via a matrix request (two approvals).')}
         </p>
-        {[['require_justification', t('Begründung (Anlass) ist Pflicht')],
-          ['require_requestor', t('Requestor (Verantwortlicher) ist Pflicht')],
-          ['require_valid_until', t('Ablaufdatum (Gültig-bis) erzwingen')]].map(([key, label]) => (
+        <h4 style={{ margin: '1rem 0 .4rem' }}>{t('Mandatory fields for rules')}</h4>
+        <p className="muted small">
+          {t('Active by default (BSI documentation duties) – they can be deactivated here if needed.')}
+        </p>
+        {[['require_justification', t('Justification (reason) is mandatory')],
+          ['require_requestor', t('Requestor (owner) is mandatory')],
+          ['require_valid_until', t('Enforce expiry date (valid until)')]].map(([key, label]) => (
           <label key={key} className="checkbox">
             <input type="checkbox" checked={settings[key] === 'yes'}
               onChange={(e) => act(() => api.updateSettings({ [key]: e.target.checked ? 'yes' : 'no' })
-                .then((s) => { setSettings(s); return { detail: t('Einstellung gespeichert') } }))} />
+                .then((s) => { setSettings(s); return { detail: t('Setting saved') } }))} />
             {label}
           </label>
         ))}
       </section>
 
       <form onSubmit={create} className="object-form card">
-        <h3>{t('Neuen Benutzer anlegen')}</h3>
+        <h3>{t('Create new user')}</h3>
         <p className="muted small">
-          {t('Ohne Passwort: Der Benutzer erhält einen Aktivierungslink und setzt sein Passwort selbst (empfohlen).')}
+          {t('Without a password the user receives an activation link and sets their own password (recommended).')}
         </p>
         <div className="grid-3">
-          <label>{t('Benutzername')}
+          <label>{t('Username')}
             <input value={form.username} required minLength={2}
               onChange={(e) => setForm({ ...form, username: e.target.value })} />
           </label>
@@ -177,18 +189,18 @@ export default function Admin() {
               onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </label>
         </div>
-        <label>{t('Rolle')}
+        <label>{t('Role')}
           <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
         </label>
         <div className="actions">
-          <button className="btn btn-primary" type="submit">{t('Benutzer anlegen')}</button>
+          <button className="btn btn-primary" type="submit">{t('Create user')}</button>
         </div>
       </form>
 
       <section className="card" style={{ marginTop: '1rem' }}>
-        <h3>NetBox-Import <span className="muted small">{t('(Netzwerk-Prefixe, Status active/planned)')}</span></h3>
+        <h3>NetBox-Import <span className="muted small">{t('(network prefixes, status active/planned)')}</span></h3>
         <div className="grid-3">
           <label>NetBox-URL
             <input value={nbForm.url} placeholder="https://netbox.example.org"
@@ -196,10 +208,10 @@ export default function Admin() {
           </label>
           <label>API-Token
             <input type="password" value={nbForm.token}
-              placeholder={netbox?.configured ? t('(gespeichert – leer lassen)') : ''}
+              placeholder={netbox?.configured ? t('(stored – leave empty)') : ''}
               onChange={(e) => setNbForm({ ...nbForm, token: e.target.value })} />
           </label>
-          <label>{t('Zu importierende Status (kommagetrennt)')}
+          <label>{t('Statuses to import (comma-separated)')}
             <input value={nbForm.statuses}
               onChange={(e) => setNbForm({ ...nbForm, statuses: e.target.value })}
               placeholder="active,reserved" />
@@ -207,49 +219,49 @@ export default function Admin() {
           <label className="checkbox" style={{ alignSelf: 'end' }}>
             <input type="checkbox" checked={nbForm.verify_tls}
               onChange={(e) => setNbForm({ ...nbForm, verify_tls: e.target.checked })} />
-            {t('TLS-Zertifikat prüfen')}
+            {t('Verify TLS certificate')}
           </label>
         </div>
         <div className="actions" style={{ marginTop: '.5rem' }}>
           <button className="btn btn-primary" onClick={() => act(() => api.setNetboxConfig(nbForm)
-            .then((c) => { setNetbox(c); setNbForm((f) => ({ ...f, token: '' })); return { detail: t('NetBox-Konfiguration gespeichert') } }))}>
-            {t('Speichern')}
+            .then((c) => { setNetbox(c); setNbForm((f) => ({ ...f, token: '' })); return { detail: t('NetBox configuration saved') } }))}>
+            {t('Save')}
           </button>
           <button className="btn btn-ghost" onClick={() => act(() => api.netboxTest()
-            .then((r) => ({ detail: `${t('Verbindung ok')} – ${r.prefix_total} Prefixe in NetBox` })))}>
-            {t('Verbindung testen')}
+            .then((r) => ({ detail: `${t('Connection ok')} – ${r.prefix_total} Prefixe in NetBox` })))}>
+            {t('Test connection')}
           </button>
           <button className="btn btn-ghost" onClick={() => act(() => api.netboxImport()
-            .then((r) => ({ detail: `${t('Import fertig')}: ${r.fetched} geladen, ${r.pending} zur Übernahme bereit`
-              + (r.skipped_statuses?.length ? ` (${t('übersprungen')}: ${r.skipped_statuses.join(', ')})` : '') })))}>
-            {t('Jetzt importieren')}
+            .then((r) => ({ detail: `${t('Import complete')}: ${r.fetched} geladen, ${r.pending} zur Übernahme bereit`
+              + (r.skipped_statuses?.length ? ` (${t('skipped')}: ${r.skipped_statuses.join(', ')})` : '') })))}>
+            {t('Import now')}
           </button>
           {netbox?.last_import_at && (
             <span className="muted small" style={{ alignSelf: 'center' }}>
-              {t('Letzter Import')}: {new Date(netbox.last_import_at).toLocaleString('de-DE')}
+              {t('Last import')}: {new Date(netbox.last_import_at).toLocaleString('de-DE')}
             </span>
           )}
         </div>
         <p className="muted small" style={{ marginTop: '.4rem' }}>
-          {t('Importierte Prefixe werden auf der Seite Netzwerke einer Zone zugeordnet (Freigabe durch zwei Change Approver).')}
+          {t('Imported prefixes are assigned to a zone on the Networks page (approval by two change approvers).')}
         </p>
       </section>
 
       <section className="card" style={{ marginTop: '1rem' }}>
-        <h3>{t('API-Tokens (read-only)')} <span className="muted small">{t('für Ansible/Terraform u.a.')}</span></h3>
+        <h3>{t('API tokens (read-only)')} <span className="muted small">{t('for Ansible/Terraform and more')}</span></h3>
         <p className="muted small">
-          {t('Nur lesender Zugriff (GET). Als Header verwenden: Authorization: Bearer <token>')}
+          {t('Read-only access (GET). Use as header: Authorization: Bearer <token>')}
         </p>
         {newToken && (
           <div className="infobox">
-            {t('Neuer Token (wird nur einmal angezeigt):')}{' '}
+            {t('New token (shown only once):')}{' '}
             <code style={{ userSelect: 'all', wordBreak: 'break-all' }}>{newToken}</code>
           </div>
         )}
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>{t('Name')}</th><th>Prefix</th><th>{t('Zuletzt genutzt')}</th><th>{t('Gültig bis')}</th><th>{t('Status')}</th><th></th></tr>
+              <tr><th>{t('Name')}</th><th>Prefix</th><th>{t('Last used')}</th><th>{t('Valid until')}</th><th>{t('Status')}</th><th></th></tr>
             </thead>
             <tbody>
               {tokens.map((tok) => (
@@ -257,16 +269,16 @@ export default function Admin() {
                   <td><strong>{tok.name}</strong></td>
                   <td><code>{tok.prefix}…</code></td>
                   <td className="small">{tok.last_used_at ? new Date(tok.last_used_at).toLocaleString('de-DE') : '–'}</td>
-                  <td className="small">{tok.expires_at ? tok.expires_at.slice(0, 10) : t('unbefristet')}</td>
+                  <td className="small">{tok.expires_at ? tok.expires_at.slice(0, 10) : t('unlimited')}</td>
                   <td><span className={`badge ${tok.revoked ? 'status-deactivated' : 'status-approved'}`}>
-                    {tok.revoked ? t('widerrufen') : t('aktiv')}</span></td>
+                    {tok.revoked ? t('revoked') : t('active')}</span></td>
                   <td className="row-actions">
                     {!tok.revoked && <button className="btn btn-ghost"
-                      onClick={() => act(() => api.revokeApiToken(tok.id), t('Token widerrufen'))}>{t('Widerrufen')}</button>}
+                      onClick={() => act(() => api.revokeApiToken(tok.id), t('Token revoked'))}>{t('Revoke')}</button>}
                   </td>
                 </tr>
               ))}
-              {!tokens.length && <tr><td colSpan={6} className="muted">{t('Keine Tokens.')}</td></tr>}
+              {!tokens.length && <tr><td colSpan={6} className="muted">{t('No tokens.')}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -280,51 +292,51 @@ export default function Admin() {
           } catch (err) { setError(err.message) }
         }}>
           <input value={tokenName} onChange={(e) => setTokenName(e.target.value)}
-            placeholder={t('Name, z.B. "Ansible-Prod"')} />
-          <button className="btn btn-primary" type="submit">{t('Token erzeugen')}</button>
+            placeholder={t('Name, e.g. "Ansible-Prod"')} />
+          <button className="btn btn-primary" type="submit">{t('Create token')}</button>
         </form>
       </section>
 
       <section className="card" style={{ marginTop: '1rem' }}>
-        <h3>{t('Audit-Log')} <span className="muted small">{t('(letzte 50 Ereignisse; vollständig über die API /api/audit-log für SIEM)')}</span></h3>
+        <h3>{t('Audit log')} <span className="muted small">{t('(last 50 events; full log via the /api/audit-log API for SIEM)')}</span></h3>
         <div className="row" style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '.8rem' }}>
           <button className="btn btn-ghost" onClick={() => act(async () => {
             const r = await api.auditVerify(); setIntegrity(r); return {}
-          })}>{t('Integrität prüfen')}</button>
+          })}>{t('Verify integrity')}</button>
           {integrity && (integrity.ok
-            ? <span className="pill" style={{ background: '#e6f4ea', color: '#1e7e34', borderColor: '#bfe3ca' }}>
-                ✓ {t('Kette unversehrt')} ({integrity.checked} {t('Einträge')})
+            ? <span className="pill" style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green-border)' }}>
+                ✓ {t('Chain intact')} ({integrity.checked} {t('entries')})
               </span>
-            : <span className="pill" style={{ background: '#fdecea', color: '#b3261e', borderColor: '#f3c1bc' }}>
-                ✗ {t('Kette verletzt')} – ID {integrity.broken_at_id}: {integrity.reason}
+            : <span className="pill" style={{ background: 'var(--red-bg)', color: 'var(--red)', borderColor: 'var(--red-border)' }}>
+                ✗ {t('Chain broken')} – ID {integrity.broken_at_id}: {integrity.reason}
               </span>)}
           <button className="btn btn-ghost" onClick={() => act(async () => {
             const r = await api.auditCheckpoint()
             const s = await api.auditSiemStatus(); setSiem(s)
             const v = await api.auditVerify(); setIntegrity(v)
             return { detail: r.event_count
-              ? t('Ketten-Ende verankert bei Eintrag') + ` ${r.event_count}`
+              ? t('Chain end anchored at entry') + ` ${r.event_count}`
               : r.detail }
-          })}>{t('Jetzt verankern')}</button>
+          })}>{t('Anchor now')}</button>
           {siem && (
             <span className="muted small">
-              {t('SIEM-Zustellung')}: {siem.enabled ? t('aktiv') : t('nicht konfiguriert')}
-              {' · '}{t('ausstehend')}: {siem.pending} · {t('gesendet')}: {siem.sent}
-              {siem.skipped ? ` · ${t('ohne Ziel')}: ${siem.skipped}` : ''}
+              {t('SIEM delivery')}: {siem.enabled ? t('active') : t('not configured')}
+              {' · '}{t('pending')}: {siem.pending} · {t('sent')}: {siem.sent}
+              {siem.skipped ? ` · ${t('no sink')}: ${siem.skipped}` : ''}
               {siem.anchor
-                ? ` · ${t('verankert bei')}: ${siem.anchor.event_count}` +
+                ? ` · ${t('anchored at')}: ${siem.anchor.event_count}` +
                   (siem.enabled
-                    ? (siem.anchor.delivered ? ` (${t('an SIEM übermittelt')})`
-                                             : ` (${t('Übermittlung ausstehend')})`)
+                    ? (siem.anchor.delivered ? ` (${t('sent to SIEM')})`
+                                             : ` (${t('delivery pending')})`)
                     : '')
-                : ` · ${t('noch nicht verankert')}`}
+                : ` · ${t('not anchored yet')}`}
             </span>
           )}
         </div>
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>{t('Zeitpunkt')}</th><th>{t('Ereignis')}</th><th>{t('Objekt')}</th><th>{t('Von')}</th><th>{t('Quell-IP')}</th><th>{t('Details')}</th></tr>
+              <tr><th>{t('Time')}</th><th>{t('Event')}</th><th>{t('Object')}</th><th>{t('By')}</th><th>{t('Source IP')}</th><th>{t('Details')}</th></tr>
             </thead>
             <tbody>
               {audit.map((e, i) => (
@@ -337,7 +349,7 @@ export default function Admin() {
                   <td className="small">{e.detail || (e.status || '')}</td>
                 </tr>
               ))}
-              {!audit.length && <tr><td colSpan={6} className="muted">{t('Keine Einträge.')}</td></tr>}
+              {!audit.length && <tr><td colSpan={6} className="muted">{t('No entries.')}</td></tr>}
             </tbody>
           </table>
         </div>

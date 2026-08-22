@@ -1,4 +1,4 @@
-"""Tests für die automatische Ermittlung der Umsetzungs-Komponenten aus Quelle/Ziel."""
+"""Tests for deriving the implementing components automatically from source/destination."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -38,7 +38,7 @@ def test_normalize_ip():
 
 
 def test_containment_resolution(db):
-    # Host-IP im gepflegten Netz -> Komponenten des Netzes, Inter-Zone -> nur Firewalls
+    # Host IP inside a maintained network -> that network's components, inter-zone -> firewalls only
     components, unknown = resolve_rule_components(
         db,
         [{"ip": "10.10.20.77", "alias": ""}],
@@ -50,7 +50,7 @@ def test_containment_resolution(db):
 
 
 def test_most_specific_mapping_wins(db):
-    # 10.10.20.5 hat eine eigene /32-Zuordnung (nur BER, ohne ACI)
+    # 10.10.20.5 has its own /32 mapping (BER only, without ACI)
     components, unknown = resolve_rule_components(
         db, [{"ip": "10.10.20.5", "alias": ""}], [{"ip": "10.10.30.0/24", "alias": ""}],
         "VPN", "PROD-APP",
@@ -88,5 +88,5 @@ def test_unknown_address_reported_once(db):
     )
     assert len(unknown) == 1
     assert unknown[0]["ip"] == "192.168.99.1"
-    # Bekannte Seite wird trotzdem aufgelöst
+    # The known side is resolved nonetheless
     assert components

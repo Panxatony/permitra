@@ -10,13 +10,13 @@ Spalten-Mapping (wie AP0400-Sicherheitsregeln):
     Info | Fachlicher Bezug
 """
 import argparse
+import re
 import sys
 
 import openpyxl
 
-import re
-
 from app.database import Base, SessionLocal, engine
+from app.domain_values import LEGACY_IMPL_STATUS
 from app.models import ComponentType, Rule, RuleStatus, RuleVersion, SecurityComponent
 from app.validation import extract_networks
 
@@ -79,6 +79,12 @@ STATUS_MAP = {
 }
 
 
+def impl_value(raw: str) -> str:
+    """Rollout status from the Excel file as the English domain value."""
+    value = raw.strip().lower()
+    return LEGACY_IMPL_STATUS.get(value, value)
+
+
 def cell(row, idx) -> str:
     value = row[idx] if idx < len(row) else None
     return str(value).strip() if value is not None else ""
@@ -90,13 +96,13 @@ def parse_services(protocol_cell: str, port_cell: str) -> list[dict]:
     services = []
 
     if len(protos) == len(ports):
-        pairs = list(zip(protos, ports))
+        pairs = list(zip(protos, ports, strict=True))  # equal length is guaranteed by the branch
     elif len(protos) == 1:
         pairs = [(protos[0], p) for p in ports] or [(protos[0], "")]
     elif len(ports) == 1:
         pairs = [(p, ports[0]) for p in protos]
     else:  # ungleich und mehrdeutig: bestmöglich paaren
-        pairs = list(zip(protos, ports + [""] * (len(protos) - len(ports))))
+        pairs = list(zip(protos, ports + [""] * (len(protos) - len(ports)), strict=False))
 
     for proto, port in pairs:
         proto_norm = proto.upper().replace("ICMPV6", "ICMP").strip()
@@ -154,11 +160,13 @@ def run(path: str, sheet: str, wipe: bool):
         rule_components = [
             component_for(db, component_cache, p) for p in parse_platforms(cell(row, 2))
         ]
+        # The Excel file carries the German rollout status; the database stores
+        # the English domain value.
         impl_status = {}
         if cell(row, 12):  # "Status Juniper"
-            impl_status[component_for(db, component_cache, "juniper").name] = cell(row, 12).lower()
+            impl_status[component_for(db, component_cache, "juniper").name] = impl_value(cell(row, 12))
         if cell(row, 13):  # "Status ACI"
-            impl_status[component_for(db, component_cache, "aci").name] = cell(row, 13).lower()
+            impl_status[component_for(db, component_cache, "aci").name] = impl_value(cell(row, 13))
 
         rule = Rule(
             rule_id=rule_id,

@@ -1,4 +1,4 @@
-"""Tests für den Rollback einer Regel auf eine frühere Version (Issue #9)."""
+"""Tests for rolling a rule back to an earlier version (issue #9)."""
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -6,8 +6,19 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import (
-    AddressComponentMap, ComponentType, Role, Rule, RuleAction, RuleStatus,
-    SecurityComponent, User, Vrf, Zone, ZoneNetwork, ZonePolicy, ZonePolicyType,
+    AddressComponentMap,
+    ComponentType,
+    Role,
+    Rule,
+    RuleAction,
+    RuleStatus,
+    SecurityComponent,
+    User,
+    Vrf,
+    Zone,
+    ZoneNetwork,
+    ZonePolicy,
+    ZonePolicyType,
 )
 from app.routers.rules_router import add_version, restore_version
 
@@ -39,7 +50,7 @@ def db():
 
 
 def make_versioned_rule(db):
-    """Regel mit v1-Snapshot (Port 443), danach inhaltlich geändert (v2, Port 22)."""
+    """Rule with a v1 snapshot (port 443), then changed in content (v2, port 22)."""
     fw = db.query(SecurityComponent).one()
     rule = Rule(
         rule_id="SR00001", vrf_id=1, name="HTTPS", components=[fw],
@@ -52,7 +63,7 @@ def make_versioned_rule(db):
     db.add(rule)
     db.flush()
     architect = User(username="alex", password_hash="x", role=Role.architect)
-    add_version(db, rule, architect, "Regel angelegt")  # v1-Snapshot mit Port 443
+    add_version(db, rule, architect, "Regel angelegt")  # v1 snapshot with port 443
     rule.services = [{"protocol": "TCP", "port": "22"}]
     rule.name = "SSH"
     rule.version = 2
@@ -62,13 +73,13 @@ def make_versioned_rule(db):
 
 
 def test_restore_previous_version(db):
-    rule, architect = make_versioned_rule(db)
+    _rule, architect = make_versioned_rule(db)
     restored = restore_version("SR00001", 1, db, architect)
     assert restored.name == "HTTPS"
     assert restored.services == [{"protocol": "TCP", "port": "443"}]
-    assert restored.status == RuleStatus.draft          # Rollback -> normaler Review
+    assert restored.status == RuleStatus.draft          # rollback -> normal review
     assert restored.version == 3
-    assert any("Rollback auf Version 1" in v.change_note for v in restored.versions)
+    assert any("Rolled back to version 1" in v.change_note for v in restored.versions)
     assert [c.name for c in restored.components] == ["FW-Test"]
 
 
@@ -80,8 +91,8 @@ def test_restore_unknown_version(db):
 
 
 def test_restore_respects_current_matrix(db):
-    """Steht die Beziehung inzwischen auf Block, wird der Rollback abgelehnt."""
-    rule, architect = make_versioned_rule(db)
+    """If the relation is set to block by now, the rollback is rejected."""
+    _rule, architect = make_versioned_rule(db)
     policy = db.query(ZonePolicy).one()
     policy.policy = ZonePolicyType.block_all
     db.commit()
@@ -89,4 +100,4 @@ def test_restore_respects_current_matrix(db):
         restore_version("SR00001", 1, db, architect)
     assert exc.value.status_code == 422
     db.rollback()
-    assert db.query(Rule).one().name == "SSH"  # unverändert
+    assert db.query(Rule).one().name == "SSH"  # unchanged

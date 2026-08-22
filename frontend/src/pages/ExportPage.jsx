@@ -14,7 +14,7 @@ const FORMATS = [
   { key: 'json', label: 'JSON (vollständig)', hint: 'Alle Felder für Integrationen' },
 ]
 
-// Capirca-/Aerleon-Anbindung: weitere Plattformen über den Policy-Generator
+// Capirca/Aerleon integration: additional platforms via the policy generator
 const AERLEON_FORMATS = [
   { key: 'aerleon-cisco', target: 'cisco', label: 'Cisco IOS (via Capirca)', hint: 'Extended ACL, generiert mit Aerleon' },
   { key: 'aerleon-ciscoasa', target: 'ciscoasa', label: 'Cisco ASA (via Capirca)', hint: 'ASA-ACLs, generiert mit Aerleon' },
@@ -114,7 +114,7 @@ export default function ExportPage() {
   return (
     <div>
       <div className="page-head">
-        <h1>{t('Konfigurations-Export')}</h1>
+        <h1>{t('Configuration export')}</h1>
       </div>
       <div className="export-layout">
         <aside className="export-sidebar">
@@ -126,7 +126,7 @@ export default function ExportPage() {
               <span className="muted small">{f.hint}</span>
             </button>
           ))}
-          <div className="export-divider muted small">{t('Weitere Plattformen via Capirca/Aerleon:')}</div>
+          <div className="export-divider muted small">{t('More platforms via Capirca/Aerleon:')}</div>
           {AERLEON_FORMATS.map((f) => (
             <button key={f.key}
               className={`format-btn ${f.key === fmt ? 'active' : ''}`}
@@ -135,7 +135,7 @@ export default function ExportPage() {
               <span className="muted small">{f.hint}</span>
             </button>
           ))}
-          <div className="export-divider muted small">{t('Host-Firewall für einen Ziel-Server:')}</div>
+          <div className="export-divider muted small">{t('Host firewall for a target server:')}</div>
           {HOST_FORMATS.map((f) => (
             <button key={f.key}
               className={`format-btn ${f.key === fmt ? 'active' : ''}`}
@@ -146,31 +146,31 @@ export default function ExportPage() {
           ))}
           <div className="export-options">
             {hostFormat && (
-              <label>{t('Ziel-IP des Servers')}
+              <label>{t('Target IP of the server')}
                 <input value={targetIp} onChange={(e) => setTargetIp(e.target.value)}
                   placeholder="z.B. 10.10.80.10" />
               </label>
             )}
-            <label>{t('Komponente (nur deren Regeln)')}
+            <label>{t('Component (its rules only)')}
               <select value={componentId} onChange={(e) => setComponentId(e.target.value)}>
-                <option value="">{t('– alle Komponenten –')}</option>
+                <option value="">{t('– all components –')}</option>
                 {components.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </label>
-            <label>{t('Nur bestimmte Regeln (IDs, kommagetrennt)')}
+            <label>{t('Specific rules only (IDs, comma-separated)')}
               <input value={ids} onChange={(e) => setIds(e.target.value)} placeholder="SR00855, SR00846" />
             </label>
             <label className="checkbox">
               <input type="checkbox" checked={onlyApproved} onChange={(e) => setOnlyApproved(e.target.checked)} />
-              {t('Nur freigegebene Regeln')}
+              {t('Approved rules only')}
             </label>
-            <button className="btn btn-primary" onClick={() => load()}>{t('Vorschau aktualisieren')}</button>
+            <button className="btn btn-primary" onClick={() => load()}>{t('Refresh preview')}</button>
           </div>
         </aside>
         <section className="export-preview">
           <div className="preview-actions">
-            <button className="btn" onClick={copy} disabled={!preview}>{t('In Zwischenablage')}</button>
-            <button className="btn btn-primary" onClick={download} disabled={!preview}>{t('Herunterladen')}</button>
+            <button className="btn" onClick={copy} disabled={!preview}>{t('Copy to clipboard')}</button>
+            <button className="btn btn-primary" onClick={download} disabled={!preview}>{t('Download')}</button>
           </div>
           {error && <div className="error">{error}</div>}
           {loading ? <p className="muted">Erzeuge Vorschau…</p>

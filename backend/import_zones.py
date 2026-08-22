@@ -68,16 +68,14 @@ def run(path: str, sheet_name: str | None, wipe: bool):
     zones_by_key: dict[str, Zone] = {
         norm(z.name): z for z in db.query(Zone).all()
     }
-    order = 0
     row_names = [str(r[0]).strip() for r in rows[header_idx + 1:] if r and r[0]]
-    for name in row_names + col_names:
+    for order, name in enumerate(row_names + col_names):
         key = norm(name)
         if key and key not in zones_by_key:
             zone = Zone(name=name, sort_order=order)
             db.add(zone)
             db.flush()
             zones_by_key[key] = zone
-        order += 1
 
     # Matrix einlesen
     count = 0

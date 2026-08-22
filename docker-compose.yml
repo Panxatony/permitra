@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: permitra
       POSTGRES_USER: permitra
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD muss gesetzt sein}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,48 +16,48 @@ services:
   backend:
     build: ./backend
     environment:
-      # Keine Fallback-Werte: fehlt SECRET_KEY, verweigert die App den Start
-      # (fail-secure, app/auth.py). Ein bekannter Default würde fälschbare
-      # Admin-Tokens erlauben. Werte in .env setzen (siehe .env.example).
-      DATABASE_URL: postgresql+psycopg2://permitra:${DB_PASSWORD:?DB_PASSWORD muss gesetzt sein}@db:5432/permitra
-      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY muss gesetzt sein (openssl rand -hex 32)}
-      # Demo-/Testbetrieb: legt die bekannten Demo-Benutzer an. In Produktion
-      # NICHT setzen – dann entsteht ein Erst-Admin mit Zufallspasswort (Log).
+      # No fallback values: if SECRET_KEY is missing, the app refuses to start
+      # (fail-secure, app/auth.py). A well-known default would allow forgeable
+      # admin tokens. Set the values in .env (see .env.example).
+      DATABASE_URL: postgresql+psycopg2://permitra:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/permitra
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set (openssl rand -hex 32)}
+      # Demo/test operation: creates the well-known demo users. Do NOT set this
+      # in production – an initial admin with a random password is created (log).
       PERMITRA_DEMO: ${PERMITRA_DEMO:-}
-      # E-Mail-Versand (leer = aus) und Basis-URL für Links in Mails
+      # Email delivery (empty = off) and base URL for links in emails
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       PERMITRA_BASE_URL: ${PERMITRA_BASE_URL:-}
-      # WebAuthn/Passkeys (Default: aus PERMITRA_BASE_URL abgeleitet)
+      # WebAuthn/passkeys (default: derived from PERMITRA_BASE_URL)
       PERMITRA_RP_ID: ${PERMITRA_RP_ID:-}
       PERMITRA_ORIGIN: ${PERMITRA_ORIGIN:-}
-      # Change-Management-Webhook (z.B. ServiceNow)
+      # Change management webhook (e.g. ServiceNow)
       CHANGE_WEBHOOK_URL: ${CHANGE_WEBHOOK_URL:-}
       CHANGE_WEBHOOK_TOKEN: ${CHANGE_WEBHOOK_TOKEN:-}
-      # SIEM-Anbindung des Audit-Logs (leer = aus). Ist ein Ziel gesetzt, werden
-      # Ereignisse persistent vorgemerkt und zuverlässig zugestellt (at-least-once).
+      # SIEM connection for the audit log (empty = off). If a target is set,
+      # events are queued persistently and delivered reliably (at-least-once).
       AUDIT_WEBHOOK_URL: ${AUDIT_WEBHOOK_URL:-}
       AUDIT_SYSLOG_HOST: ${AUDIT_SYSLOG_HOST:-}
       AUDIT_SYSLOG_PORT: ${AUDIT_SYSLOG_PORT:-514}
       AUDIT_SYSLOG_PROTO: ${AUDIT_SYSLOG_PROTO:-udp}
-      # Abstand der Verankerungen des Ketten-Endes (Sekunden)
+      # Interval between anchorings of the chain end (seconds)
       AUDIT_CHECKPOINT_INTERVAL: ${AUDIT_CHECKPOINT_INTERVAL:-3600}
     depends_on:
       db:
         condition: service_healthy
-    # Für den Excel-Import: das data-Verzeichnis in den Container mounten
+    # For the Excel import: mount the data directory into the container
     volumes:
       - ./data:/data:ro
 
   frontend:
     environment:
-      # Kommagetrennte IPs/CIDRs eines vorgelagerten Reverse-Proxys. Nur von
-      # diesen Adressen wird X-Forwarded-For ausgewertet – die Quell-IP landet
-      # im Audit-Log und wäre sonst vom Client frei erfindbar. Leer lassen,
-      # wenn der Container direkt veröffentlicht ist.
+      # Comma-separated IPs/CIDRs of an upstream reverse proxy. X-Forwarded-For
+      # is only evaluated from these addresses – the source IP ends up in the
+      # audit log and could otherwise be made up freely by the client. Leave
+      # empty if the container is published directly.
       PERMITRA_TRUSTED_PROXIES: ${PERMITRA_TRUSTED_PROXIES:-}
     build: ./frontend
     ports:

@@ -1,14 +1,14 @@
-"""Prüfung von Regeln gegen die Zonen-Kommunikationsmatrix.
+"""Checks rules against the zone communication matrix.
 
-Semantik:
-  - gleiche Zone (Intra-Zone)           -> erlaubt (Diagonale "-" der Matrix);
-                                           hier wird typischerweise ACI eingesetzt
-  - Matrix-Eintrag "allow_only"         -> erlaubt (Durchsetzung immer per Firewall)
-  - Matrix-Eintrag "block_all"          -> Regel unzulässig
-  - Zone oder Beziehung nicht gepflegt  -> erlaubt, aber mit Hinweis (Altdaten-Toleranz)
+Semantics:
+  - same zone (intra-zone)              -> allowed (the "-" diagonal of the matrix);
+                                           ACI is typically used here
+  - matrix entry "allow_only"           -> allowed (always enforced by a firewall)
+  - matrix entry "block_all"            -> rule not permitted
+  - zone or relation not maintained     -> allowed, but with a warning (legacy data tolerance)
 
-Zusätzlich ein Hinweis, wenn eine zonenübergreifende Regel ACI als Plattform nennt,
-denn ACI wird nur innerhalb einer Zone verwendet.
+Additionally a warning is emitted when a cross-zone rule names ACI as its platform,
+because ACI is only used within a single zone.
 """
 from dataclasses import dataclass, field
 
@@ -19,7 +19,7 @@ from .validation import parse_network
 
 
 def zone_for_ip(ip: str, networks: list[ZoneNetwork]) -> Zone | None:
-    """Zone eines Adress-Eintrags: 'any' -> cidr='any'; sonst spezifischstes Netz."""
+    """Zone of an address entry: 'any' -> cidr='any'; otherwise the most specific network."""
     ip = (ip or "").strip()
     if not ip:
         return None
@@ -35,18 +35,17 @@ def zone_for_ip(ip: str, networks: list[ZoneNetwork]) -> Zone | None:
         candidate = parse_network(entry.cidr)
         if not candidate or candidate.version != net.version:
             continue
-        if net == candidate or net.subnet_of(candidate):
-            if candidate.prefixlen > best_prefix:
-                best, best_prefix = entry.zone, candidate.prefixlen
+        if (net == candidate or net.subnet_of(candidate)) and candidate.prefixlen > best_prefix:
+            best, best_prefix = entry.zone, candidate.prefixlen
     return best
 
 
 def resolve_zone_for_entries(db: Session, entries: list[dict], vrf_id: int | None = None) -> tuple[str | None, list[str], set[str]]:
-    """Ermittelt die Zone einer Adressliste.
+    """Determines the zone of an address list.
 
-    Liefert (Zonenname oder None, nicht zugeordnete IPs/Netze, alle getroffenen Zonen).
-    Jedes Netzwerk MUSS einer Zone zugeordnet sein; eine Regelseite darf nur eine
-    Zone umfassen."""
+    Returns (zone name or None, unassigned IPs/networks, all matched zones).
+    Every network MUST be assigned to a zone; one side of a rule may only span a
+    single zone."""
     query = db.query(ZoneNetwork)
     if vrf_id is not None:
         query = query.filter(ZoneNetwork.vrf_id == vrf_id)
@@ -61,7 +60,7 @@ def resolve_zone_for_entries(db: Session, entries: list[dict], vrf_id: int | Non
         if zone is None:
             unassigned.append(ip)
         else:
-            zones_hit.add(zone_ref(zone))  # führend: die Zonen-ID
+            zones_hit.add(zone_ref(zone))  # authoritative: the zone ID
     resolved = zones_hit.copy().pop() if len(zones_hit) == 1 else None
     return resolved, unassigned, zones_hit
 
@@ -75,22 +74,22 @@ class ZoneCheckResult:
 
 
 def zone_ref(zone: Zone) -> str:
-    """Kanonischer Referenzwert einer Zone: die Zonen-ID (code), sonst der Name.
-    Dieser Wert wird auf Regeln gespeichert (führend für die Regeln)."""
+    """Canonical reference value of a zone: the zone ID (code), otherwise the name.
+    This value is stored on rules (it is authoritative for them)."""
     return (zone.code or zone.name) if zone else ""
 
 
 def find_zone(db: Session, ref: str) -> Zone | None:
-    """Löst eine Zone per ID (code) ODER Name auf (case-insensitiv). Die ID hat
-    Vorrang – sie ist der führende Identifier."""
+    """Resolves a zone by ID (code) OR name (case-insensitive). The ID takes
+    precedence – it is the authoritative identifier."""
     ref = (ref or "").strip()
     if not ref:
         return None
     zones = db.query(Zone).all()
-    for zone in zones:  # zuerst über die Zonen-ID
+    for zone in zones:  # first by zone ID
         if (zone.code or "").upper() == ref.upper():
             return zone
-    for zone in zones:  # dann über den Namen (Altdaten, Nutzereingabe)
+    for zone in zones:  # then by name (legacy data, user input)
         if zone.name.upper() == ref.upper():
             return zone
     return None
@@ -107,8 +106,8 @@ def get_policy(db: Session, from_zone: Zone, to_zone: Zone) -> ZonePolicy | None
 def _aci_cross_zone_hint(result: ZoneCheckResult, platforms: list[str] | None):
     if "aci" in (platforms or []):
         result.messages.append(
-            "ACI wird nur innerhalb einer Zone eingesetzt – diese Regel ist zonenübergreifend, "
-            "Plattform ACI prüfen"
+            "ACI is only used within a single zone – this rule crosses zones, "
+            "check the ACI platform assignment"
         )
 
 
@@ -116,11 +115,11 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
                     platforms: list[str] | None = None) -> ZoneCheckResult:
     src, dst = (source_zone or "").strip(), (destination_zone or "").strip()
     if not src or not dst:
-        return ZoneCheckResult(True, "undefined", messages=["Quell- oder Ziel-Zone nicht angegeben"])
+        return ZoneCheckResult(True, "undefined", messages=["Source or destination zone not specified"])
     if src.upper() == dst.upper():
-        return ZoneCheckResult(True, "intra", messages=["Intra-Zonen-Verkehr (gleiche Zone)"])
+        return ZoneCheckResult(True, "intra", messages=["Intra-zone traffic (same zone)"])
 
-    # Minimalprinzip (BSI): Verhalten für ungepflegte Beziehungen ist konfigurierbar
+    # Least privilege (BSI): behaviour for unmaintained relations is configurable
     from .settings import get_setting
 
     default_deny = get_setting(db, "zone_matrix_default") == "deny"
@@ -130,8 +129,8 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
         missing = [n for n, z in ((src, zone_a), (dst, zone_b)) if not z]
         result = ZoneCheckResult(
             not default_deny, "undefined",
-            messages=[f"Zone(n) nicht in der Zonenverwaltung gepflegt: {', '.join(missing)}"
-                      + (" – default-deny: bitte Zone anlegen und Beziehung freigeben"
+            messages=[f"Zone(s) not maintained in the zone administration: {', '.join(missing)}"
+                      + (" – default-deny: create the zone and approve the relation"
                          if default_deny else "")],
         )
         _aci_cross_zone_hint(result, platforms)
@@ -141,9 +140,9 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
     if not policy:
         result = ZoneCheckResult(
             not default_deny, "undefined",
-            messages=[f"Beziehung {zone_a.name} → {zone_b.name} ist in der Matrix nicht gepflegt"
-                      + (" – Minimalprinzip (default-deny): bitte per Matrixantrag auf Allow "
-                         "setzen (zwei Freigaben)" if default_deny else "")],
+            messages=[f"Relation {zone_a.name} → {zone_b.name} is not maintained in the matrix"
+                      + (" – least privilege (default-deny): set it to allow via a matrix "
+                         "request (two approvals)" if default_deny else "")],
         )
         _aci_cross_zone_hint(result, platforms)
         return result
@@ -155,11 +154,11 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
     )
     if policy.policy == ZonePolicyType.block_all:
         result.messages.append(
-            f"Matrix verbietet Sicherheitsregeln von {zone_a.name} nach {zone_b.name} (Block)"
+            f"The matrix forbids security rules from {zone_a.name} to {zone_b.name} (Block)"
         )
         return result
 
     if policy.temporary:
-        result.messages.append("Beziehung ist in der Matrix nur temporär erlaubt (Temp)")
+        result.messages.append("The matrix allows this relation only temporarily (Temp)")
     _aci_cross_zone_hint(result, platforms)
     return result

@@ -1,43 +1,41 @@
-"""Einheitliches Audit-Log für SIEM-Integration (Issue #11, BSI OPS.1.1.5)
-mit Integritätssicherung und zuverlässiger Zustellung (Issue #26).
+"""Unified audit log for SIEM integration (issue #11, BSI OPS.1.1.5) with
+integrity protection and reliable delivery (issue #26).
 
-Fasst die verteilten, personengebundenen Änderungsereignisse (Regel-Versionen,
-Zonen-/Matrix-/Netzwerk-Anträge) zu einem maschinenlesbaren, chronologischen
-Audit-Log zusammen und ergänzt sicherheitsrelevante Ereignisse (Anmeldung,
-Administration, Zugriffe) in einem append-only Store.
+Consolidates the distributed, person-attributable change events (rule versions,
+zone/matrix/network requests) into a machine-readable, chronological audit trail
+and adds security-relevant events (login, administration, access) in an
+append-only store.
 
-Integrität (#26): Jeder Eintrag im Store trägt einen SHA-256-`hash` über seinen
-Inhalt UND den `hash` des Vorgängers (Hash-Kette). Nachträgliche Änderungen an
-einem Ereignis oder an der Reihenfolge brechen die Kette und werden von
-`verify_chain()` erkannt. Zusätzlich verankern Prüfpunkte (`AuditCheckpoint`)
-regelmäßig das Ketten-Ende, sonst bliebe das Abschneiden der jüngsten Einträge
-unbemerkt: der Rest wäre in sich weiterhin schlüssig.
+Integrity (#26): every entry in the store carries a SHA-256 `hash` over its own
+content AND the `hash` of its predecessor (hash chain). Later modifications to
+an event or to the ordering break the chain and are detected by
+`verify_chain()`. In addition, checkpoints (`AuditCheckpoint`) regularly anchor
+the end of the chain; otherwise truncating the most recent entries would go
+unnoticed, because the remainder would still be internally consistent.
 
-WAS DIESE SICHERUNG LEISTET – UND WAS NICHT:
-Der Hash ist schlüssellos (SHA-256, kein HMAC). Wer auf der Datenbank SCHREIBEN
-kann, kann ein Ereignis ändern und die Kette ab dieser Stelle mit derselben
-öffentlichen Funktion neu berechnen; löscht er zusätzlich die Prüfpunkte, ist
-die Fälschung innerhalb der Datenbank nicht mehr nachweisbar. Die Kette allein
-schützt also gegen versehentliche Korruption und gegen Manipulation ohne
-Neuberechnung – nicht gegen einen Angreifer mit Datenbank-Schreibrechten.
+WHAT THIS PROTECTION ACHIEVES - AND WHAT IT DOES NOT:
+The hash is keyless (SHA-256, not an HMAC). Anyone with WRITE access to the
+database can modify an event and recompute the chain from that point on using
+the same public function; if they also delete the checkpoints, the forgery can
+no longer be proven from within the database. On its own the chain therefore
+protects against accidental corruption and against tampering without
+recomputation - not against an attacker with database write access.
 
-Der tragende Schutz ist deshalb die Auslagerung: Ereignisse UND Prüfpunkte
-werden zuverlässig an ein SIEM übermittelt. Was dort liegt, ist dem Zugriff auf
-die Datenbank entzogen; ein Abgleich deckt jede nachträgliche Fälschung auf.
-Ohne konfiguriertes SIEM-Ziel bleibt der Schutz auf das oben Genannte
-beschränkt – das ist eine bewusste Betriebsentscheidung, keine Eigenschaft der
-Anwendung.
+The load-bearing protection is therefore externalization: events AND checkpoints
+are reliably transmitted to a SIEM. What is stored there is beyond the reach of
+database access; a comparison exposes any later forgery. Without a configured
+SIEM target the protection stays limited to what is described above - that is a
+deliberate operational decision, not a property of the application.
 
-Zustellung (#26): Ereignisse werden persistent als `siem_status='pending'`
-markiert und von einem Hintergrund-Worker (siehe main.siem_delivery_job) in
-Reihenfolge an ein SIEM zugestellt (at-least-once). Erst nach Bestätigung wird
-`siem_status='sent'` gesetzt; ein Absturz/Neustart verliert nichts, weil der
-Zustand in der Datenbank liegt.
+Delivery (#26): events are persistently marked as `siem_status='pending'` and
+delivered in order to a SIEM by a background worker (see main.siem_delivery_job,
+at-least-once). Only after acknowledgement is `siem_status='sent'` set; a crash
+or restart loses nothing, because the state lives in the database.
 
-Konfiguration (optional):
-  AUDIT_SYSLOG_HOST / AUDIT_SYSLOG_PORT   Syslog-Ziel (Port default 514)
-  AUDIT_SYSLOG_PROTO                       'udp' (default, best-effort) oder 'tcp' (quittiert)
-  AUDIT_WEBHOOK_URL                        JSON-POST je Ereignis (2xx = zugestellt)
+Configuration (optional):
+  AUDIT_SYSLOG_HOST / AUDIT_SYSLOG_PORT   syslog target (port defaults to 514)
+  AUDIT_SYSLOG_PROTO                       'udp' (default, best-effort) or 'tcp' (acknowledged)
+  AUDIT_WEBHOOK_URL                        JSON POST per event (2xx = delivered)
 """
 from __future__ import annotations
 
@@ -56,19 +54,19 @@ from .models import AuditCheckpoint, AuditEvent, Rule, RuleVersion, ZonePolicyCh
 
 log = logging.getLogger("permitra.audit")
 
-GENESIS = "0" * 64  # prev_hash des allerersten Ereignisses
+GENESIS = "0" * 64  # prev_hash of the very first event
 
-# Schreibvorgänge in den Store werden serialisiert, damit die Hash-Kette auch
-# bei nebenläufigen Requests konsistent verkettet wird (ein Prozess/mehrere
-# Threads). Für den Mehr-Prozess-Fall (uvicorn --workers>1) kommt zusätzlich ein
-# Postgres-Advisory-Lock innerhalb der Transaktion zum Einsatz.
+# Writes to the store are serialized so that the hash chain stays consistently
+# linked even under concurrent requests (one process/multiple threads). For the
+# multi-process case (uvicorn --workers>1) a Postgres advisory lock inside the
+# transaction is used in addition.
 _write_lock = threading.Lock()
 _PG_ADVISORY_KEY = 0x50524D5452  # "PRMTR"
 
 
 def client_ip(request) -> str:
-    """Quell-IP eines Requests: erster Hop aus X-Forwarded-For (hinter dem
-    Reverse-Proxy), sonst die direkte Peer-Adresse."""
+    """Source IP of a request: first hop from X-Forwarded-For (when behind a
+    reverse proxy), otherwise the direct peer address."""
     if request is None:
         return ""
     fwd = request.headers.get("x-forwarded-for", "")
@@ -77,11 +75,11 @@ def client_ip(request) -> str:
     return request.client.host if request.client else ""
 
 
-# ---------- Hash-Kette (Integrität) ----------------------------------------
+# ---------- Hash chain (integrity) -----------------------------------------
 
 def _ts_canonical(dt) -> str:
-    """Zeitstempel deterministisch als UTC mit Mikrosekunden – identisch beim
-    Schreiben und beim Verifizieren, auch über den DB-Roundtrip hinweg."""
+    """Timestamp rendered deterministically as UTC with microseconds - identical
+    when writing and when verifying, even across the DB roundtrip."""
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -89,8 +87,8 @@ def _ts_canonical(dt) -> str:
 
 def event_hash(ts, category, event, actor, object, detail, source_ip, extra,
                prev_hash) -> str:
-    """SHA-256 über den kanonisch serialisierten Inhalt eines Ereignisses plus
-    den Vorgänger-Hash. Die SIEM-Zustellspalten fließen bewusst NICHT ein."""
+    """SHA-256 over the canonically serialized content of an event plus the
+    predecessor hash. The SIEM delivery columns are deliberately NOT included."""
     payload = {
         "ts": _ts_canonical(ts),
         "category": category or "",
@@ -113,22 +111,22 @@ def _row_hash(ev: AuditEvent) -> str:
 
 
 def _advisory_lock(db: Session) -> None:
-    """Serialisiert Audit-Writes prozessübergreifend auf Postgres (no-op sonst).
-    Der Lock wird am Transaktionsende (commit/rollback) automatisch freigegeben."""
+    """Serializes audit writes across processes on Postgres (no-op otherwise).
+    The lock is released automatically at transaction end (commit/rollback)."""
     try:
         if db.bind and db.bind.dialect.name == "postgresql":
             from sqlalchemy import text
             db.execute(text("SELECT pg_advisory_xact_lock(:k)"),
                        {"k": _PG_ADVISORY_KEY})
     except Exception:
-        log.debug("Advisory-Lock nicht verfügbar", exc_info=True)
+        log.debug("Advisory lock not available", exc_info=True)
 
 
 def record(db: Session, category: str, event: str, actor: str = "", object: str = "",
            detail: str = "", source_ip: str = "", extra: dict | None = None) -> None:
-    """Schreibt EINEN Audit-Eintrag revisionssicher (verkettet) in den
-    Append-only-Store und markiert ihn für die SIEM-Zustellung. Fehler dürfen
-    den fachlichen Vorgang nie blockieren."""
+    """Writes ONE audit entry into the append-only store in a tamper-evident
+    (chained) way and marks it for SIEM delivery. Errors must never block the
+    business operation."""
     ts = utcnow()
     with _write_lock:
         try:
@@ -144,8 +142,8 @@ def record(db: Session, category: str, event: str, actor: str = "", object: str 
                 siem_status=("pending" if push_enabled() else "skipped"),
             ))
             db.commit()
-        except Exception:  # Audit darf den fachlichen Vorgang nicht mitreißen
-            log.exception("Audit-Eintrag konnte nicht gespeichert werden")
+        except Exception:  # auditing must not take the business operation down
+            log.exception("Audit entry could not be stored")
             db.rollback()
 
 
@@ -154,10 +152,10 @@ def latest_checkpoint(db: Session) -> AuditCheckpoint | None:
 
 
 def create_checkpoint(db: Session) -> AuditCheckpoint | None:
-    """Hält den aktuellen Stand der Kette als Prüfpunkt fest (Verankerung).
+    """Records the current state of the chain as a checkpoint (anchoring).
 
-    Ohne Ereignisse gibt es nichts zu verankern. Hat sich seit dem letzten
-    Prüfpunkt nichts getan, wird keiner angelegt."""
+    Without events there is nothing to anchor. If nothing has happened since the
+    last checkpoint, no new one is created."""
     last = db.query(AuditEvent).order_by(AuditEvent.id.desc()).first()
     if last is None:
         return None
@@ -178,42 +176,42 @@ def create_checkpoint(db: Session) -> AuditCheckpoint | None:
 
 
 def _check_against_checkpoint(db: Session, checked: int) -> dict | None:
-    """Vergleicht den aktuellen Bestand mit dem jüngsten Prüfpunkt. Erkennt das
-    Abschneiden der jüngsten Einträge, das die reine Verkettung nicht sieht."""
+    """Compares the current data against the most recent checkpoint. Detects the
+    truncation of the newest entries, which the chaining alone cannot see."""
     cp = latest_checkpoint(db)
     if cp is None:
         return None
     anchor = db.get(AuditEvent, cp.last_event_id)
     if anchor is None:
         return {"ok": False, "checked": checked, "broken_at_id": cp.last_event_id,
-                "reason": f"Verankerter Eintrag {cp.last_event_id} fehlt – die Kette wurde "
-                          f"nach dem Prüfpunkt vom {cp.ts:%d.%m.%Y %H:%M} gekürzt"}
+                "reason": f"Anchored entry {cp.last_event_id} is missing – the chain was "
+                          f"truncated after the checkpoint of {cp.ts:%Y-%m-%d %H:%M}"}
     if (anchor.hash or "") != cp.head_hash:
         return {"ok": False, "checked": checked, "broken_at_id": cp.last_event_id,
-                "reason": "Verankerter Eintrag stimmt nicht mehr mit dem Prüfpunkt überein "
-                          "(Kette wurde nachträglich neu berechnet)"}
+                "reason": "Anchored entry no longer matches the checkpoint "
+                          "(the chain was recalculated afterwards)"}
     if checked < cp.event_count:
         return {"ok": False, "checked": checked, "broken_at_id": None,
-                "reason": f"Nur {checked} Einträge vorhanden, der Prüfpunkt belegt "
-                          f"{cp.event_count} – es wurden Einträge entfernt"}
+                "reason": f"Only {checked} entries present, the checkpoint records "
+                          f"{cp.event_count} – entries have been removed"}
     return None
 
 
 def verify_chain(db: Session) -> dict:
-    """Prüft die vollständige Hash-Kette. Liefert ok=True nur, wenn jeder
-    Eintrag inhaltlich unverändert ist, lückenlos an den Vorgänger anschließt
-    UND der jüngste Prüfpunkt noch gedeckt ist (Schutz gegen Kürzung)."""
+    """Verifies the complete hash chain. Returns ok=True only if every entry is
+    unchanged in content, links seamlessly to its predecessor AND the most
+    recent checkpoint is still covered (protection against truncation)."""
     prev = GENESIS
     checked = 0
     for ev in db.query(AuditEvent).order_by(AuditEvent.id.asc()).yield_per(500):
         checked += 1
         if (ev.prev_hash or GENESIS) != prev:
             return {"ok": False, "checked": checked, "broken_at_id": ev.id,
-                    "reason": "prev_hash passt nicht zum Vorgänger "
-                              "(Reihenfolge verändert oder Eintrag entfernt)"}
+                    "reason": "prev_hash does not match the predecessor "
+                              "(order changed or entry removed)"}
         if _row_hash(ev) != (ev.hash or ""):
             return {"ok": False, "checked": checked, "broken_at_id": ev.id,
-                    "reason": "Hash passt nicht zum Inhalt (Eintrag verändert)"}
+                    "reason": "Hash does not match the content (entry modified)"}
         prev = ev.hash
 
     broken = _check_against_checkpoint(db, checked)
@@ -240,12 +238,12 @@ def _iso(dt):
 
 def collect(db: Session, since: str | None = None, limit: int = 500,
             event_type: str | None = None) -> list[dict]:
-    """Chronologisches Audit-Log (neueste zuerst).
+    """Chronological audit log (newest first).
 
-    event_type: 'rule' | 'zone_change' | Kategorie des Stores | None (alle)."""
+    event_type: 'rule' | 'zone_change' | a store category | None (all)."""
     events: list[dict] = []
 
-    # Persistenter Append-only-Store (rule.deleted, auth, admin, …)
+    # Persistent append-only store (rule.deleted, auth, admin, ...)
     aq = db.query(AuditEvent).order_by(AuditEvent.ts.desc())
     if event_type:
         aq = aq.filter(AuditEvent.category == event_type)
@@ -298,7 +296,7 @@ def collect(db: Session, since: str | None = None, limit: int = 500,
     return events[:limit]
 
 
-# ---------- SIEM-Zustellung (at-least-once Outbox) --------------------------
+# ---------- SIEM delivery (at-least-once outbox) ----------------------------
 
 def push_enabled() -> bool:
     return bool(os.environ.get("AUDIT_SYSLOG_HOST", "").strip()
@@ -314,14 +312,14 @@ def _event_payload(ev: AuditEvent) -> dict:
 
 
 def _syslog(event: dict) -> bool:
-    """Sendet ein Ereignis per Syslog. UDP ist best-effort (Erfolg = kein
-    Fehler beim Senden); TCP wird durch die Verbindung quittiert."""
+    """Sends an event via syslog. UDP is best-effort (success = no error while
+    sending); TCP is acknowledged by the connection."""
     host = os.environ.get("AUDIT_SYSLOG_HOST", "").strip()
     if not host:
-        return True  # kein Syslog-Ziel konfiguriert
+        return True  # no syslog target configured
     port = int(os.environ.get("AUDIT_SYSLOG_PORT", "514"))
     proto = os.environ.get("AUDIT_SYSLOG_PROTO", "udp").strip().lower()
-    # RFC 5424, Facility 13 (log audit) * 8 + Severity 6 (info) = 110
+    # RFC 5424, facility 13 (log audit) * 8 + severity 6 (info) = 110
     msg = f"<110>1 - permitra - {event.get('event')} - - {json.dumps(event, default=str)}"
     try:
         if proto == "tcp":
@@ -335,35 +333,37 @@ def _syslog(event: dict) -> bool:
                 s.sendto(msg.encode()[:2048], (host, port))
         return True
     except Exception as exc:
-        log.warning("Audit-Syslog fehlgeschlagen: %s", exc)
+        log.warning("Audit syslog delivery failed: %s", exc)
         return False
 
 
 def _webhook(event: dict) -> bool:
     url = os.environ.get("AUDIT_WEBHOOK_URL", "").strip()
     if not url:
-        return True  # kein Webhook-Ziel konfiguriert
+        return True  # no webhook target configured
     body = json.dumps({"source": "permitra", **event}, default=str).encode()
-    req = urllib.request.Request(url, data=body, method="POST",
+    # S310 rationale: the target URL is operator-configured (AUDIT_WEBHOOK_URL), not
+    # user-supplied; see the SSRF note in the security audit.
+    req = urllib.request.Request(url, data=body, method="POST",  # noqa: S310
                                  headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
             return 200 <= resp.status < 300
     except Exception as exc:
-        log.warning("Audit-Webhook fehlgeschlagen: %s", exc)
+        log.warning("Audit webhook delivery failed: %s", exc)
         return False
 
 
 def deliver(event: dict) -> bool:
-    """Stellt ein Ereignis an alle konfigurierten Ziele zu. Erfolg nur, wenn
-    jedes konfigurierte Ziel bestätigt (bzw. UDP-Syslog fehlerfrei sendet)."""
+    """Delivers an event to all configured targets. Success only if every
+    configured target acknowledges (or UDP syslog sends without error)."""
     return _syslog(event) and _webhook(event)
 
 
 def deliver_pending(db: Session, batch: int = 200) -> dict:
-    """Stellt ausstehende Ereignisse in strenger Reihenfolge (id aufsteigend)
-    zu. Bricht beim ersten Fehlschlag ab, damit die Reihenfolge erhalten bleibt
-    und im nächsten Lauf ab derselben Stelle erneut versucht wird."""
+    """Delivers pending events in strict order (id ascending). Stops at the
+    first failure so that the ordering is preserved and the next run retries
+    from the same position."""
     if not push_enabled():
         return {"sent": 0, "pending": 0}
     rows = (db.query(AuditEvent)
@@ -379,7 +379,7 @@ def deliver_pending(db: Session, batch: int = 200) -> dict:
             db.commit()
             sent += 1
         else:
-            db.commit()  # Zählerstand festhalten, Reihenfolge wahren
+            db.commit()  # persist the attempt counter, preserve the ordering
             break
     remaining = (db.query(AuditEvent)
                  .filter(AuditEvent.siem_status == "pending").count())
@@ -387,10 +387,10 @@ def deliver_pending(db: Session, batch: int = 200) -> dict:
 
 
 def deliver_pending_checkpoints(db: Session, batch: int = 20) -> dict:
-    """Stellt noch nicht übermittelte Prüfpunkte an das SIEM zu.
+    """Delivers checkpoints that have not been transmitted yet to the SIEM.
 
-    Erst außerhalb der Datenbank entfaltet ein Prüfpunkt seine Wirkung: Wer die
-    Audit-Tabelle manipuliert, erreicht die dort abgelegte Kopie nicht."""
+    A checkpoint only takes effect outside the database: whoever tampers with
+    the audit table cannot reach the copy stored there."""
     if not push_enabled():
         return {"sent": 0, "pending": 0}
     rows = (db.query(AuditCheckpoint)
@@ -401,7 +401,7 @@ def deliver_pending_checkpoints(db: Session, batch: int = 20) -> dict:
         payload = {
             "type": "audit", "event": "audit.checkpoint",
             "actor": "permitra", "object": f"#{cp.event_count}",
-            "detail": "Verankerung des Audit-Ketten-Endes",
+            "detail": "Anchoring of the audit chain head",
             "event_count": cp.event_count, "last_event_id": cp.last_event_id,
             "head_hash": cp.head_hash, "timestamp": _iso(cp.ts),
         }
@@ -419,7 +419,7 @@ def deliver_pending_checkpoints(db: Session, batch: int = 20) -> dict:
 
 
 def siem_status(db: Session) -> dict:
-    """Überblick über den Zustellzustand für die Admin-Ansicht."""
+    """Overview of the delivery state for the admin view."""
     def _count(status):
         return db.query(AuditEvent).filter(AuditEvent.siem_status == status).count()
     cp = latest_checkpoint(db)

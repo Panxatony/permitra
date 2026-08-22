@@ -1,4 +1,4 @@
-"""Tests für den optionalen Change-Management-Webhook (z.B. ServiceNow)."""
+"""Tests for the optional change management webhook (e.g. ServiceNow)."""
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -9,7 +9,7 @@ from app import change_management
 def test_disabled_without_url(monkeypatch):
     monkeypatch.delenv("CHANGE_WEBHOOK_URL", raising=False)
     assert not change_management.enabled()
-    change_management.notify("rule.approved", {"rule_id": "SR0001"})  # darf nichts tun
+    change_management.notify("rule.approved", {"rule_id": "SR0001"})  # must do nothing
 
 
 def test_notify_posts_json(monkeypatch):
@@ -35,7 +35,7 @@ def test_notify_posts_json(monkeypatch):
         monkeypatch.setenv("CHANGE_WEBHOOK_TOKEN", "geheim")
         assert change_management.enabled()
         change_management.notify("rule.approved", {"rule_id": "SR0001", "components": ["FW-A"]})
-        assert done.wait(5), "Webhook wurde nicht aufgerufen"
+        assert done.wait(5), "webhook was not called"
     finally:
         server.shutdown()
 
@@ -48,6 +48,6 @@ def test_notify_posts_json(monkeypatch):
 
 
 def test_failures_never_raise(monkeypatch):
-    # Nicht erreichbares Ziel: notify darf keinen Fehler werfen (fire-and-forget)
+    # Unreachable target: notify must not raise an error (fire-and-forget)
     monkeypatch.setenv("CHANGE_WEBHOOK_URL", "http://127.0.0.1:1/unerreichbar")
     change_management.notify("rule.rejected", {"rule_id": "SR0002"})

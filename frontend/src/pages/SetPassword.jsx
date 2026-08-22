@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useLang } from '../i18n'
 
-/* Passwort setzen über Aktivierungs- oder Reset-Link (?token=…). */
+/* Set a password via an activation or reset link (?token=…). */
 export default function SetPassword() {
   const { t } = useLang()
   const [searchParams] = useSearchParams()
@@ -17,7 +17,7 @@ export default function SetPassword() {
     e.preventDefault()
     setError('')
     if (password !== repeat) {
-      setError(t('Die Passwörter stimmen nicht überein.'))
+      setError(t('The passwords do not match.'))
       return
     }
     try {
@@ -32,28 +32,28 @@ export default function SetPassword() {
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
         <h1>🛡️ Permitra</h1>
-        <p className="muted">{t('Passwort setzen')}</p>
-        {!token && <div className="error">{t('Kein Token im Link – bitte den Link aus der E-Mail vollständig öffnen.')}</div>}
+        <p className="muted">{t('Set password')}</p>
+        {!token && <div className="error">{t('No token in the link – please open the complete link from the email.')}</div>}
         {done ? (
           <>
             <div className="infobox">{done}</div>
             <Link className="btn btn-primary" to="/login" style={{ textAlign: 'center' }}>
-              {t('Zur Anmeldung')}
+              {t('Go to login')}
             </Link>
           </>
         ) : (
           <>
-            <label>{t('Neues Passwort (min. 8 Zeichen)')}
+            <label>{t('New password (min. 8 characters)')}
               <input type="password" value={password} required minLength={8} autoFocus
                 onChange={(e) => setPassword(e.target.value)} />
             </label>
-            <label>{t('Passwort wiederholen')}
+            <label>{t('Repeat password')}
               <input type="password" value={repeat} required minLength={8}
                 onChange={(e) => setRepeat(e.target.value)} />
             </label>
             {error && <div className="error">{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={!token}>
-              {t('Passwort speichern')}
+              {t('Save password')}
             </button>
           </>
         )}

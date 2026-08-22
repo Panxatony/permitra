@@ -4,9 +4,9 @@ Revision ID: b7e1c4a9d2f0
 Revises: fcfd7ac1a97b
 Create Date: 2026-08-22 18:40:00.000000
 
-Integritätssicherung (Hash-Kette) und zuverlässige SIEM-Zustellung (#26).
-Bestehende Audit-Einträge werden beim Upgrade rückwirkend verkettet, damit die
-Kette lückenlos ab dem ersten Ereignis verifizierbar ist.
+Integrity protection (hash chain) and reliable SIEM delivery (#26).
+Existing audit entries are chained retroactively during the upgrade, so that the
+chain is verifiable without gaps starting from the first event.
 """
 from typing import Sequence, Union
 
@@ -31,7 +31,7 @@ def upgrade() -> None:
     op.create_index('ix_audit_events_hash', 'audit_events', ['hash'])
     op.create_index('ix_audit_events_siem_status', 'audit_events', ['siem_status'])
 
-    # Bestehende Einträge in Reihenfolge verketten (identische Hash-Logik wie zur Laufzeit).
+    # Chain existing entries in order (identical hash logic as at runtime).
     from app.models import AuditEvent
     from app import audit
 
@@ -41,7 +41,7 @@ def upgrade() -> None:
         ev.prev_hash = prev
         ev.hash = audit.event_hash(ev.ts, ev.category, ev.event, ev.actor,
                                    ev.object, ev.detail, ev.source_ip, ev.extra, prev)
-        ev.siem_status = 'skipped'  # Altbestand wird nicht rückwirkend gepusht
+        ev.siem_status = 'skipped'  # legacy records are not pushed retroactively
         prev = ev.hash
     session.commit()
 

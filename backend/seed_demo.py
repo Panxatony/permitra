@@ -1,11 +1,11 @@
-"""Erzeugt exemplarische Demo-Daten: Zonen, Zonen-Matrix und ca. 100 Sicherheitsregeln.
+"""Generates sample demo data: zones, zone matrix and about 100 security rules.
 
-Aufruf:
-    python seed_demo.py [--wipe]     # --wipe löscht vorhandene Regeln/Zonen zuerst
+Usage:
+    python seed_demo.py [--wipe]     # --wipe deletes existing rules/zones first
 
-Die Daten sind deterministisch (fester Random-Seed) und komplett fiktiv:
-IP-Netze aus 10.10.0.0/16, Hostnamen unter *.demo.local.
-Architektur-Prinzip: zwischen Zonen Firewalls (Juniper/Check Point), ACI nur intra-zonal.
+The data is deterministic (fixed random seed) and entirely fictitious:
+IP networks from 10.10.0.0/16, hostnames under *.demo.local.
+Architecture principle: firewalls between zones (Juniper/Check Point), ACI intra-zone only.
 """
 import argparse
 import random
@@ -13,22 +13,22 @@ from datetime import date, timedelta
 
 from app.database import Base, SessionLocal, engine
 from app.models import (
-    Setting,
     AciGateway,
-    AuditEvent,
     AddressComponentMap,
     AddressEpgMap,
     AddressObject,
-    Epg,
+    AuditEvent,
     Comment,
     ComponentLink,
     ComponentType,
-    ServiceObject,
+    Epg,
     Rule,
     RuleAction,
     RuleStatus,
     RuleVersion,
     SecurityComponent,
+    ServiceObject,
+    Setting,
     Vrf,
     Zone,
     ZoneNetwork,
@@ -39,7 +39,7 @@ from app.models import (
 
 random.seed(42)
 
-# --- Zonen (Name, Beschreibung, Netz) ---------------------------------------
+# --- Zones (name, description, network) -------------------------------------
 ZONES = [
     ("INET",      "Internet (extern)",                 None),
     ("DMZ-WEB",   "DMZ – öffentliche Web-Dienste",     "10.10.10.0/24"),
@@ -55,7 +55,7 @@ ZONES = [
     ("AUDIT",     "Audit/SIEM – zentrale Protokollierung", "10.10.95.0/24"),
 ]
 
-# --- Erlaubte Beziehungen (alles andere: Block) ------------------------------
+# --- Allowed relationships (everything else: block) --------------------------
 ALLOWED = {
     ("INET", "DMZ-WEB"),
     ("DMZ-WEB", "PROD-APP"),
@@ -72,10 +72,10 @@ ALLOWED = {
     ("MON", "TEST"), ("MON", "DEV"), ("MON", "CICD"), ("MON", "MGMT"),
     ("MGMT", "AUDIT"), ("MON", "AUDIT"), ("AUDIT", "SHARED"),
 }
-TEMPORARY = {("VPN", "TEST")}  # Beispiel für eine nur temporär erlaubte Beziehung
+TEMPORARY = {("VPN", "TEST")}  # example of a relationship allowed only temporarily
 
-# --- Sicherheitskomponenten (Firewall-Cluster, ACI-Fabric) -------------------
-# (Name, Typ, Standort, Mgmt, Nord-Süd-Ebene [0=nördlich/Internet-nah], Beschreibung)
+# --- Security components (firewall cluster, ACI fabric) ----------------------
+# (name, type, location, mgmt, north-south tier [0=northbound/close to internet], description)
 COMPONENTS = [
     ("FW-Cluster-FFM", ComponentType.checkpoint, "Zone FFM",
      "cpmgmt.ffm.demo.local - 10.10.80.20", 10,
@@ -98,7 +98,7 @@ COMPONENTS = [
      "Zweiter Provider-Cluster – redundanter Übergang (u.a. VPN-Einwahl); Anbindung über FW-Cluster-BER"),
 ]
 
-# --- Bausteine für Regeln ----------------------------------------------------
+# --- Building blocks for rules -----------------------------------------------
 PEOPLE = [
     ("Max Bauer", "mbauer"), ("Julia Klein", "jklein"), ("Deniz Yilmaz", "dyilmaz"),
     ("Sofia Ricci", "sricci"), ("Jonas Weber", "jweber"), ("Emma Fischer", "efischer"),
@@ -115,7 +115,7 @@ HOST_ROLES = {
     "AUDIT": ["sim", "aud", "col"],
 }
 
-# Typische Dienste je Zielzone
+# Typical services per destination zone
 SERVICES_BY_DEST = {
     "DMZ-WEB": [[("TCP", "443")], [("TCP", "80"), ("TCP", "443")]],
     "PROD-APP": [[("TCP", "443")], [("TCP", "8443")], [("TCP", "8080-8090")]],
@@ -141,7 +141,7 @@ def zone_net(zone: str) -> str | None:
 
 
 def make_host_entry(zone: str) -> dict:
-    """Einzelne IP mit Hostnamen-Alias, z.B. {"ip": "10.10.30.42", "alias": "app07.demo.local"}."""
+    """Single IP with hostname alias, e.g. {"ip": "10.10.30.42", "alias": "app07.demo.local"}."""
     role = random.choice(HOST_ROLES.get(zone, ["srv"]))
     base = zone_net(zone).rsplit(".", 1)[0]
     idx = random.randint(1, 99)
@@ -149,11 +149,11 @@ def make_host_entry(zone: str) -> dict:
 
 
 def make_addresses(zone: str) -> list[dict]:
-    """Adress-Einträge: immer IP/Netz, Alias = Hostname bzw. Netzwerkname."""
+    """Address entries: always IP/network, alias = hostname or network name."""
     if zone == "INET":
         return [{"ip": "any", "alias": "Internet"}]
     kind = random.random()
-    if kind < 0.35:  # ganzes Zonen-Netz mit Netzwerknamen
+    if kind < 0.35:  # entire zone network with network name
         return [{"ip": zone_net(zone), "alias": f"NET-{zone}"}]
     count = 1 if kind < 0.75 else random.randint(2, 4)
     return [make_host_entry(zone) for _ in range(count)]
@@ -168,22 +168,22 @@ def seed(wipe: bool):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     if wipe:
-        # AuditEvent gehört zum Demo-Reset: der Wipe verwirft die komplette
-        # Regel-Historie, sonst verwiesen alte Ereignisse auf gelöschte Regeln
-        # und die Hash-Kette trüge Reste des vorherigen Demo-Zyklus (#26).
+        # AuditEvent is part of the demo reset: the wipe discards the entire
+        # rule history, otherwise old events would reference deleted rules
+        # and the hash chain would carry remnants of the previous demo cycle (#26).
         for model in (AuditEvent, Setting, Comment, RuleVersion, Rule, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
                       AddressComponentMap, AddressEpgMap, Epg, AddressObject,
                       ServiceObject, ComponentLink, SecurityComponent, Vrf):
             db.query(model).delete()
         db.commit()
 
-    # Vorerst eine Umgebung; das Multi-Umgebungs-/VRF-Scoping bleibt vorbereitet
-    # (zweite Umgebung, z.B. OT, kann später über /api/vrfs ergänzt werden)
+    # One environment for now; multi-environment/VRF scoping stays prepared
+    # (a second environment, e.g. OT, can be added later via /api/vrfs)
     vrf_it = Vrf(name="IT", description="Default-Umgebung")
     db.add(vrf_it)
     db.flush()
 
-    # Objektkatalog: wiederverwendbare Adress- und Dienst-Objekte
+    # Object catalog: reusable address and service objects
     db.add_all([
         AddressObject(name="jump01.demo.local", ip="10.10.80.10", description="Zentraler Jump-Host"),
         AddressObject(name="dns01.demo.local", ip="10.10.70.11", description="DNS-Resolver"),
@@ -198,7 +198,7 @@ def seed(wipe: bool):
         ServiceObject(name="Ping", protocol="ICMP", port=""),
     ])
 
-    # Sicherheitskomponenten
+    # Security components
     components = {}
     for name, ctype, location, mgmt, tier, descr in COMPONENTS:
         component = SecurityComponent(name=name, type=ctype, location=location,
@@ -207,7 +207,7 @@ def seed(wipe: bool):
         components[name] = component
     db.flush()
 
-    # Kommunikationsbeziehungen der Komponenten (Topologie-Dokumentation)
+    # Communication relationships of the components (topology documentation)
     fw_ffm_c, fw_ber_c, aci_c = (components[n] for n in
                                  ("FW-Cluster-FFM", "FW-Cluster-BER", "ACI-Fabric-FFM"))
     db.add_all([
@@ -241,7 +241,7 @@ def seed(wipe: bool):
         ),
     ])
 
-    # ACI Anycast Gateways – PBR-Anbindung an den Check Point Cluster (FFM)
+    # ACI anycast gateways – PBR connection to the Check Point cluster (FFM)
     checkpoint_ffm = components["FW-Cluster-FFM"]
     gateways = [
         AciGateway(
@@ -269,37 +269,40 @@ def seed(wipe: bool):
     ]
     db.add_all(gateways)
 
-    # Zonen + vollständige Matrix; BSI P-A-P-Einstufung:
-    # extern = nördlich der P-A-P, pap = innerhalb (DMZ/Transfer), intern = unterhalb
-    PAP_LEVELS = {"INET": "extern", "DMZ-WEB": "pap", "VPN": "pap"}
-    # BSI-Doku je Zone: Verantwortlicher + Schutzbedarf (C, I, A)
+    # Zones + full matrix; BSI P-A-P classification:
+    # extern = north of the P-A-P, pap = inside (DMZ/transfer), intern = below
+    PAP_LEVELS = {"INET": "external", "DMZ-WEB": "pap", "VPN": "pap"}
+    # BSI documentation per zone: owner + protection requirement (C, I, A)
     ZONE_META = {
         "INET":     ("",                    "normal", "normal", "normal"),
-        "DMZ-WEB":  ("Team Web-Betrieb",    "hoch",   "hoch",   "hoch"),
-        "VPN":      ("Team Netzwerk",       "hoch",   "hoch",   "hoch"),
-        "PROD-APP": ("Team Applikationen",  "hoch",   "hoch",   "sehr hoch"),
-        "PROD-DB":  ("Team Datenbanken",    "sehr hoch", "sehr hoch", "sehr hoch"),
+        "DMZ-WEB":  ("Team Web-Betrieb",    "high",   "high",   "high"),
+        "VPN":      ("Team Netzwerk",       "high",   "high",   "high"),
+        "PROD-APP": ("Team Applikationen",  "high",   "high",   "very high"),
+        "PROD-DB":  ("Team Datenbanken",    "very high", "very high", "very high"),
         "TEST":     ("Team Applikationen",  "normal", "normal", "normal"),
         "DEV":      ("Team Entwicklung",    "normal", "normal", "normal"),
-        "CICD":     ("Team Entwicklung",    "hoch",   "hoch",   "normal"),
-        "SHARED":   ("Team Infrastruktur",  "normal", "hoch",   "hoch"),
-        "MGMT":     ("Team Infrastruktur",  "sehr hoch", "sehr hoch", "hoch"),
-        "MON":      ("Team Betrieb",        "hoch",   "hoch",   "hoch"),
-        "AUDIT":    ("Team Security",       "sehr hoch", "sehr hoch", "hoch"),
+        "CICD":     ("Team Entwicklung",    "high",   "high",   "normal"),
+        "SHARED":   ("Team Infrastruktur",  "normal", "high",   "high"),
+        "MGMT":     ("Team Infrastruktur",  "very high", "very high", "high"),
+        "MON":      ("Team Betrieb",        "high",   "high",   "high"),
+        "AUDIT":    ("Team Security",       "very high", "very high", "high"),
     }
     zones = {}
     for order, (name, descr, _net) in enumerate(ZONES):
         owner, cia_c, cia_i, cia_a = ZONE_META.get(name, ("", "normal", "normal", "normal"))
-        # Anzeige-Kennung in 10er-Schritten (Z010, Z020, … – lässt Lücken zum Einfügen)
+        # Display identifier in steps of 10 (Z010, Z020, … – leaves gaps for insertions)
         zone = Zone(name=name, description=descr, sort_order=order,
                     code=f"Z{(order + 1) * 10:03d}",
-                    pap_level=PAP_LEVELS.get(name, "intern"),
+                    pap_level=PAP_LEVELS.get(name, "internal"),
                     owner=owner, cia_c=cia_c, cia_i=cia_i, cia_a=cia_a)
         db.add(zone)
         zones[name] = zone
     db.flush()
-    zc = lambda name: zones[name].code  # Zonen-ID (führend für Regeln)
-    # Netzwerk-Zuordnung: jedes Netzwerk gehört zu genau einer Zone; "any" -> INET
+
+    def zc(name):  # zone ID (leading identifier for rules)
+        return zones[name].code
+
+    # Network assignment: every network belongs to exactly one zone; "any" -> INET
     for name, _descr, net in ZONES:
         if net:
             db.add(ZoneNetwork(cidr=net, zone_id=zones[name].id, vrf_id=vrf_it.id, description=f"NET-{name}"))
@@ -316,11 +319,11 @@ def seed(wipe: bool):
                 )
             )
 
-    # ~100 Regeln: 88 zwischen erlaubten Zonen (FW), 12 intra-zonal (ACI)
+    # ~100 rules: 88 between allowed zones (FW), 12 intra-zone (ACI)
     pairs = sorted(ALLOWED)
     intra_zones = ["PROD-APP", "PROD-DB", "SHARED", "TEST", "DEV", "CICD"]
     plans = [random.choice(pairs) for _ in range(88)] + \
-            [(z, z) for z in (intra_zones * 2)]  # 12 Intra-Zonen-Regeln
+            [(z, z) for z in (intra_zones * 2)]  # 12 intra-zone rules
 
     statuses = (
         [RuleStatus.approved] * 60 + [RuleStatus.in_review] * 15 + [RuleStatus.draft] * 14
@@ -334,16 +337,16 @@ def seed(wipe: bool):
     fw_ber = components["FW-Cluster-BER"]
     aci_ffm = components["ACI-Fabric-FFM"]
 
-    # Adress->Komponenten-Zuordnung: Zonen-Netze verteilt auf die beiden Cluster,
-    # ACI-Fabric zusätzlich für Intra-Zonen-Contracts
-    # DMZ hängt am BER-Cluster: Internet-Pfad ist durchgängig Provider -> BER,
-    # der FFM-Cluster bedient nur interne Zonen (kein direkter Internet-Pfad)
+    # Address->component mapping: zone networks spread across the two clusters,
+    # ACI fabric additionally for intra-zone contracts
+    # DMZ hangs off the BER cluster: the internet path is consistently provider -> BER,
+    # the FFM cluster only serves internal zones (no direct internet path)
     ZONE_FW = {
         "PROD-APP": fw_ffm, "SHARED": fw_ffm,
         "PROD-DB": fw_ffm_dc, "MON": fw_ffm_dc, "AUDIT": fw_ffm_dc,
         "DMZ-WEB": fw_ber, "VPN": fw_ber, "MGMT": fw_ber, "TEST": fw_ber, "DEV": fw_ber, "CICD": fw_ber,
     }
-    NO_ACI_ZONES = {"MGMT", "AUDIT"}  # reine FW-Zonen ohne ACI-Segmentierung
+    NO_ACI_ZONES = {"MGMT", "AUDIT"}  # pure FW zones without ACI segmentation
     for zone_name, fw in ZONE_FW.items():
         ids = {fw.id} if zone_name in NO_ACI_ZONES else {fw.id, aci_ffm.id}
         db.add(
@@ -352,25 +355,25 @@ def seed(wipe: bool):
                 component_ids=sorted(ids), created_by="demo-seed",
             )
         )
-        zones[zone_name].components = [fw]  # "Angebunden an": explizite Firewall-Anbindung
+        zones[zone_name].components = [fw]  # "Angebunden an" field: explicit firewall connection
     zones["INET"].components = [components["FW-Cluster-Provider"]]
-    zones["DMZ-WEB"].components = [fw_ber, components["FW-Cluster-Provider"]]  # Beispiel: Mehrfach-Anbindung
-    # Shared Services (DNS/NTP/Repo) sind von beiden Standorten erreichbar
+    zones["DMZ-WEB"].components = [fw_ber, components["FW-Cluster-Provider"]]  # example: multiple connections
+    # Shared services (DNS/NTP/repo) are reachable from both sites
     zones["SHARED"].components = [fw_ffm, fw_ber]
-    # Administration/Jump-Hosts erreichen alle drei Standort-Cluster
+    # Administration/jump hosts reach all three site clusters
     zones["MGMT"].components = [fw_ber, fw_ffm, fw_ffm_dc]
-    # Audit/SIEM sammelt von allen internen Firewall-Clustern
+    # Audit/SIEM collects from all internal firewall clusters
     zones["AUDIT"].components = [fw_ber, fw_ffm, fw_ffm_dc]
-    # VPN-Einwahl terminiert an beiden Provider-Clustern (redundant), weiter über BER
+    # VPN dial-in terminates at both provider clusters (redundant), then via BER
     zones["VPN"].components = [fw_ber, components["FW-Cluster-Provider"],
                                components["FW-Cluster-Provider-2"]]
-    # Internet ("any") erreicht die Umgebung über den Provider-Cluster
+    # Internet ("any") reaches the environment via the provider cluster
     db.add(AddressComponentMap(
         ip="any", alias="Internet", vrf_id=vrf_it.id,
         component_ids=[components["FW-Cluster-Provider"].id], created_by="demo-seed",
     ))
 
-    # ACI: EPG-Katalog + Adresse->EPG-Zuordnung (Basis des Contract-Exports)
+    # ACI: EPG catalog + address->EPG mapping (basis of the contract export)
     ACI_ZONES = ["PROD-APP", "PROD-DB", "SHARED", "TEST", "DEV", "CICD"]
     epgs = {}
     for zone_name in ACI_ZONES:
@@ -380,7 +383,7 @@ def seed(wipe: bool):
         )
         db.add(epg)
         epgs[zone_name] = epg
-    # External EPG (L3Out) für Nord-Süd-Verkehr aus dem MGMT-Netz in die Fabric
+    # External EPG (L3Out) for north-south traffic from the MGMT network into the fabric
     l3out_mgmt = Epg(
         name="epg-l3out-mgmt", tenant="DEMO", app_profile="AP-DEMO",
         description="External EPG (L3Out) für Administration aus dem MGMT-Netz",
@@ -398,8 +401,8 @@ def seed(wipe: bool):
             return [aci_ffm]
         fws = {ZONE_FW[z].name: ZONE_FW[z] for z in (src_zone, dst_zone) if z in ZONE_FW}
         if src_zone == "INET" or dst_zone == "INET":
-            # Internet läuft ausschließlich über Provider -> BER; der FW-Cluster FFM
-            # hat keinen direkten Internet-Pfad (Kundenumgebungs-Beispiel)
+            # Internet traffic runs exclusively via provider -> BER; the FW cluster FFM
+            # has no direct internet path (customer environment example)
             provider = components["FW-Cluster-Provider"]
             return sorted([provider, fw_ber], key=lambda c: c.name)
         return sorted(fws.values(), key=lambda c: c.name)
@@ -407,7 +410,7 @@ def seed(wipe: bool):
     for i, (src_zone, dst_zone) in enumerate(plans, start=1):
         rule_id = f"SR{i:05d}"
         intra = src_zone == dst_zone
-        # Komponenten wie die automatische Auflösung: Intra-Zone -> ACI, sonst FW-Cluster
+        # Components as the automatic resolution would pick them: intra-zone -> ACI, otherwise FW cluster
         rule_components_list = resolve_seed_components(src_zone, dst_zone)
         app = random.choice(APPLICATIONS)
         requestor, owner = random.choice(PEOPLE), random.choice(PEOPLE)
@@ -417,9 +420,9 @@ def seed(wipe: bool):
         impl_status = {}
         if status == RuleStatus.approved:
             for c in rule_components_list:
-                impl_status[c.name] = random.choice(["umgesetzt", "umgesetzt", "neu"])
+                impl_status[c.name] = random.choice(["implemented", "implemented", "new"])
         elif status == RuleStatus.deactivated:
-            impl_status = {c.name: "deaktiviert" for c in rule_components_list}
+            impl_status = {c.name: "deactivated" for c in rule_components_list}
 
         justification = random.choice(JUSTIFICATIONS).format(app=app, dst_zone=dst_zone)
         rule = Rule(
@@ -466,7 +469,7 @@ def seed(wipe: bool):
                 )
             )
 
-    # Zwei bewusste Konflikt-Beispiele (Überlappung) zum Testen der Warnungen
+    # Two deliberate conflict examples (overlap) for testing the warnings
     for rid, src, src_alias in (
         ("SR00101", "10.10.20.0/24", "NET-VPN"),
         ("SR00102", "10.10.20.128/25", "NET-VPN-B"),
@@ -480,7 +483,7 @@ def seed(wipe: bool):
             services=[{"protocol": "TCP", "port": "22"}], action=RuleAction.permit,
             justification="Demo: absichtlich überlappende Regel für Konflikt-Warnung",
             requestor="Max Bauer", owner="mbauer", change_id="CHN2026999",
-            status=RuleStatus.approved, impl_status={fw_ber.name: "umgesetzt"},
+            status=RuleStatus.approved, impl_status={fw_ber.name: "implemented"},
             created_by="demo-seed",
         )
         db.add(rule)
@@ -488,9 +491,9 @@ def seed(wipe: bool):
         db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
                            change_note="Demo-Regel angelegt", changed_by="demo-seed"))
 
-    # Demo-Regel über alle drei Komponenten: MGMT (hinter FW BER) -> PROD-APP (FFM).
-    # Umsetzung: Firewall-Regel auf beiden Clustern (Standort-Transit) plus
-    # ACI Contract, weil das Ziel-Segment Contracts erzwingt (L3Out -> EPG).
+    # Demo rule spanning all three components: MGMT (behind FW BER) -> PROD-APP (FFM).
+    # Implementation: firewall rule on both clusters (site transit) plus an
+    # ACI contract, because the target segment enforces contracts (L3Out -> EPG).
     rule = Rule(
         rule_id="SR00103",
         vrf_id=vrf_it.id, name="Admin-Zugriff-PROD-APP", application="Infrastruktur",
@@ -505,8 +508,8 @@ def seed(wipe: bool):
                       "Transit über beide FW-Cluster, ACI Contract im Ziel-Segment)",
         business_context="Interne IT", requestor="Max Bauer", owner="mbauer",
         change_id="CHN2027001", status=RuleStatus.approved,
-        impl_status={"FW-Cluster-BER": "umgesetzt", "FW-Cluster-FFM": "umgesetzt",
-                     "ACI-Fabric-FFM": "neu"},
+        impl_status={"FW-Cluster-BER": "implemented", "FW-Cluster-FFM": "implemented",
+                     "ACI-Fabric-FFM": "new"},
         created_by="demo-seed",
     )
     db.add(rule)
@@ -514,8 +517,8 @@ def seed(wipe: bool):
     db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
                        change_note="Demo-Regel angelegt", changed_by="demo-seed"))
 
-    # Minimalprinzip: Die Demo-Matrix ist vollständig gepflegt -> default-deny
-    # für ungepflegte Zonen-Beziehungen aktivieren (BSI-Empfehlung, Issue #13)
+    # Least privilege: the demo matrix is fully maintained -> enable default-deny
+    # for unmaintained zone relationships (BSI recommendation, issue #13)
     from app.settings import set_setting
 
     set_setting(db, "zone_matrix_default", "deny")
@@ -528,14 +531,14 @@ def seed(wipe: bool):
     gateway_count = db.query(AciGateway).count()
     db.close()
     print(
-        f"Demo-Daten: {zone_count} Zonen, {policy_count} Matrix-Einträge, "
-        f"{rules_count} Regeln, {component_count} Sicherheitskomponenten, "
+        f"Demo data: {zone_count} zones, {policy_count} matrix entries, "
+        f"{rules_count} rules, {component_count} security components, "
         f"{gateway_count} ACI Gateways."
     )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--wipe", action="store_true", help="Vorhandene Regeln und Zonen löschen")
+    parser.add_argument("--wipe", action="store_true", help="Delete existing rules and zones first")
     args = parser.parse_args()
     seed(args.wipe)

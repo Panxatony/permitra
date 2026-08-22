@@ -1,12 +1,12 @@
-"""Host-Firewall-Export: erzeugt für eine Ziel-IP die lokalen Firewall-Regeln
-des Servers aus allen freigegebenen permit-Regeln, deren Ziel die IP abdeckt.
+"""Host firewall export: builds the local firewall rules of a server for a given
+target IP from all approved permit rules whose destination covers that IP.
 
-Formate:
-  - debian:  nftables-Regelwerk (/etc/nftables.conf, Debian 10+)
-  - redhat:  firewalld-Skript mit Rich Rules (RHEL/CentOS/Rocky)
-  - sles:    iptables-Skript (klassisch; SLES 15 nutzt firewalld -> RedHat-Export)
+Formats:
+  - debian:  nftables rule set (/etc/nftables.conf, Debian 10+)
+  - redhat:  firewalld script with rich rules (RHEL/CentOS/Rocky)
+  - sles:    iptables script (classic; SLES 15 uses firewalld -> RedHat export)
 
-Jede Zeile trägt die SR-ID als Kommentar (Rückverfolgbarkeit/Drift).
+Every line carries the SR ID as a comment (traceability/drift).
 """
 from ..models import Rule, RuleAction, RuleStatus
 from ..validation import parse_network
@@ -20,7 +20,7 @@ HOST_OS = {
 
 
 def matching_rules(rules: list[Rule], target_ip: str) -> list[tuple[Rule, bool]]:
-    """Freigegebene permit-Regeln, deren Ziel die IP abdeckt; Flag = nur über 'any'."""
+    """Approved permit rules whose destination covers the IP; flag = only via 'any'."""
     net = parse_network(target_ip)
     result = []
     for rule in rules:
@@ -41,7 +41,7 @@ def matching_rules(rules: list[Rule], target_ip: str) -> list[tuple[Rule, bool]]
 
 
 def _sources(rule: Rule) -> list[str | None]:
-    """Quell-CIDRs der Regel; None = beliebige Quelle ('any')."""
+    """Source CIDRs of the rule; None = any source ('any')."""
     sources = []
     for entry in rule.source or []:
         ip = (entry.get("ip") or "").strip()
@@ -57,7 +57,7 @@ def _sources(rule: Rule) -> list[str | None]:
 
 
 def _services(rule: Rule) -> list[tuple[str, str]]:
-    """[(protokoll, port-oder-leer)] mit aufgelösten Mehrfach-Ports."""
+    """[(protocol, port-or-empty)] with multi-port specifications resolved."""
     result = []
     for svc in rule.services or []:
         for proto in split_protocols(svc.get("protocol", "")):
@@ -79,8 +79,8 @@ def _comment(rule: Rule) -> str:
 def export_debian(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
     lines = [
         "#!/usr/sbin/nft -f",
-        f"# Permitra Host-Firewall für {target_ip} (Debian/nftables)",
-        f"# Regeln: {', '.join(r.rule_id for r, _ in matched)}",
+        f"# Permitra host firewall for {target_ip} (Debian/nftables)",
+        f"# Rules: {', '.join(r.rule_id for r, _ in matched)}",
         "flush ruleset",
         "table inet filter {",
         "  chain input {",
@@ -91,7 +91,7 @@ def export_debian(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
         "    meta l4proto ipv6-icmp accept",
     ]
     for rule, only_any in matched:
-        lines.append(f"    # {_comment(rule)}{' (Ziel via any)' if only_any else ''}")
+        lines.append(f"    # {_comment(rule)}{' (destination via any)' if only_any else ''}")
         for src in _sources(rule):
             saddr = ""
             if src:
@@ -110,12 +110,12 @@ def export_debian(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
 def export_redhat(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
     lines = [
         "#!/bin/bash",
-        f"# Permitra Host-Firewall für {target_ip} (RHEL/firewalld, Rich Rules)",
-        f"# Regeln: {', '.join(r.rule_id for r, _ in matched)}",
+        f"# Permitra host firewall for {target_ip} (RHEL/firewalld, rich rules)",
+        f"# Rules: {', '.join(r.rule_id for r, _ in matched)}",
         "set -e",
     ]
     for rule, only_any in matched:
-        lines.append(f"# {_comment(rule)}{' (Ziel via any)' if only_any else ''}")
+        lines.append(f"# {_comment(rule)}{' (destination via any)' if only_any else ''}")
         for src in _sources(rule):
             family = "ipv6" if (src and ":" in src) else "ipv4"
             src_part = f' source address="{src}"' if src else ""
@@ -133,9 +133,9 @@ def export_redhat(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
 def export_sles(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
     lines = [
         "#!/bin/bash",
-        f"# Permitra Host-Firewall für {target_ip} (SLES/iptables)",
-        "# Hinweis: SLES 15 nutzt firewalld – dort den RedHat-Export verwenden.",
-        f"# Regeln: {', '.join(r.rule_id for r, _ in matched)}",
+        f"# Permitra host firewall for {target_ip} (SLES/iptables)",
+        "# Note: SLES 15 uses firewalld – use the RedHat export there.",
+        f"# Rules: {', '.join(r.rule_id for r, _ in matched)}",
         "set -e",
         "iptables -F INPUT",
         "ip6tables -F INPUT",
@@ -147,7 +147,7 @@ def export_sles(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
         "ip6tables -A INPUT -p ipv6-icmp -j ACCEPT",
     ]
     for rule, only_any in matched:
-        lines.append(f"# {_comment(rule)}{' (Ziel via any)' if only_any else ''}")
+        lines.append(f"# {_comment(rule)}{' (destination via any)' if only_any else ''}")
         for src in _sources(rule):
             cmd = "ip6tables" if (src and ":" in src) else "iptables"
             src_part = f" -s {src}" if src else ""
@@ -170,7 +170,7 @@ EXPORTERS = {"debian": export_debian, "redhat": export_redhat, "sles": export_sl
 
 
 def export(os_name: str, target_ip: str, rules: list[Rule]) -> tuple[str, list[str]]:
-    """Liefert (Inhalt, Liste der verwendeten Rule-IDs)."""
+    """Returns (content, list of the rule IDs used)."""
     matched = matching_rules(rules, target_ip)
     content = EXPORTERS[os_name](target_ip, matched)
     return content, [r.rule_id for r, _ in matched]

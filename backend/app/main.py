@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,34 +10,40 @@ from .database import SessionLocal
 from .expiry import expire_rules
 from .migrations import run_migrations
 from .routers import (
-    netbox_router,
-    api_tokens_router,
-    audit_router,
-    settings_router,
     aci_gateways_router,
     address_map_router,
+    api_tokens_router,
+    audit_router,
     auth_router,
+    components_router,
     dashboard_router,
     epgs_router,
-    objects_router,
-    components_router,
     export_router,
+    netbox_router,
+    objects_router,
     rules_router,
+    settings_router,
     users_router,
     vrfs_router,
     zones_router,
 )
 from .seed import seed_users
 
+
+def _lifespan(app):          # eigentliche Implementierung weiter unten
+    return lifespan(app)
+
+
 app = FastAPI(
+    lifespan=_lifespan,
     title="Permitra",
-    description="Zentrale Verwaltung von Sicherheitsregeln für Firewalls (Juniper SRX, Check Point) und ACI Contracts",
+    description="Central management of security rules for firewalls (Juniper SRX, Check Point) and ACI contracts",
     version="0.1.0",
 )
 
-# CORS-Origins konfigurierbar (PERMITRA_CORS_ORIGINS, kommagetrennt).
-# Default: nur lokale Entwicklungs-Origins. In Produktion die echte Frontend-URL
-# setzen; leer/"*" wird bewusst NICHT als Wildcard akzeptiert (credentials=True).
+# CORS origins are configurable (PERMITRA_CORS_ORIGINS, comma-separated).
+# Default: local development origins only. In production set the real frontend
+# URL; empty/"*" is deliberately NOT accepted as a wildcard (credentials=True).
 _cors_env = os.environ.get("PERMITRA_CORS_ORIGINS", "").strip()
 CORS_ORIGINS = (
     [o.strip() for o in _cors_env.split(",") if o.strip() and o.strip() != "*"]
@@ -73,22 +80,21 @@ app.include_router(vrfs_router.router)
 logger = logging.getLogger("permitra")
 
 
-# Die Hintergrund-Jobs arbeiten mit synchronem I/O: SQLAlchemy-Sessions, SMTP
-# und die SIEM-Zustellung (urllib/socket, je 5 s Zeitlimit). In einer
-# async-Funktion direkt aufgerufen, würde das den Event-Loop blockieren – ein
-# nicht erreichbares SIEM legte damit den gesamten Webserver zeitweise still.
-# Deshalb läuft die eigentliche Arbeit über asyncio.to_thread in einem
-# Arbeits-Thread; die Session wird dort erzeugt und geschlossen, sie wandert
-# also nie zwischen Threads.
+# The background jobs use synchronous I/O: SQLAlchemy sessions, SMTP and the
+# SIEM delivery (urllib/socket, 5 s timeout each). Called directly inside an
+# async function this would block the event loop - an unreachable SIEM would
+# then temporarily stall the entire web server. The actual work therefore runs
+# via asyncio.to_thread in a worker thread; the session is created and closed
+# there, so it never travels between threads.
 
 def _expiry_once() -> int:
-    """Ein Durchlauf der Gültigkeitsprüfung (blockierend, läuft im Thread)."""
+    """One pass of the validity check (blocking, runs in a thread)."""
     from . import notifications
     from .expiry import expiring_rules
 
     db = SessionLocal()
     try:
-        # Vor dem Deaktivieren den Stand für die Rezertifizierungs-Mail erfassen
+        # Capture the state for the recertification mail before deactivating
         soon_expired, soon_expiring = expiring_rules(db, days=30)
         count = expire_rules(db)
         notifications.recertification_due(db, soon_expired, soon_expiring)
@@ -98,20 +104,20 @@ def _expiry_once() -> int:
 
 
 async def expiry_job():
-    """Täglicher Job: abgelaufene freigegebene Regeln automatisch deaktivieren."""
+    """Daily job: automatically deactivate expired approved rules."""
     while True:
         try:
             count = await asyncio.to_thread(_expiry_once)
             if count:
-                logger.info("Gültigkeits-Job: %d Regel(n) automatisch deaktiviert", count)
-        except Exception:  # Job darf die App nie mitreißen
-            logger.exception("Gültigkeits-Job fehlgeschlagen")
+                logger.info("Validity job: %d rule(s) automatically deactivated", count)
+        except Exception:  # the job must never take the app down with it
+            logger.exception("Validity job failed")
         await asyncio.sleep(24 * 3600)
 
 
 def _siem_delivery_once() -> tuple[dict, dict]:
-    """Ein Zustelldurchlauf (blockierend, läuft im Thread): erst die Ereignisse,
-    dann die Prüfpunkte zur Verankerung des Ketten-Endes."""
+    """One delivery pass (blocking, runs in a thread): first the events, then the
+    checkpoints that anchor the end of the chain."""
     from . import audit
 
     db = SessionLocal()
@@ -121,17 +127,17 @@ def _siem_delivery_once() -> tuple[dict, dict]:
         db.close()
 
 
-SIEM_INTERVAL = 10          # Sekunden zwischen zwei Durchläufen
-SIEM_MAX_BACKOFF = 300      # Obergrenze, wenn das Ziel nicht erreichbar ist
+SIEM_INTERVAL = 10          # seconds between two passes
+SIEM_MAX_BACKOFF = 300      # upper bound when the target is unreachable
 
 
 async def siem_delivery_job():
-    """Stellt ausstehende Audit-Ereignisse zuverlässig an ein SIEM zu (#26).
-    Der Zustand liegt in der Datenbank, deshalb übersteht die Zustellung
-    Neustarts (at-least-once). Läuft nur, wenn ein SIEM-Ziel konfiguriert ist.
+    """Reliably delivers pending audit events to a SIEM (#26).
+    The state lives in the database, so delivery survives restarts
+    (at-least-once). Runs only if a SIEM target is configured.
 
-    Ist das Ziel nicht erreichbar, wächst der Abstand schrittweise bis
-    SIEM_MAX_BACKOFF – sonst liefe jeder Durchlauf in dieselben Zeitlimits."""
+    If the target is unreachable, the interval grows step by step up to
+    SIEM_MAX_BACKOFF - otherwise every pass would run into the same timeouts."""
     from . import audit
 
     delay = SIEM_INTERVAL
@@ -140,23 +146,23 @@ async def siem_delivery_job():
             if audit.push_enabled():
                 result, anchors = await asyncio.to_thread(_siem_delivery_once)
                 if result.get("sent"):
-                    logger.info("SIEM-Zustellung: %d Ereignis(se) gesendet, "
-                                "%d ausstehend", result["sent"], result["pending"])
+                    logger.info("SIEM delivery: %d event(s) sent, "
+                                "%d pending", result["sent"], result["pending"])
                 if anchors.get("sent"):
-                    logger.info("SIEM-Zustellung: %d Prüfpunkt(e) verankert",
+                    logger.info("SIEM delivery: %d checkpoint(s) anchored",
                                 anchors["sent"])
                 stuck = (result.get("pending") or 0) and not result.get("sent")
                 delay = min(delay * 2, SIEM_MAX_BACKOFF) if stuck else SIEM_INTERVAL
             else:
                 delay = SIEM_INTERVAL
-        except Exception:  # Zustell-Job darf die App nie mitreißen
-            logger.exception("SIEM-Zustellung fehlgeschlagen")
+        except Exception:  # the delivery job must never take the app down with it
+            logger.exception("SIEM delivery failed")
             delay = min(delay * 2, SIEM_MAX_BACKOFF)
         await asyncio.sleep(delay)
 
 
 def _checkpoint_once() -> tuple[int, str] | None:
-    """Setzt einen Prüfpunkt (blockierend, läuft im Thread)."""
+    """Writes a checkpoint (blocking, runs in a thread)."""
     from . import audit
 
     db = SessionLocal()
@@ -168,29 +174,43 @@ def _checkpoint_once() -> tuple[int, str] | None:
 
 
 async def audit_checkpoint_job():
-    """Verankert das Ende der Audit-Kette regelmäßig (#26).
+    """Regularly anchors the end of the audit chain (#26).
 
-    Die Verkettung erkennt Änderungen im Bestand, nicht aber das Abschneiden
-    der jüngsten Einträge. Ein Prüfpunkt hält den erreichten Stand fest; über
-    die SIEM-Zustellung verlässt er die Anwendung und ist damit dem Zugriff
-    auf die Datenbank entzogen."""
+    The hash chain detects modifications of existing entries, but not the
+    truncation of the most recent ones. A checkpoint pins down the state
+    reached; via the SIEM delivery it leaves the application and is thus beyond
+    the reach of anyone with database access."""
     while True:
         try:
             summary = await asyncio.to_thread(_checkpoint_once)
             if summary:
-                logger.debug("Audit-Prüfpunkt: %d Ereignisse, Head %s", *summary)
-        except Exception:  # darf die App nie mitreißen
-            logger.exception("Audit-Prüfpunkt fehlgeschlagen")
+                logger.debug("Audit checkpoint: %d events, head %s", *summary)
+        except Exception:  # must never take the app down with it
+            logger.exception("Audit checkpoint failed")
         await asyncio.sleep(int(os.environ.get("AUDIT_CHECKPOINT_INTERVAL", "3600")))
 
 
-@app.on_event("startup")
-def startup():
-    run_migrations()
-    seed_users()
-    asyncio.get_event_loop().create_task(expiry_job())
-    asyncio.get_event_loop().create_task(siem_delivery_job())
-    asyncio.get_event_loop().create_task(audit_checkpoint_job())
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Startup and shutdown.
+
+    Migrations and seeding are blocking database work and therefore run in a
+    worker thread - otherwise they would stall the event loop while the
+    application is coming up. The background tasks are cancelled on shutdown so
+    a reload does not leave orphaned jobs behind."""
+    await asyncio.to_thread(run_migrations)
+    await asyncio.to_thread(seed_users)
+    tasks = [
+        asyncio.create_task(expiry_job()),
+        asyncio.create_task(siem_delivery_job()),
+        asyncio.create_task(audit_checkpoint_job()),
+    ]
+    try:
+        yield
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 @app.get("/api/health")

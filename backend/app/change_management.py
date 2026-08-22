@@ -1,21 +1,21 @@
-"""Optionale Anbindung an Change-Management-Systeme (z.B. ServiceNow).
+"""Optional integration with change management systems (e.g. ServiceNow).
 
-Permitra sendet bei relevanten Ereignissen (Regel eingereicht/freigegeben/
-abgelehnt, Zonen-/Netzwerk-Antrag entschieden) einen generischen JSON-Webhook.
-Die Integration ist per Umgebungsvariablen aktivierbar und darf den eigentlichen
-Vorgang niemals blockieren (fire-and-forget, kurzer Timeout, Fehler nur im Log).
+Permitra sends a generic JSON webhook on relevant events (rule submitted/
+approved/rejected, zone or network request decided). The integration is enabled
+via environment variables and must never block the actual operation
+(fire-and-forget, short timeout, errors only in the log).
 
-Konfiguration:
-  CHANGE_WEBHOOK_URL    Ziel-URL (leer = Integration aus)
-  CHANGE_WEBHOOK_TOKEN  optional; wird als "Authorization: Bearer <token>" gesendet
+Configuration:
+  CHANGE_WEBHOOK_URL    target URL (empty = integration disabled)
+  CHANGE_WEBHOOK_TOKEN  optional; sent as "Authorization: Bearer <token>"
 
-Payload (stabil, für Adapter wie ServiceNow gedacht):
+Payload (stable, intended for adapters such as ServiceNow):
   {"event": "rule.approved", "source": "permitra",
    "timestamp": "2026-08-22T09:00:00+00:00", "data": {...}}
 
-Ein ServiceNow-Adapter (z.B. Scripted REST API oder MID-Server) kann daraus ein
-Change-Ticket erzeugen; die Ticket-Nummer lässt sich anschließend über
-PUT /api/rules/{id} im Feld change_id zurückschreiben.
+A ServiceNow adapter (e.g. Scripted REST API or MID server) can turn this into a
+change ticket; the ticket number can then be written back via
+PUT /api/rules/{id} in the change_id field.
 """
 from __future__ import annotations
 
@@ -35,21 +35,23 @@ def enabled() -> bool:
 
 
 def _send(url: str, token: str, body: bytes) -> None:
-    request = urllib.request.Request(
+    # S310 rationale: the target URL is operator-configured (CHANGE_WEBHOOK_URL), not
+    # user-supplied; see the SSRF note in the security audit.
+    request = urllib.request.Request(  # noqa: S310
         url, data=body, method="POST",
         headers={"Content-Type": "application/json", "User-Agent": "Permitra"},
     )
     if token:
         request.add_header("Authorization", f"Bearer {token}")
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:
-            log.info("Change-Webhook %s: HTTP %s", url, response.status)
-    except Exception as exc:  # Integration darf den Vorgang nie blockieren
-        log.warning("Change-Webhook fehlgeschlagen (%s): %s", url, exc)
+        with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310
+            log.info("Change webhook %s: HTTP %s", url, response.status)
+    except Exception as exc:  # the integration must never block the operation
+        log.warning("Change webhook failed (%s): %s", url, exc)
 
 
 def notify(event: str, data: dict) -> None:
-    """Sendet ein Ereignis an das Change-Management-System (asynchron, optional)."""
+    """Sends an event to the change management system (asynchronous, optional)."""
     url = os.environ.get("CHANGE_WEBHOOK_URL", "").strip()
     if not url:
         return
@@ -64,7 +66,7 @@ def notify(event: str, data: dict) -> None:
 
 
 def rule_payload(rule) -> dict:
-    """Kompakte, stabile Regel-Darstellung für Change-Tickets."""
+    """Compact, stable rule representation for change tickets."""
     return {
         "rule_id": rule.rule_id,
         "name": rule.name,

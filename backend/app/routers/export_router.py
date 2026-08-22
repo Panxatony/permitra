@@ -1,19 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from .. import audit
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 
+from .. import audit
 from ..auth import get_current_user
 from ..database import get_db
 from ..exporters import aci, aerleon_export, checkpoint, generic, hostfw, juniper
-from ..validation import parse_network
 from ..models import Rule, RuleStatus, User
+from ..validation import parse_network
 
 router = APIRouter(prefix="/api/export", tags=["export"])
 
 FORMATS = {
-    "csv": ("text/csv", generic.export_csv, "regeln.csv"),
-    "json": ("application/json", generic.export_json, "regeln.json"),
+    "csv": ("text/csv", generic.export_csv, "rules.csv"),
+    "json": ("application/json", generic.export_json, "rules.json"),
     "juniper": ("text/plain", juniper.export, "juniper-srx.conf"),
     "checkpoint-cli": ("text/x-shellscript", checkpoint.export_cli, "checkpoint-mgmt-cli.sh"),
     "checkpoint-api": ("application/json", checkpoint.export_api_json, "checkpoint-api.json"),
@@ -32,7 +32,7 @@ def formats(_: User = Depends(get_current_user)):
 
 @router.get("/aerleon-targets")
 def aerleon_targets(_: User = Depends(get_current_user)):
-    """Verfügbare Capirca-/Aerleon-Ziel-Plattformen."""
+    """Available Capirca/Aerleon target platforms."""
     return [
         {"key": key, "label": label, "zone_based": key in aerleon_export.ZONE_BASED}
         for key, (_tpl, label) in aerleon_export.TARGETS.items()
@@ -43,18 +43,18 @@ def aerleon_targets(_: User = Depends(get_current_user)):
 def aerleon(
     request: Request,
     target: str,
-    component_id: int | None = Query(None, description="Nur Regeln dieser Komponente"),
-    only_approved: bool = Query(True, description="Nur freigegebene Regeln exportieren"),
+    component_id: int | None = Query(None, description="Only rules of this component"),
+    only_approved: bool = Query(True, description="Export approved rules only"),
     download: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Capirca-/Aerleon-Export: Permitra-Regeln als native Konfiguration der
-    Ziel-Plattform bzw. als Policy-YAML für bestehende Capirca-Pipelines."""
+    """Capirca/Aerleon export: Permitra rules as the target platform's native
+    configuration, or as policy YAML for existing Capirca pipelines."""
     if target != "policy" and target not in aerleon_export.TARGETS:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"Unbekanntes Ziel '{target}'. Erlaubt: policy, {', '.join(aerleon_export.TARGETS)}",
+            f"Unknown target '{target}'. Allowed: policy, {', '.join(aerleon_export.TARGETS)}",
         )
     query = db.query(Rule).filter(Rule.deleted_at.is_(None))
     if only_approved:
@@ -63,7 +63,7 @@ def aerleon(
     if component_id:
         rules = [r for r in rules if any(c.id == component_id for c in r.components)]
     if not rules:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Keine passenden Regeln")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No matching rules")
     try:
         if target == "policy":
             content = aerleon_export.export_policy_yaml(rules)
@@ -71,17 +71,17 @@ def aerleon(
         else:
             content = aerleon_export.export(rules, target)
             filename = f"permitra-{target}.acl"
-    except Exception as exc:  # Aerleon meldet Detailfehler als ACLGeneratorError
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            f"Aerleon-Generierung fehlgeschlagen: {exc}")
+    except Exception as exc:  # Aerleon reports detailed failures as ACLGeneratorError
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            f"Aerleon generation failed: {exc}") from exc
     headers = {}
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    nicht_freigegeben = [r.rule_id for r in rules if r.status != RuleStatus.approved]
+    not_approved = [r.rule_id for r in rules if r.status != RuleStatus.approved]
     audit.record(db, "export", "export.rules", actor=user.username,
-                 object=f"aerleon/{target}", detail=f"{len(rules)} Regel(n)"
-                 + (f", NICHT freigegeben: {', '.join(nicht_freigegeben)}"
-                    if nicht_freigegeben else ""),
+                 object=f"aerleon/{target}", detail=f"{len(rules)} rule(s)"
+                 + (f", NOT approved: {', '.join(not_approved)}"
+                    if not_approved else ""),
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type="text/plain", headers=headers)
 
@@ -90,21 +90,21 @@ def aerleon(
 def host_export(
     request: Request,
     os_name: str,
-    ip: str = Query(..., description="Ziel-IP des Servers, z.B. 10.10.80.10"),
-    vrf: str | None = Query(None, description="Umgebung/VRF; leer = Default"),
+    ip: str = Query(..., description="Target IP of the server, e.g. 10.10.80.10"),
+    vrf: str | None = Query(None, description="Environment/VRF; empty = default"),
     download: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Host-Firewall-Regeln für einen Ziel-Server: alle freigegebenen permit-Regeln,
-    deren Ziel die IP abdeckt, als lokale Firewall-Konfiguration (Debian/RedHat/SLES)."""
+    """Host firewall rules for one target server: every approved permit rule whose
+    destination covers the IP, as a local firewall configuration (Debian/RedHat/SLES)."""
     if os_name not in hostfw.HOST_OS:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"Unbekanntes Host-OS '{os_name}'. Erlaubt: {', '.join(hostfw.HOST_OS)}",
+            f"Unknown host OS '{os_name}'. Allowed: {', '.join(hostfw.HOST_OS)}",
         )
     if parse_network(ip.strip()) is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"'{ip}' ist keine gültige IP-Adresse")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"'{ip}' is not a valid IP address")
     from ..vrf import get_vrf
 
     vrf_obj = get_vrf(db, vrf)
@@ -113,14 +113,14 @@ def host_export(
     if not used:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"Keine freigegebene permit-Regel hat {ip} als Ziel",
+            f"No approved permit rule has {ip} as its destination",
         )
     filename, _label = hostfw.HOST_OS[os_name]
     headers = {}
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{ip.replace("/", "_")}-{filename}"'
     audit.record(db, "export", "export.rules", actor=user.username,
-                 object=f"host/{os_name}", detail=f"Ziel {ip}, {len(used)} Regel(n)",
+                 object=f"host/{os_name}", detail=f"destination {ip}, {len(used)} rule(s)",
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type="text/plain", headers=headers)
 
@@ -129,17 +129,17 @@ def host_export(
 def export(
     request: Request,
     fmt: str,
-    ids: str | None = Query(None, description="Kommagetrennte Rule-IDs; leer = alle passenden"),
-    component_id: int | None = Query(None, description="Nur Regeln dieser Komponente exportieren"),
-    app_id: str | None = Query(None, description="Nur Regeln dieser Anwendungs-ID (Report je App)"),
-    only_approved: bool = Query(True, description="Nur freigegebene Regeln exportieren"),
-    platform_filter: bool = Query(True, description="Nur Regeln, deren Plattform zum Format passt"),
+    ids: str | None = Query(None, description="Comma-separated rule IDs; empty = all matching"),
+    component_id: int | None = Query(None, description="Export only rules of this component"),
+    app_id: str | None = Query(None, description="Only rules of this application ID (per-app report)"),
+    only_approved: bool = Query(True, description="Export approved rules only"),
+    platform_filter: bool = Query(True, description="Only rules whose platform matches the format"),
     download: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     if fmt not in FORMATS:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unbekanntes Format '{fmt}'")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown format '{fmt}'")
     media_type, export_fn, filename = FORMATS[fmt]
 
     query = db.query(Rule).filter(Rule.deleted_at.is_(None))
@@ -147,10 +147,10 @@ def export(
     if ids:
         wanted = [i.strip() for i in ids.split(",") if i.strip()]
         query = query.filter(Rule.rule_id.in_(wanted))
-    # Der Statusfilter gilt AUCH bei ausdrücklich genannten IDs: eine ID grenzt
-    # ein, welche Regeln gemeint sind – nicht, ob ihr Status noch zählt. Zuvor
-    # ließ sich über ?ids= eine deaktivierte oder abgelaufene Regel als fertige
-    # Geräte-Konfiguration exportieren und geriet so zurück auf die Firewall.
+    # The status filter applies EVEN when IDs are named explicitly: an ID narrows
+    # down which rules are meant – not whether their status still counts. Before,
+    # ?ids= let a deactivated or expired rule be exported as a ready-to-apply
+    # device configuration, and it thereby found its way back onto the firewall.
     if only_approved:
         query = query.filter(Rule.status == RuleStatus.approved)
     if app_id:
@@ -160,39 +160,39 @@ def export(
     if component_id:
         rules = [r for r in rules if any(c.id == component_id for c in r.components)]
 
-    # Gerätespezifische Formate nur für Regeln der jeweiligen Plattform
+    # Device-specific formats only for rules belonging to that platform
     platform_of_fmt = {"juniper": "juniper", "checkpoint-cli": "checkpoint",
                        "checkpoint-api": "checkpoint", "aci-json": "aci", "aci-yaml": "aci"}
     if platform_filter and fmt in platform_of_fmt:
         rules = [r for r in rules if platform_of_fmt[fmt] in (r.platforms or [])]
 
     if not rules:
-        detail = "Keine passenden Regeln (Filter: nur freigegebene, passende Plattform)"
+        detail = "No matching rules (filters: approved only, matching platform)"
         if wanted and only_approved:
-            # Häufigster Fall: die genannte Regel existiert, ist aber (noch) nicht
-            # freigegeben. Das gehört benannt, sonst sucht der Nutzer im Falschen.
-            vorhanden = (db.query(Rule)
+            # Most common case: the named rule exists but is not (yet) approved.
+            # Say so, otherwise the user goes looking in entirely the wrong place.
+            existing = (db.query(Rule)
                          .filter(Rule.rule_id.in_(wanted), Rule.deleted_at.is_(None))
                          .filter(Rule.status != RuleStatus.approved).all())
-            if vorhanden:
-                liste = ", ".join(f"{r.rule_id} ({r.status.value})" for r in vorhanden)
-                detail = (f"Nicht freigegeben und deshalb nicht exportiert: {liste}. "
-                          "Für eine Vorschau 'nur freigegebene' abwählen (only_approved=false).")
+            if existing:
+                listed = ", ".join(f"{r.rule_id} ({r.status.value})" for r in existing)
+                detail = (f"Not approved and therefore not exported: {listed}. "
+                          "For a preview, turn off 'approved only' (only_approved=false).")
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail)
 
     headers = {}
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    # ACI-Exporte brauchen DB-Zugriff (EPG-Auflösung, Filter-Katalog, PBR-Gateways)
+    # ACI exports need DB access (EPG resolution, filter catalogue, PBR gateways)
     if fmt in ("aci-json", "aci-yaml"):
         content = aci.export_json(rules, db) if fmt == "aci-json" else aci.export_yaml(rules, db)
     else:
         content = export_fn(rules)
-    nicht_freigegeben = [r.rule_id for r in rules if r.status != RuleStatus.approved]
+    not_approved = [r.rule_id for r in rules if r.status != RuleStatus.approved]
     audit.record(db, "export", "export.rules", actor=user.username,
-                 object=fmt, detail=f"{len(rules)} Regel(n)"
+                 object=fmt, detail=f"{len(rules)} rule(s)"
                  + (f", app_id={app_id}" if app_id else "")
-                 + (f", NICHT freigegeben: {', '.join(nicht_freigegeben)}"
-                    if nicht_freigegeben else ""),
+                 + (f", NOT approved: {', '.join(not_approved)}"
+                    if not_approved else ""),
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type=media_type, headers=headers)

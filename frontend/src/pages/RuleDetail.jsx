@@ -4,7 +4,7 @@ import { api, getUser } from '../api'
 import { AddressList, ComponentBadges, Highlighted, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
 import { useLang } from '../i18n'
 
-const IMPL_OPTIONS = ['offen', 'neu', 'zu ändern', 'zu löschen', 'umgesetzt', 'deaktiviert']
+const IMPL_OPTIONS = ['open', 'new', 'to change', 'to remove', 'implemented', 'deactivated']
 
 export default function RuleDetail() {
   const { id } = useParams()
@@ -68,18 +68,18 @@ export default function RuleDetail() {
 
       {rule.removal_reason && (
         <div className="error">
-          <strong>🗑️ {t('Zur Löschung vorgeschlagen')}</strong>
+          <strong>🗑️ {t('Proposed for removal')}</strong>
           <p style={{ margin: '.3rem 0 0' }}>{rule.removal_reason}</p>
           <p className="small" style={{ margin: '.4rem 0 0' }}>
-            {t('Die Regel ist durch eine genehmigte Änderung unzulässig geworden. Eine Freigabe bedeutet hier: Löschung freigeben – die Regel wird deaktiviert und auf den Komponenten zurückgebaut. Alternativ die Regel überarbeiten, bis sie wieder zulässig ist.')}
+            {t('An approved change made this rule inadmissible. Approving it here means approving its removal – the rule is deactivated and rolled back on the components. Alternatively, rework the rule until it is admissible again.')}
           </p>
         </div>
       )}
 
       {risk && risk.level !== 'none' && (
-        <div className={risk.level === 'hoch' ? 'error' : 'warnbox'}>
-          <strong>⚠️ {t('Risiko')}: {risk.level.toUpperCase()}</strong>
-          {' '}({t('Schutzbedarf Ziel')}: {risk.schutzbedarf_ziel})
+        <div className={risk.level === 'high' ? 'error' : 'warnbox'}>
+          <strong>⚠️ {t('Risk')}: {risk.level.toUpperCase()}</strong>
+          {' '}({t('Target protection level')}: {risk.target_protection_level})
           <ul>
             {risk.findings.map((f, i) => (
               <li key={i}><span className={`badge risk-${f.severity}`}>{f.severity}</span> {f.detail}</li>
@@ -107,31 +107,31 @@ export default function RuleDetail() {
 
       <div className="detail-grid">
         <section className="card">
-          <h2>{t('Verkehrsbeziehung')}</h2>
+          <h2>{t('Traffic relationship')}</h2>
           <dl>
-            <dt>{t('Komponenten')}</dt><dd><ComponentBadges components={rule.components} /></dd>
-            <dt>{t('Quell-Zone')}</dt><dd>{zoneLabel(rule.source_zone) || '–'}</dd>
-            <dt>{t('Quelle')}</dt><dd className="addr"><AddressList entries={rule.source} /></dd>
-            <dt>{t('Ziel-Zone')}</dt><dd>{zoneLabel(rule.destination_zone) || '–'}</dd>
-            <dt>{t('Ziel')}</dt><dd className="addr"><AddressList entries={rule.destination} /></dd>
-            <dt>{t('Dienste')}</dt><dd><ServiceList services={rule.services} /></dd>
-            <dt>{t('Aktion')}</dt><dd><code>{rule.action}</code></dd>
+            <dt>{t('Components')}</dt><dd><ComponentBadges components={rule.components} /></dd>
+            <dt>{t('Source zone')}</dt><dd>{zoneLabel(rule.source_zone) || '–'}</dd>
+            <dt>{t('Source')}</dt><dd className="addr"><AddressList entries={rule.source} /></dd>
+            <dt>{t('Destination zone')}</dt><dd>{zoneLabel(rule.destination_zone) || '–'}</dd>
+            <dt>{t('Destination')}</dt><dd className="addr"><AddressList entries={rule.destination} /></dd>
+            <dt>{t('Services')}</dt><dd><ServiceList services={rule.services} /></dd>
+            <dt>{t('Action')}</dt><dd><code>{rule.action}</code></dd>
           </dl>
         </section>
 
         <section className="card">
-          <h2>{t('Metadaten')}</h2>
+          <h2>{t('Metadata')}</h2>
           <dl>
             <dt>Application</dt><dd>{rule.application || '–'}</dd>
             <dt>APP-ID</dt><dd>{rule.app_id || '–'}</dd>
-            <dt>{t('Anlass')}</dt><dd>{rule.justification || '–'}</dd>
-            <dt>{t('Beschreibung')}</dt><dd>{rule.description || '–'}</dd>
+            <dt>{t('Reason')}</dt><dd>{rule.justification || '–'}</dd>
+            <dt>{t('Description')}</dt><dd>{rule.description || '–'}</dd>
             <dt>Requestor</dt><dd>{rule.requestor || '–'}</dd>
             <dt>Bearbeiter</dt><dd>{rule.owner || '–'}</dd>
             <dt>Change-ID</dt><dd>{rule.change_id || '–'}</dd>
             <dt>Fachlicher Bezug</dt><dd>{rule.business_context || '–'}</dd>
-            <dt>{t('Gültigkeit')}</dt>
-            <dd>{rule.valid_from || '…'} – {rule.valid_until || t('unbefristet')}</dd>
+            <dt>{t('Validity')}</dt>
+            <dd>{rule.valid_from || '…'} – {rule.valid_until || t('unlimited')}</dd>
             <dt>Info</dt><dd>{rule.info || '–'}</dd>
             <dt>Version</dt><dd>v{rule.version} · angelegt von {rule.created_by}</dd>
           </dl>
@@ -142,13 +142,13 @@ export default function RuleDetail() {
           <div className="workflow-actions">
             {isArchitect && ['draft', 'rejected'].includes(rule.status) && (
               <>
-                <button className="btn btn-primary" onClick={act(() => api.submit(id))}>{t('Zum Review einreichen')}</button>
-                <button className="btn" onClick={() => navigate(`/rules/${id}/edit`)}>{t('Bearbeiten')}</button>
+                <button className="btn btn-primary" onClick={act(() => api.submit(id))}>{t('Submit for review')}</button>
+                <button className="btn" onClick={() => navigate(`/rules/${id}/edit`)}>{t('Edit')}</button>
               </>
             )}
             {isArchitect && !['draft', 'rejected'].includes(rule.status) && (
               <button className="btn" onClick={() => navigate(`/rules/${id}/edit`)}>
-                {t('Bearbeiten (setzt Review zurück)')}
+                {t('Edit (resets review)')}
               </button>
             )}
             {isApprover && rule.status === 'in_review' && (() => {
@@ -157,48 +157,48 @@ export default function RuleDetail() {
                 <div className="review-box">
                   {zoneBlocked && (
                     <div className="warnbox">
-                      ⚠ {t('Die Zonen-Beziehung ist auf Block – „Freigeben" bestätigt die Löschung: Die Regel wird deaktiviert, je Komponente auf „zu löschen" gesetzt und erscheint beim Betrieb als offene Umsetzung (Rückbau).')}
+                      ⚠ {t('The zone relationship is set to block – "approve" confirms removal: the rule is deactivated, each component is set to "to remove" and it appears for operations as open implementation work (decommissioning).')}
                     </div>
                   )}
-                  <textarea rows={2} placeholder={t('Review-Kommentar (optional)')} value={reviewComment}
+                  <textarea rows={2} placeholder={t('Review comment (optional)')} value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)} />
                   <div>
                     <button className="btn btn-approve" onClick={act(() => api.approve(id, reviewComment))}>
-                      {zoneBlocked ? `✓ ${t('Löschung freigeben')}` : t('✓ Freigeben')}
+                      {zoneBlocked ? `✓ ${t('Approve removal')}` : t('✓ Approve')}
                     </button>
-                    <button className="btn btn-reject" onClick={act(() => api.reject(id, reviewComment))}>{t('✕ Ablehnen')}</button>
+                    <button className="btn btn-reject" onClick={act(() => api.reject(id, reviewComment))}>{t('✕ Reject')}</button>
                   </div>
                 </div>
               )
             })()}
             {rule.status === 'approved' && (isOps || isArchitect) && (
-              <button className="btn btn-ghost" onClick={act(() => api.deactivate(id, reviewComment))}>{t('Regel deaktivieren')}</button>
+              <button className="btn btn-ghost" onClick={act(() => api.deactivate(id, reviewComment))}>{t('Deactivate rule')}</button>
             )}
             {rule.status === 'approved' && (
-              <Link className="btn" to={`/export?ids=${rule.rule_id}`}>{t('Konfiguration exportieren →')}</Link>
+              <Link className="btn" to={`/export?ids=${rule.rule_id}`}>{t('Export configuration →')}</Link>
             )}
           </div>
 
-          <h3>{t('Umsetzungsstatus je Komponente (Betrieb)')}</h3>
+          <h3>{t('Implementation status per component (operations)')}</h3>
           <div className="impl-status">
             {(rule.components || []).map((c) => (
               <label key={c.id} className="inline">
                 <span className={`badge platform-${c.type}`}>{c.name}</span>
                 <select
                   disabled={!isOps}
-                  value={rule.impl_status?.[c.name] || 'offen'}
+                  value={rule.impl_status?.[c.name] || 'open'}
                   onChange={(e) => act(() => api.setImplStatus(id, { [c.name]: e.target.value }))()}
                 >
-                  {IMPL_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+                  {IMPL_OPTIONS.map((o) => <option key={o} value={o}>{t(o)}</option>)}
                 </select>
               </label>
             ))}
-            {!(rule.components || []).length && <span className="muted">{t('Keine Komponenten zugeordnet.')}</span>}
+            {!(rule.components || []).length && <span className="muted">{t('No components assigned.')}</span>}
           </div>
         </section>
 
         <section className="card">
-          <h2>{t('Kommentare')} ({rule.comments.length})</h2>
+          <h2>{t('Comments')} ({rule.comments.length})</h2>
           <ul className="comments">
             {rule.comments.map((c) => (
               <li key={c.id}>
@@ -210,14 +210,14 @@ export default function RuleDetail() {
           </ul>
           <form onSubmit={addComment} className="comment-form">
             <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)}
-              placeholder={t('Kommentar für das Review…')} />
-            <button className="btn" type="submit">{t('Kommentieren')}</button>
+              placeholder={t('Comment for the review…')} />
+            <button className="btn" type="submit">{t('Comment')}</button>
           </form>
         </section>
 
         <section className="card wide">
-          <h2>{t('Umsetzung auf den Komponenten')}</h2>
-          {!impl ? <p className="muted">{t('Lade…')}</p> : impl.implementations.map((entry) => (
+          <h2>{t('Implementation on the components')}</h2>
+          {!impl ? <p className="muted">{t('Loading…')}</p> : impl.implementations.map((entry) => (
             <div key={entry.component_id} className="impl-block">
               <div className="path-comp-head">
                 <span className={`badge platform-${entry.type}`}>{entry.component}</span>
@@ -239,11 +239,11 @@ export default function RuleDetail() {
         </section>
 
         <section className="card wide">
-          <h2>{t('Versionshistorie')}</h2>
+          <h2>{t('Version history')}</h2>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>{t('Version')}</th><th>{t('Änderung')}</th><th>{t('Von')}</th><th>{t('Zeitpunkt')}</th><th></th></tr>
+                <tr><th>{t('Version')}</th><th>{t('Change')}</th><th>{t('By')}</th><th>{t('Time')}</th><th></th></tr>
               </thead>
               <tbody>
                 {rule.versions.map((v) => (
@@ -255,12 +255,12 @@ export default function RuleDetail() {
                     <td className="row-actions">
                       {isArchitect && v.version < rule.version && (
                         <button className="btn btn-ghost"
-                          title={t('Stellt diesen Stand als neuen Entwurf wieder her (normaler Review-Workflow)')}
+                          title={t('Restores this state as a new draft (normal review workflow)')}
                           onClick={() => {
-                            if (!window.confirm(`${t('Regel auf Version')} v${v.version} ${t('zurücksetzen? Der Stand wird als neuer Entwurf wiederhergestellt.')}`)) return
+                            if (!window.confirm(`${t('Reset rule to version')} v${v.version} ${t('? The state will be restored as a new draft.')}`)) return
                             act(() => api.restoreRule(id, v.version))()
                           }}>
-                          ↩ {t('Wiederherstellen')}
+                          ↩ {t('Restore')}
                         </button>
                       )}
                     </td>

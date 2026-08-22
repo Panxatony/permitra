@@ -31,11 +31,11 @@ function EpgSection() {
   const addMap = async (e) => {
     e.preventDefault()
     setError('')
-    // Mehrere Adressen auf einmal: Komma-, Semikolon- oder Leerzeichen-getrennt
+    // Several addresses at once: comma-, semicolon- or space-separated
     const ips = mapForm.ip.split(/[\s,;]+/).filter(Boolean)
     try {
       for (const ip of ips) {
-        // Alias nur bei einer einzelnen Adresse übernehmen (Alias ist adressspezifisch)
+        // Only carry over the alias for a single address (an alias is address-specific)
         await api.upsertEpgMap({ ip, alias: ips.length === 1 ? mapForm.alias : '',
           epg_id: Number(mapForm.epg_id) })
       }
@@ -43,7 +43,7 @@ function EpgSection() {
       load()
     } catch (err) {
       setError(err.message)
-      load()  // bereits gespeicherte Zuordnungen anzeigen
+      load()  // show the mappings that were already saved
     }
   }
 
@@ -202,7 +202,7 @@ export default function ObjectCatalog() {
   return (
     <div>
       <div className="page-head">
-        <h1>{t('Objektkatalog')}</h1>
+        <h1>{t('Object catalog')}</h1>
         <span className="muted">
           Wiederverwendbare Adress- und Dienst-Objekte – ändert sich die IP eines
           Adress-Objekts, werden alle Regeln mit diesem Alias automatisch mitgezogen
@@ -213,7 +213,7 @@ export default function ObjectCatalog() {
 
       <div className="detail-grid">
         <section className="card">
-          <h2>{t('Adress-Objekte')} ({addresses.length})</h2>
+          <h2>{t('Address objects')} ({addresses.length})</h2>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Name (Alias)</th><th>IP/Netz</th><th>Beschreibung</th><th></th></tr></thead>
@@ -255,7 +255,7 @@ export default function ObjectCatalog() {
         </section>
 
         <section className="card">
-          <h2>{t('Dienst-Objekte')} ({services.length})</h2>
+          <h2>{t('Service objects')} ({services.length})</h2>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Name</th><th>Protokoll</th><th>Port</th><th>Beschreibung</th><th></th></tr></thead>

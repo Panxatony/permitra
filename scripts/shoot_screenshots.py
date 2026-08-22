@@ -1,7 +1,7 @@
-"""Erzeugt Screenshots der laufenden Permitra-Demo für die Webseite.
+"""Creates screenshots of the running Permitra demo for the website.
 
-Loggt sich per API ein, setzt Token/User in localStorage und nimmt je Seite
-einen Screenshot in fester Fenstergröße auf. Nutzt das System-Chromium.
+Logs in via the API, sets token/user in localStorage and takes one screenshot
+per page at a fixed window size. Uses the system Chromium.
 """
 import json
 import sys
@@ -23,7 +23,7 @@ def login(username, password):
         return json.load(r)
 
 
-# (Datei, Route, Benutzer, Wartezeit-Sekunden, optional Full-Page)
+# (file, route, user, wait seconds, optional full page)
 SHOTS = [
     ("dashboard.png", "/", "architekt", 2.5, False),
     ("rules.png", "/rules", "architekt", 3.0, False),

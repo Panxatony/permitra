@@ -1,9 +1,9 @@
-"""Gültigkeits-Überwachung: ablaufende und abgelaufene Regeln.
+"""Validity monitoring: expiring and expired rules.
 
-- expiring_rules(): freigegebene Regeln, deren valid_until in den nächsten N Tagen
-  liegt oder bereits überschritten ist (für die Rezertifizierungs-Ansicht).
-- expire_rules(): täglicher Job – deaktiviert freigegebene Regeln automatisch,
-  wenn ihre Gültigkeit abgelaufen ist (mit Versions- und Kommentareintrag).
+- expiring_rules(): approved rules whose valid_until falls within the next N days
+  or has already passed (for the recertification view).
+- expire_rules(): daily job - automatically deactivates approved rules once their
+  validity has expired (adding a version and a comment entry).
 """
 import logging
 from datetime import date, timedelta
@@ -16,22 +16,22 @@ log = logging.getLogger("permitra.expiry")
 
 
 def _split_by_due(rules: list[Rule], today: date):
-    """Teilt in bereits abgelaufen und demnächst ablaufend.
+    """Splits into already expired and expiring soon.
 
-    Ein unlesbares Datum darf hier NICHT durchschlagen: Neue Regeln werden zwar
-    serverseitig geprüft (schemas.parse_iso_date), Altbestand und Importe können
-    aber Unsinn wie '2020-02-30' enthalten. Eine einzige solche Regel hätte
-    sonst Dashboard, Ablaufliste und den täglichen Job für alle Nutzer
-    lahmgelegt. Solche Regeln werden übersprungen und gemeldet – bewusst nicht
-    automatisch deaktiviert, denn eine Rückbau-Entscheidung auf Basis
-    unbrauchbarer Daten wäre schlimmer als das Liegenbleiben."""
+    An unparsable date must NOT propagate here: new rules are validated
+    server-side (schemas.parse_iso_date), but legacy data and imports may
+    contain nonsense such as '2020-02-30'. A single such rule would otherwise
+    have taken down the dashboard, the expiry list and the daily job for all
+    users. Such rules are skipped and reported - deliberately not deactivated
+    automatically, since a teardown decision based on unusable data would be
+    worse than leaving the rule in place."""
     expired, expiring = [], []
     for rule in rules:
         try:
             due = date.fromisoformat((rule.valid_until or "").strip())
         except ValueError:
-            log.warning("Regel %s hat ein unlesbares Gültig-bis (%r) und wird bei der "
-                        "Ablaufprüfung übersprungen – bitte korrigieren",
+            log.warning("Rule %s has an unreadable valid-until (%r) and is skipped by the "
+                        "expiry check – please correct it",
                         rule.rule_id, rule.valid_until)
             continue
         (expired if due < today else expiring).append(rule)
@@ -39,8 +39,8 @@ def _split_by_due(rules: list[Rule], today: date):
 
 
 def invalid_validity_rules(db: Session) -> list[Rule]:
-    """Regeln mit unlesbarem Gültig-bis – Datenqualitätsproblem, das sonst
-    unbemerkt bliebe, weil die Ablaufprüfung sie überspringt."""
+    """Rules with an unparsable valid-until - a data quality problem that would
+    otherwise go unnoticed, because the expiry check skips them."""
     rows = (db.query(Rule)
             .filter(Rule.valid_until.isnot(None), Rule.valid_until != "",
                     Rule.deleted_at.is_(None))
@@ -55,7 +55,7 @@ def invalid_validity_rules(db: Session) -> list[Rule]:
 
 
 def expiring_rules(db: Session, days: int = 30) -> tuple[list[Rule], list[Rule]]:
-    """Liefert (abgelaufen, läuft in <days> Tagen ab) – nur freigegebene Regeln."""
+    """Returns (expired, expiring within <days> days) - approved rules only."""
     today = date.today()
     horizon = today + timedelta(days=days)
     candidates = (
@@ -69,7 +69,7 @@ def expiring_rules(db: Session, days: int = 30) -> tuple[list[Rule], list[Rule]]
 
 
 def expire_rules(db: Session) -> int:
-    """Deaktiviert abgelaufene freigegebene Regeln. Gibt die Anzahl zurück."""
+    """Deactivates expired approved rules. Returns the number of rules affected."""
     expired, _ = expiring_rules(db, days=0)
     for rule in expired:
         rule.status = RuleStatus.deactivated
@@ -79,7 +79,7 @@ def expire_rules(db: Session) -> int:
                 rule_pk=rule.id,
                 version=rule.version,
                 snapshot={"auto": "expiry"},
-                change_note=f"Automatisch deaktiviert: Gültigkeit bis {rule.valid_until} abgelaufen",
+                change_note=f"Automatically deactivated: validity until {rule.valid_until} has expired",
                 changed_by="system",
             )
         )
@@ -87,8 +87,8 @@ def expire_rules(db: Session) -> int:
             Comment(
                 rule_pk=rule.id,
                 author="system",
-                text=f"Regel automatisch deaktiviert – Gültigkeit bis {rule.valid_until} abgelaufen. "
-                     "Bei weiterem Bedarf bitte rezertifizieren (neu einreichen).",
+                text=f"Rule automatically deactivated – validity until {rule.valid_until} has expired. "
+                     "If it is still needed, recertify it (submit it again).",
             )
         )
     if expired:

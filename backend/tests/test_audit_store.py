@@ -1,4 +1,4 @@
-"""Tests für den append-only Audit-Store und Soft-Delete (Issue #24)."""
+"""Tests for the append-only audit store and soft delete (issue #24)."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -19,7 +19,8 @@ def db():
              source=[{"ip": "10.0.0.1", "alias": ""}], destination=[{"ip": "10.0.0.2", "alias": ""}],
              services=[{"protocol": "TCP", "port": "443"}], action=RuleAction.permit,
              status=RuleStatus.approved)
-    s.add(r); s.flush()
+    s.add(r)
+    s.flush()
     s.add(RuleVersion(rule_pk=r.id, version=1, snapshot={}, change_note="angelegt", changed_by="alex"))
     s.commit()
     yield s
@@ -27,7 +28,8 @@ def db():
 
 
 class Req:
-    class client: host = "203.0.113.5"
+    class client:
+        host = "203.0.113.5"
 
 
 def test_record_persists_and_appears_in_collect(db):
@@ -43,11 +45,11 @@ def test_soft_delete_keeps_history_and_audits(db):
     admin = User(username="root", password_hash="x", role="admin", is_active=True)
     delete_rule(Req(), "SR00001", db, admin)
     rule = db.query(Rule).filter(Rule.rule_id == "SR00001").one()
-    # Regel bleibt physisch erhalten, ist aber als gelöscht markiert
+    # The rule is physically preserved but marked as deleted
     assert rule.deleted_at is not None
-    # Versionshistorie (Audit-Trail) unversehrt
+    # Version history (audit trail) intact
     assert db.query(RuleVersion).filter(RuleVersion.rule_pk == rule.id).count() == 1
-    # Löschung ist protokolliert (mit Quell-IP)
+    # The deletion is logged (including the source IP)
     ev = db.query(AuditEvent).filter(AuditEvent.event == "rule.deleted").one()
     assert ev.object == "SR00001" and ev.source_ip == "203.0.113.5"
 
@@ -57,5 +59,5 @@ def test_soft_deleted_excluded_from_list(db):
     delete_rule(Req(), "SR00001", db, admin)
     active = db.query(Rule).filter(Rule.deleted_at.is_(None)).count()
     assert active == 0
-    # aber weiterhin im Audit-Log auffindbar
+    # but still findable in the audit log
     assert any(e["event"] == "rule.deleted" for e in audit.collect(db))

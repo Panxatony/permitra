@@ -1,11 +1,12 @@
-"""NetBox-Anbindung: Prefix-Import (konfigurierbare Status) in die Staging-Tabelle.
+"""NetBox integration: prefix import (configurable statuses) into the staging table.
 
-Der API-Token wird mit Fernet verschlüsselt gespeichert (Schlüssel aus
-SECRET_KEY abgeleitet). Der Import ist ein reiner Lesevorgang gegen die
-NetBox-REST-API (/api/ipam/prefixes)."""
+The API token is stored Fernet-encrypted (the key is derived from SECRET_KEY).
+The import is a read-only operation against the NetBox REST API
+(/api/ipam/prefixes)."""
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import json
 import ssl
@@ -45,10 +46,12 @@ def get_config(db: Session) -> NetboxConfig | None:
 
 
 def _request(cfg: NetboxConfig, path_or_url: str) -> dict:
-    # Absolute URL (z.B. aus dem 'next'-Feld) direkt verwenden, sonst an die
-    # Basis-URL anhängen
+    # Use an absolute URL (e.g. from the 'next' field) as is, otherwise append
+    # it to the base URL
     url = path_or_url if path_or_url.startswith("http") else cfg.url.rstrip("/") + path_or_url
-    req = urllib.request.Request(url, headers={
+    # S310 rationale: the NetBox base URL is operator-configured and stored by an admin,
+    # not user-supplied; see the SSRF note in the security audit.
+    req = urllib.request.Request(url, headers={  # noqa: S310
         "Authorization": f"Token {decrypt_token(cfg.token_enc)}",
         "Accept": "application/json",
     })
@@ -58,38 +61,36 @@ def _request(cfg: NetboxConfig, path_or_url: str) -> dict:
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
     try:
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:  # noqa: S310
             return json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         body = ""
-        try:
+        with contextlib.suppress(Exception):  # the error body is best-effort context only
             body = exc.read().decode()[:400]
-        except Exception:
-            pass
-        raise RuntimeError(f"NetBox HTTP {exc.code} bei {url}: {body or exc.reason}")
+        raise RuntimeError(f"NetBox HTTP {exc.code} bei {url}: {body or exc.reason}") from exc
 
 
 def test_connection(cfg: NetboxConfig) -> dict:
-    """Verbindungstest: liefert die Prefix-Anzahl."""
+    """Connection test: returns the number of prefixes."""
     data = _request(cfg, "/api/ipam/prefixes/?limit=1")
     return {"ok": True, "prefix_total": data.get("count", 0)}
 
 
 def import_prefixes(db: Session) -> dict:
-    """Holt Prefixe der konfigurierten Status aus NetBox in die Staging-Tabelle.
+    """Fetches prefixes with the configured statuses from NetBox into the staging table.
 
-    Bereits übernommene (adopted) Einträge bleiben unangetastet; neue kommen
-    hinzu, vorhandene werden aktualisiert; in NetBox verschwundene, noch nicht
-    übernommene werden entfernt."""
+    Entries that have already been adopted stay untouched; new ones are added,
+    existing ones are updated, and entries that disappeared from NetBox and were
+    not adopted yet are removed."""
     cfg = get_config(db)
     if not cfg or not cfg.url or not cfg.token_enc:
-        raise ValueError("NetBox ist nicht konfiguriert")
+        raise ValueError("NetBox is not configured")
 
     seen_netbox_ids: set[int] = set()
     fetched = 0
     skipped: list[str] = []
-    # Jeden Status EINZELN abfragen – so scheitert der Import nicht, wenn ein
-    # Status (z.B. 'planned') auf der Instanz für Prefixe gar nicht existiert
+    # Query each status SEPARATELY – this way the import does not fail if a
+    # status (e.g. 'planned') does not exist for prefixes on that instance
     statuses = [s.strip() for s in (cfg.statuses or "").split(",") if s.strip()] or list(DEFAULT_STATUSES)
     for wanted in statuses:
         query = urllib.parse.urlencode([("status", wanted), ("limit", 500)])
@@ -117,11 +118,11 @@ def import_prefixes(db: Session) -> dict:
                 else:
                     db.add(NetboxPrefix(netbox_id=nid, cidr=cidr, status=status_val,
                                         vrf=vrf, description=desc, last_seen=utcnow()))
-            path = data.get("next")  # absolute URL der nächsten Seite
+            path = data.get("next")  # absolute URL of the next page
             if path:
                 data = _request(cfg, path)
 
-    # Nicht mehr vorhandene, noch nicht übernommene Staging-Einträge entfernen
+    # Remove staging entries that vanished from NetBox and were not adopted yet
     stale = (db.query(NetboxPrefix)
              .filter(NetboxPrefix.adopted == False,  # noqa: E712
                      NetboxPrefix.netbox_id.notin_(seen_netbox_ids or {-1}))

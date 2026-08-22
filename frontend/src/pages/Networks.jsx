@@ -15,12 +15,12 @@ export default function Networks() {
   const [changes, setChanges] = useState([])
   const [filter, setFilter] = useState('')
   const [form, setForm] = useState({ cidr: '', zone: '', description: '' })
-  const [editNet, setEditNet] = useState(null)  // Eintrag im Overlay-Editor
+  const [editNet, setEditNet] = useState(null)  // entry in the overlay editor
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
   const [nbPrefixes, setNbPrefixes] = useState([])
-  const [nbZone, setNbZone] = useState({})  // prefixId -> Zonenname
+  const [nbZone, setNbZone] = useState({})  // prefixId -> zone name
 
   const load = () => {
     api.zoneNetworks().then(setNetworks).catch((e) => setError(e.message))
@@ -34,17 +34,17 @@ export default function Networks() {
     const items = nbPrefixes
       .filter((p) => nbZone[p.id])
       .map((p) => ({ prefix_id: p.id, zone: nbZone[p.id] }))
-    if (!items.length) { setError(t('Bitte mindestens einem Prefix eine Zone zuweisen.')); return }
+    if (!items.length) { setError(t('Please assign a zone to at least one prefix.')); return }
     setError(''); setNotice('')
     try {
       const r = await api.netboxAdopt(items)
-      setNotice(r?.detail || t('Übernahme beantragt.'))
+      setNotice(r?.detail || t('Adoption requested.'))
       setNbZone({})
       load()
     } catch (err) { setError(err.message) }
   }
 
-  // Offene Anträge für Netzwerk-Zuordnungen: Markierung je Eintrag/CIDR
+  // Pending requests for network assignments: marker per entry/CIDR
   const pendingNet = changes.filter(
     (c) => c.status === 'pending' && c.change_type.startsWith('net_'))
   const isPending = (n) => pendingNet.some(
@@ -52,7 +52,7 @@ export default function Networks() {
 
   const netChangeLabel = (c) => {
     if (c.change_type === 'net_add') return `${c.to_zone} → ${t('Zone')} ${c.from_zone}`
-    if (c.change_type === 'net_delete') return `${c.to_zone} ${t('aus Zone')} ${c.from_zone} ${t('entfernen')}`
+    if (c.change_type === 'net_delete') return `${c.to_zone} ${t('from zone')} ${c.from_zone} ${t('remove')}`
     const oldZone = c.extra?.old_zone, oldCidr = c.extra?.old_cidr
     const parts = []
     if (oldCidr && oldCidr !== c.to_zone) parts.push(`${oldCidr} → ${c.to_zone}`)
@@ -66,7 +66,7 @@ export default function Networks() {
     try {
       const result = await fn()
       if (result?.status === 'pending') {
-        setNotice(t('Änderung beantragt – sie wird erst nach Freigabe durch zwei Change Approver wirksam.'))
+        setNotice(t('Change requested – it only takes effect after approval by two change approvers.'))
       } else if (result?.detail) {
         setNotice(result.detail)
       }
@@ -85,7 +85,7 @@ export default function Networks() {
   }
 
   const remove = (network) => {
-    if (!window.confirm(t('Entfernen der Zuordnung beantragen?') + ` (${network.cidr} → ${network.zone})`)) return
+    if (!window.confirm(t('Request removal of this mapping?') + ` (${network.cidr} → ${network.zone})`)) return
     submit(() => api.deleteZoneNetwork(network.id))
   }
 
@@ -98,16 +98,16 @@ export default function Networks() {
   return (
     <div>
       <div className="page-head">
-        <h1>{t('Netzwerke')}</h1>
+        <h1>{t('Networks')}</h1>
         <span className="muted">
-          {t('Zuordnung Netzwerk → Sicherheitszone – jedes Netzwerk gehört zu genau einer Zone')}
+          {t('Network → security zone mapping – every network belongs to exactly one zone')}
         </span>
       </div>
 
       <div className="infobox">
-        {t('Die Verwaltung der Netzwerke selbst erfolgt in dedizierten Tools (z.B. NetBox/IPAM) – Permitra pflegt hier nur das Mapping auf die Sicherheitszonen. Ein automatischer Import aus externen Quellen kann über das Herkunftsfeld andocken; importierte Einträge erscheinen dann z.B. als „NetBox“.')}
+        {t('The networks themselves are managed in dedicated tools (e.g. NetBox/IPAM) – Permitra only maintains the mapping to security zones here. An automatic import from external sources can hook into the source field; imported entries then appear e.g. as “NetBox”.')}
         {' '}
-        {t('Änderungen an der Zuordnung sind sicherheitsrelevant und werden erst nach Freigabe durch zwei Change Approver wirksam.')}
+        {t('Changes to the mapping are security-relevant and only take effect after approval by two change approvers.')}
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -115,14 +115,14 @@ export default function Networks() {
 
       {canEdit && nbPrefixes.length > 0 && (
         <div className="card">
-          <h3>{t('Aus NetBox importiert')} ({nbPrefixes.filter((p) => !p.in_registry).length})</h3>
+          <h3>{t('Imported from NetBox')} ({nbPrefixes.filter((p) => !p.in_registry).length})</h3>
           <p className="muted small">
-            {t('Jedem Prefix eine Zone zuweisen und übernehmen – die Zuordnung durchläuft den Freigabe-Workflow.')}
+            {t('Assign a zone to each prefix and adopt – the mapping goes through the approval workflow.')}
           </p>
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>{t('Netzwerk (CIDR)')}</th><th>Status</th><th>{t('Beschreibung')}</th><th>{t('Zone')}</th></tr>
+                <tr><th>{t('Network (CIDR)')}</th><th>Status</th><th>{t('Description')}</th><th>{t('Zone')}</th></tr>
               </thead>
               <tbody>
                 {nbPrefixes.map((p) => (
@@ -131,9 +131,9 @@ export default function Networks() {
                     <td><span className={`badge ${p.status === 'active' ? 'status-approved' : 'status-in_review'}`}>{p.status}</span></td>
                     <td className="small">{p.description}</td>
                     <td>
-                      {p.in_registry ? <span className="muted small">{t('bereits vorhanden')}</span> : (
+                      {p.in_registry ? <span className="muted small">{t('already present')}</span> : (
                         <select value={nbZone[p.id] || ''} onChange={(e) => setNbZone({ ...nbZone, [p.id]: e.target.value })}>
-                          <option value="">{t('– später –')}</option>
+                          <option value="">{t('– later –')}</option>
                           {zones.map((z) => <option key={z.id} value={z.name}>{z.name}</option>)}
                         </select>
                       )}
@@ -144,14 +144,14 @@ export default function Networks() {
             </table>
           </div>
           <div className="actions" style={{ marginTop: '.5rem' }}>
-            <button className="btn btn-primary" onClick={adoptNetbox}>{t('Ausgewählte übernehmen')}</button>
+            <button className="btn btn-primary" onClick={adoptNetbox}>{t('Adopt selected')}</button>
           </div>
         </div>
       )}
 
       {pendingNet.length > 0 && (
         <div className="card">
-          <h3>{t('Offene Anträge')} ({pendingNet.length})</h3>
+          <h3>{t('Pending requests')} ({pendingNet.length})</h3>
           <ul className="plain-list">
             {pendingNet.map((c) => (
               <li key={c.id}>
@@ -159,21 +159,21 @@ export default function Networks() {
                 {netChangeLabel(c)}
                 <span className="muted small">
                   {' – '}{c.requested_by}
-                  {c.first_approved_by ? ` · ${t('Freigaben')}: 1/2 (${c.first_approved_by})` : ` · ${t('Freigaben')}: 0/2`}
+                  {c.first_approved_by ? ` · ${t('Approvals')}: 1/2 (${c.first_approved_by})` : ` · ${t('Approvals')}: 0/2`}
                 </span>
               </li>
             ))}
           </ul>
           <p className="muted small">
-            {t('Freigabe durch Change Approver auf der Seite')}{' '}
-            <Link to="/zones">{t('Sicherheitszonen')}</Link>.
+            {t('Approval by change approvers on the page')}{' '}
+            <Link to="/zones">{t('Security zones')}</Link>.
           </p>
         </div>
       )}
 
       <form className="filterbar" onSubmit={(e) => e.preventDefault()}>
         <input value={filter} onChange={(e) => setFilter(e.target.value)}
-          placeholder={t('Filtern nach CIDR, Zone oder Beschreibung…')} />
+          placeholder={t('Filter by CIDR, zone or description…')} />
         <span className="muted">{shown.length} / {networks.length}</span>
       </form>
 
@@ -181,8 +181,8 @@ export default function Networks() {
         <table>
           <thead>
             <tr>
-              <th>{t('Netzwerk (CIDR)')}</th><th>{t('Umgebung')}</th><th>{t('Zone')}</th>
-              <th>{t('Beschreibung')}</th><th>{t('Herkunft')}</th><th></th>
+              <th>{t('Network (CIDR)')}</th><th>{t('Environment')}</th><th>{t('Zone')}</th>
+              <th>{t('Description')}</th><th>{t('Origin')}</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -192,7 +192,7 @@ export default function Networks() {
                 <td><span className="badge platform-unknown">{n.vrf}</span></td>
                 <td>
                   {n.zone}
-                  {isPending(n) && <span className="badge platform-unknown comp-badge" title={t('Antrag wartet auf Freigabe')}> ⏳</span>}
+                  {isPending(n) && <span className="badge platform-unknown comp-badge" title={t('Request awaiting approval')}> ⏳</span>}
                 </td>
                 <td>{n.description}</td>
                 <td>
@@ -204,20 +204,20 @@ export default function Networks() {
                   {canEdit && !isPending(n) && (
                     <>
                       <button className="btn btn-ghost"
-                        onClick={() => setEditNet({ ...n })}>{t('Bearbeiten')}</button>
-                      <button className="btn btn-ghost" onClick={() => remove(n)}>{t('Löschen')}</button>
+                        onClick={() => setEditNet({ ...n })}>{t('Edit')}</button>
+                      <button className="btn btn-ghost" onClick={() => remove(n)}>{t('Delete')}</button>
                     </>
                   )}
                 </td>
               </tr>
             ))}
-            {!shown.length && <tr><td colSpan={6} className="muted">{t('Keine Treffer.')}</td></tr>}
+            {!shown.length && <tr><td colSpan={6} className="muted">{t('No matches.')}</td></tr>}
           </tbody>
         </table>
       </div>
 
       {editNet && (
-        <Modal title={`${t('Bearbeiten')}: ${editNet.cidr}`} onClose={() => setEditNet(null)}>
+        <Modal title={`${t('Edit')}: ${editNet.cidr}`} onClose={() => setEditNet(null)}>
           <form className="modal-form" onSubmit={async (e) => {
             e.preventDefault()
             const ok = await submit(() => api.updateZoneNetwork(editNet.id, {
@@ -226,10 +226,10 @@ export default function Networks() {
             if (ok) setEditNet(null)
           }}>
             <p className="muted small">
-              {t('CIDR- und Zonen-Änderungen werden als Antrag eingereicht (zwei Freigaben); Beschreibungs-Änderungen wirken sofort.')}
+              {t('CIDR and zone changes are submitted as a request (two approvals); description changes take effect immediately.')}
             </p>
             <div className="grid-2">
-              <label>{t('Netzwerk (CIDR)')}
+              <label>{t('Network (CIDR)')}
                 <input value={editNet.cidr} required autoFocus
                   onChange={(e) => setEditNet({ ...editNet, cidr: e.target.value })} />
               </label>
@@ -240,13 +240,13 @@ export default function Networks() {
                 </select>
               </label>
             </div>
-            <label>{t('Beschreibung')}
+            <label>{t('Description')}
               <input value={editNet.description || ''}
                 onChange={(e) => setEditNet({ ...editNet, description: e.target.value })} />
             </label>
             <div className="actions">
-              <button className="btn btn-primary" type="submit">{t('Speichern')}</button>
-              <button className="btn btn-ghost" type="button" onClick={() => setEditNet(null)}>{t('Abbrechen')}</button>
+              <button className="btn btn-primary" type="submit">{t('Save')}</button>
+              <button className="btn btn-ghost" type="button" onClick={() => setEditNet(null)}>{t('Cancel')}</button>
             </div>
           </form>
         </Modal>
@@ -255,25 +255,25 @@ export default function Networks() {
       {canEdit && (
         <form onSubmit={add} className="object-form card">
           <div className="grid-3">
-            <label>{t('Netzwerk (CIDR)')}
+            <label>{t('Network (CIDR)')}
               <input value={form.cidr} onChange={(e) => setForm({ ...form, cidr: e.target.value })}
                 placeholder='z.B. 10.10.35.0/24 oder "any"' required />
             </label>
             <label>{t('Zone')}
               <select value={form.zone} required
                 onChange={(e) => setForm({ ...form, zone: e.target.value })}>
-                <option value="">{t('– Zone wählen –')}</option>
+                <option value="">{t('– select zone –')}</option>
                 {zones.map((z) => <option key={z.id} value={z.name}>{z.name}</option>)}
               </select>
             </label>
-            <label>{t('Beschreibung')}
+            <label>{t('Description')}
               <input value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </label>
           </div>
           <div className="actions">
-            <button className="btn btn-primary" type="submit">{t('Zuordnung beantragen')}</button>
-            <span className="muted small">{t('Umgebung')}: {getVrfName() || 'Default'}</span>
+            <button className="btn btn-primary" type="submit">{t('Request mapping')}</button>
+            <span className="muted small">{t('Environment')}: {getVrfName() || 'Default'}</span>
           </div>
         </form>
       )}

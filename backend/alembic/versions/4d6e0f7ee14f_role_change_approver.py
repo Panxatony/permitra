@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Neue Rolle change_approver + Felder für die Zweitfreigabe von Matrix-Anträgen."""
+    """New role change_approver + fields for the second approval of matrix requests."""
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         op.execute("ALTER TYPE role ADD VALUE IF NOT EXISTS 'change_approver'")

@@ -1,4 +1,4 @@
-"""Tests für read-only API-Tokens (Issue #14)."""
+"""Tests for read-only API tokens (issue #14)."""
 import hashlib
 
 import pytest
@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app import auth
 from app.database import Base
-from app.models import ApiToken, Role, User, utcnow
+from app.models import ApiToken, utcnow
 
 
 @pytest.fixture()
@@ -29,7 +29,8 @@ def _make(db, raw="pat_secret123", revoked=False, expires_at=None):
     t = ApiToken(name="ansible", prefix=raw[:12],
                  token_hash=hashlib.sha256(raw.encode()).hexdigest(),
                  revoked=revoked, expires_at=expires_at)
-    db.add(t); db.commit()
+    db.add(t)
+    db.commit()
     return t
 
 

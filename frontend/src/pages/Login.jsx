@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, login, passkeyLogin } from '../api'
 import { useLang } from '../i18n'
+import { useTheme } from '../theme'
+
+const THEME_ICONS = { system: '🖥️', light: '☀️', dark: '🌙' }
+const THEME_LABELS = { system: 'System', light: 'Hell', dark: 'Dunkel' }
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -11,7 +15,8 @@ export default function Login() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const navigate = useNavigate()
-  const { lang, t, toggle } = useLang()
+  const { t } = useLang()
+  const { theme, cycle: cycleTheme } = useTheme()
 
   const submit = async (e) => {
     e.preventDefault()
@@ -23,10 +28,10 @@ export default function Login() {
     } catch (err) {
       if (err.message === 'otp_required') {
         setOtpRequired(true)
-        setNotice(t('Bitte den Code aus der Authenticator-App eingeben.'))
+        setNotice(t('Please enter the code from your authenticator app.'))
       } else if (err.message === 'otp_invalid') {
         setOtpRequired(true)
-        setError(t('Der Code ist ungültig – bitte erneut versuchen.'))
+        setError(t('The code is invalid – please try again.'))
       } else {
         setError(err.message)
       }
@@ -37,7 +42,7 @@ export default function Login() {
     setError('')
     setNotice('')
     if (!username.trim()) {
-      setError(t('Bitte zuerst den Benutzernamen eingeben.'))
+      setError(t('Please enter your username first.'))
       return
     }
     try {
@@ -52,7 +57,7 @@ export default function Login() {
     setError('')
     setNotice('')
     if (!username.trim()) {
-      setError(t('Bitte zuerst den Benutzernamen (oder die E-Mail-Adresse) eingeben.'))
+      setError(t('Please enter your username (or email address) first.'))
       return
     }
     try {
@@ -66,38 +71,41 @@ export default function Login() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <button type="button" className="btn btn-ghost login-lang" onClick={toggle}
-          title={lang === 'de' ? 'Switch to English' : 'Auf Deutsch umstellen'}>
-          {lang === 'de' ? 'EN' : 'DE'}
-        </button>
+        <div className="login-controls">
+          <button type="button" className="btn btn-ghost" onClick={cycleTheme}
+            title={`${t('Colour scheme')}: ${t(THEME_LABELS[theme])}`}
+            aria-label={`${t('Colour scheme')}: ${t(THEME_LABELS[theme])}`}>
+            {THEME_ICONS[theme]}
+          </button>
+        </div>
         <h1>🛡️ Permitra</h1>
-        <p className="muted">{t('Zentrale Verwaltung von Sicherheitsregeln')}</p>
+        <p className="muted">{t('Central management of security rules')}</p>
         <label>
-          {t('Benutzername')}
+          {t('Username')}
           <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
         </label>
         <label>
-          {t('Passwort')}
+          {t('Password')}
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </label>
         {otpRequired && (
           <label>
-            {t('2FA-Code')}
+            {t('2FA code')}
             <input value={otp} inputMode="numeric" autoFocus placeholder="123456"
               onChange={(e) => setOtp(e.target.value)} />
           </label>
         )}
         {notice && <div className="infobox">{notice}</div>}
         {error && <div className="error">{error}</div>}
-        <button className="btn btn-primary" type="submit">{t('Anmelden')}</button>
+        <button className="btn btn-primary" type="submit">{t('Sign in')}</button>
         {window.PublicKeyCredential && (
           <button className="btn btn-ghost" type="button" onClick={withPasskey}>
-            🔑 {t('Mit Passkey anmelden')}
+            🔑 {t('Sign in with passkey')}
           </button>
         )}
         <button className="btn btn-ghost" type="button" onClick={forgot}
           style={{ fontSize: '.85rem' }}>
-          {t('Passwort vergessen?')}
+          {t('Forgot password?')}
         </button>
         <p className="muted small">
           Demo: architekt · betrieb · approver · approver2 · admin — Passwort jeweils Name+123

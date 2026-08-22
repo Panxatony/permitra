@@ -1,7 +1,7 @@
 """baseline schema
 
 Revision ID: 3ce566c3f159
-Revises: 
+Revises:
 Create Date: 2026-08-20 23:58:54.441832
 
 """

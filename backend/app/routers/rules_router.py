@@ -8,13 +8,11 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
 from ..conflicts import find_conflicts
-from ..validation import format_entry, parse_network
-from ..vrf import get_vrf
-from ..zone_check import check_zone_pair, resolve_zone_for_entries
 from ..database import get_db
+from ..domain_values import IMPL_STATUSES
+from ..expiry import expiring_rules, invalid_validity_rules
 from ..exporters.generic import rule_to_dict
 from ..models import (
-    active_rules,
     AddressComponentMap,
     Comment,
     ComponentType,
@@ -25,8 +23,8 @@ from ..models import (
     RuleVersion,
     SecurityComponent,
     User,
+    active_rules,
 )
-from ..expiry import expiring_rules, invalid_validity_rules
 from ..schemas import (
     CommentCreate,
     CommentOut,
@@ -43,6 +41,9 @@ from ..schemas import (
     RuleUpdate,
     RuleVersionOut,
 )
+from ..validation import format_entry, parse_network
+from ..vrf import get_vrf
+from ..zone_check import check_zone_pair, resolve_zone_for_entries
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -50,11 +51,11 @@ RULE_ID_RE = re.compile(r"^SR(\d+)$")
 
 
 def next_rule_id(db: Session) -> str:
-    """Nächste freie SR-Nummer, 5-stellig aufgefüllt (z.B. SR00855).
+    """Next free SR number, zero-padded to five digits (e.g. SR00855).
 
-    Max-Aggregat in der DB (SUBSTR+CAST) statt Laden aller Regeln – skaliert
-    auch bei zehntausenden Regeln. Kollisionen bei paralleler Anlage fängt der
-    Unique-Constraint mit Retry im Aufrufer ab."""
+    A MAX aggregate in the database (SUBSTR+CAST) instead of loading every rule –
+    this still scales at tens of thousands of rules. Collisions from concurrent
+    creation are caught by the unique constraint, with a retry in the caller."""
     from sqlalchemy import Integer, cast, func
 
     max_num = (
@@ -66,13 +67,13 @@ def next_rule_id(db: Session) -> str:
 
 
 def get_rule_or_404(db: Session, rule_id: str, include_deleted: bool = False) -> Rule:
-    """Holt eine Regel. Gelöschte (Soft-Delete) gelten als nicht vorhanden –
-    sonst blieben sie über /rules/{id} les-, änder- und erneut freigebbar.
-    Nur delete_rule selbst braucht sie, um doppeltes Löschen zu erkennen."""
+    """Fetch a rule. Soft-deleted ones count as non-existent – otherwise they would
+    stay readable, editable and re-approvable through /rules/{id}. Only delete_rule
+    itself needs them, in order to detect a repeated deletion."""
     q = db.query(Rule) if include_deleted else active_rules(db)
     rule = q.filter(Rule.rule_id == rule_id).first()
     if not rule:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Regel {rule_id} nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Rule {rule_id} not found")
     return rule
 
 
@@ -81,7 +82,7 @@ def snapshot(rule: Rule) -> dict:
 
 
 def resolve_components(db: Session, component_ids: list[int]) -> list[SecurityComponent]:
-    """Löst component_ids auf; unbekannte IDs führen zu 422."""
+    """Resolve component_ids; unknown IDs result in a 422."""
     if not component_ids:
         return []
     components = (
@@ -90,46 +91,46 @@ def resolve_components(db: Session, component_ids: list[int]) -> list[SecurityCo
     missing = set(component_ids) - {c.id for c in components}
     if missing:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Unbekannte Komponente(n): {sorted(missing)}",
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Unknown component(s): {sorted(missing)}",
         )
     return components
 
 
 
 def derive_zones(db: Session, payload, vrf_id: int):
-    """Leitet Quell-/Ziel-Zone aus den Netzwerk-Zuordnungen der Adressen ab.
+    """Derive the source/destination zone from the addresses' network assignments.
 
-    Jedes Netzwerk muss einer Zone zugeordnet sein; eine Regelseite darf nur
-    eine Zone umfassen. Die abgeleiteten Zonen überschreiben die Eingabe."""
+    Every network must be assigned to a security zone, and one side of a rule may
+    span only a single zone. The derived zones override whatever was submitted."""
     def entries_of(value):
         return [e.model_dump() if hasattr(e, "model_dump") else e for e in value]
 
     problems = []
     zones = {}
-    for label, field in (("Quelle", "source"), ("Ziel", "destination")):
+    for label, field in (("Source", "source"), ("Destination", "destination")):
         zone, unassigned, hits = resolve_zone_for_entries(db, entries_of(getattr(payload, field)), vrf_id)
         if unassigned:
             problems.append(
-                f"{label}: Netz(e) keiner Sicherheitszone zugeordnet: {', '.join(unassigned)} "
-                "– bitte das Netzwerk zuerst auf der Seite „Netzwerke“ anlegen und einer "
-                "Sicherheitszone zuordnen"
+                f"{label}: network(s) not assigned to any security zone: {', '.join(unassigned)} "
+                "– create the network on the Networks page first and assign it to a "
+                "security zone"
             )
         elif len(hits) > 1:
-            problems.append(f"{label} umfasst mehrere Zonen ({', '.join(sorted(hits))}) – bitte aufteilen")
+            problems.append(f"{label} spans several zones ({', '.join(sorted(hits))}) – split the rule")
         zones[field] = zone
     if problems:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "; ".join(problems))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "; ".join(problems))
     payload.source_zone = zones["source"] or payload.source_zone
     payload.destination_zone = zones["destination"] or payload.destination_zone
 
 
 def determine_components(db: Session, payload, vrf_id: int) -> list[SecurityComponent]:
-    """Ermittelt die Umsetzungs-Komponenten automatisch aus Quelle/Ziel.
+    """Determine the enforcing components automatically from source/destination.
 
-    Explizit übergebene component_ids (z.B. API-Aufrufe, Import) haben Vorrang.
-    Adressen ohne gepflegte Zuordnung führen zu 422 – der Nutzer muss die
-    Zuordnung einmalig über /api/address-map festlegen.
+    Explicitly supplied component_ids (e.g. API calls, imports) take precedence.
+    Addresses without a maintained assignment result in a 422 – the user has to
+    define the assignment once via /api/address-map.
     """
     if payload.component_ids:
         return resolve_components(db, payload.component_ids)
@@ -140,60 +141,60 @@ def determine_components(db: Session, payload, vrf_id: int) -> list[SecurityComp
     )
     if unknown:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Für folgende Adressen ist noch keine Komponenten-Zuordnung festgelegt: "
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "No component mapping is defined yet for these addresses: "
             + ", ".join(u["ip"] for u in unknown)
-            + ". Bitte einmalig über die Adress-Zuordnung festlegen.",
+            + ". Define it once via the address mapping.",
         )
     if not components:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Es konnten keine Umsetzungs-Komponenten ermittelt werden",
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "No enforcing components could be determined",
         )
     return components
 
 
 def enforce_bsi_firewall(source_zone: str, destination_zone: str, components: list[SecurityComponent]):
-    """BSI-Prinzip: Der Übergang zwischen Sicherheitszonen ist immer eine Firewall.
+    """BSI principle: the transition between security zones is always a firewall.
 
-    Eine zonenübergreifende Regel muss mindestens eine Firewall-Komponente enthalten –
-    Cisco ACI ist als Sicherheitskomponente für den Zonenübergang nicht ausreichend."""
+    A cross-zone rule must involve at least one firewall component – Cisco ACI is not
+    sufficient as the enforcing security component for a zone transition."""
     src, dst = (source_zone or "").strip(), (destination_zone or "").strip()
     if not src or not dst or src.upper() == dst.upper():
-        return  # Intra-Zone: ACI Contracts sind hier das richtige Mittel
+        return  # Intra-zone: ACI contracts are the right instrument here
     if components and not any(c.type.value != "aci" for c in components):
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Zonenübergang erfordert eine Firewall (BSI-Definition): Cisco ACI allein ist "
-            f"für {src} → {dst} nicht zulässig. Bitte einen Firewall-Cluster zuordnen.",
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "A zone transition requires a firewall (BSI definition): Cisco ACI alone is not "
+            f"sufficient for {src} → {dst}. Assign a firewall cluster.",
         )
 
 
 def enforce_zone_matrix(db: Session, source_zone: str, destination_zone: str, platforms: list[str]):
-    """Blockiert Regeln, die laut Zonen-Kommunikationsmatrix unzulässig sind."""
+    """Block rules that the zone communication matrix declares inadmissible."""
     result = check_zone_pair(db, source_zone, destination_zone, platforms)
     if not result.allowed:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Zonen-Matrix: " + "; ".join(result.messages),
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Zone matrix: " + "; ".join(result.messages),
         )
 
 
 def enforce_required_fields(db: Session, payload):
-    """Konfigurierbare Pflichtfelder (Admin-Einstellungen, BSI-Dokumentationspflichten)."""
+    """Configurable mandatory fields (admin settings, BSI documentation duties)."""
     from ..settings import get_setting
 
     missing = []
     if get_setting(db, "require_justification") == "yes" and not (payload.justification or "").strip():
-        missing.append("Begründung (Anlass)")
+        missing.append("Justification")
     if get_setting(db, "require_requestor") == "yes" and not (payload.requestor or "").strip():
-        missing.append("Requestor (Verantwortlicher)")
+        missing.append("Requestor (responsible person)")
     if get_setting(db, "require_valid_until") == "yes" and not (payload.valid_until or "").strip():
-        missing.append("Gültig-bis (Ablaufdatum)")
+        missing.append("Valid until (expiry date)")
     if missing:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "Pflichtfelder fehlen: " + ", ".join(missing),
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Mandatory fields are missing: " + ", ".join(missing),
         )
 
 
@@ -211,7 +212,7 @@ def add_version(db: Session, rule: Rule, user: User, note: str):
 
 @router.get("", response_model=RuleListOut)
 def list_rules(
-    q: str | None = Query(None, description="Volltextsuche über ID, Name, Quelle, Ziel, Anlass"),
+    q: str | None = Query(None, description="Full-text search across ID, name, source, destination, justification"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     source: str | None = None,
@@ -219,14 +220,14 @@ def list_rules(
     port: str | None = None,
     protocol: str | None = None,
     rule_status: RuleStatus | None = Query(None, alias="status"),
-    impl: str | None = Query(None, description="'pending' = freigegebene Regeln mit offener Umsetzung"),
-    risk: str | None = Query(None, description="'flagged' = nur Regeln mit Risiko-Hinweis"),
+    impl: str | None = Query(None, description="'pending' = approved rules with a pending implementation"),
+    risk: str | None = Query(None, description="'flagged' = only rules carrying a risk finding"),
     application: str | None = None,
-    app_id: str | None = Query(None, description="Anwendungs-ID (Report je App)"),
+    app_id: str | None = Query(None, description="Application ID (per-app report)"),
     platform: str | None = None,
-    component: str | None = Query(None, description="Name (Teilstring) einer Komponente"),
-    vrf: str | None = Query(None, description="Umgebung/VRF (Name); leer = alle"),
-    updated_since: str | None = Query(None, description="ISO-Zeitstempel; nur seither geänderte Regeln (Polling)"),
+    component: str | None = Query(None, description="Name (substring) of a component"),
+    vrf: str | None = Query(None, description="Environment/VRF (name); empty = all"),
+    updated_since: str | None = Query(None, description="ISO timestamp; only rules changed since then (polling)"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -240,7 +241,7 @@ def list_rules(
                 Rule.rule_id.ilike(like), Rule.name.ilike(like),
                 Rule.justification.ilike(like), Rule.change_id.ilike(like), Rule.app_id.ilike(like),
                 Rule.requestor.ilike(like), Rule.business_context.ilike(like),
-                # Adressfelder sind JSON – Volltext dazu unten in Python
+                # Address fields are JSON – their full-text search follows in Python below
                 Rule.source_zone.ilike(like), Rule.destination_zone.ilike(like),
             )
         )
@@ -250,9 +251,9 @@ def list_rules(
         from datetime import datetime as _dt
         try:
             query = query.filter(Rule.updated_at >= _dt.fromisoformat(updated_since))
-        except ValueError:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                                "updated_since muss ein ISO-Zeitstempel sein")
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                "updated_since must be an ISO timestamp") from exc
     if application:
         query = query.filter(Rule.application.ilike(f"%{application}%"))
     if app_id:
@@ -266,9 +267,9 @@ def list_rules(
             for e in entries or []
         )
 
-    # JSON-Feld-Filter in Python
+    # JSON field filters in Python
     if q:
-        # q-Treffer aus SQL beibehalten; zusätzlich Regeln aufnehmen, deren Adressen passen
+        # Keep the SQL hits for q; additionally include rules whose addresses match
         sql_ids = {r.id for r in rules}
         extra = [
             r for r in active_rules(db).order_by(Rule.rule_id.desc()).all()
@@ -302,22 +303,22 @@ def list_rules(
 
 
 def impl_pending(rule: Rule) -> bool:
-    """Regel mit offener Umsetzung: freigegeben und auf mindestens einer
-    Komponente noch nicht umgesetzt (fehlt, "offen", "neu", "zu ändern") –
-    oder für den Rückbau markiert ("zu löschen", z.B. nach Matrix-Block)."""
+    """Rule with pending implementation: approved and not yet implemented on at
+    least one component (missing, "open", "new", "to change") – or flagged for
+    removal ("to remove", e.g. after being blocked by the zone matrix)."""
     impl = rule.impl_status or {}
-    if any(impl.get(c.name) == "zu löschen" for c in rule.components):
+    if any(impl.get(c.name) == "to remove" for c in rule.components):
         return True
     if rule.status != RuleStatus.approved or not rule.components:
         return False
-    return any(impl.get(c.name) not in ("umgesetzt", "deaktiviert") for c in rule.components)
+    return any(impl.get(c.name) not in ("implemented", "deactivated") for c in rule.components)
 
 
 def _match_address_field(entries: list, query: str, net) -> tuple[list[str], str | None]:
-    """Prüft strukturierte Adress-Einträge gegen die Suchanfrage.
+    """Match structured address entries against the search query.
 
-    Liefert (getroffene Einträge formatiert, Trefferart): "direct" (Netz-Überlappung
-    oder Alias-/IP-Texttreffer) schlägt "any" (Eintrag deckt jede IP ab).
+    Returns (formatted matching entries, match kind): "direct" (network overlap or a
+    textual alias/IP hit) beats "any" (the entry covers every IP).
     """
     matched, kind = [], None
     q_lower = query.strip().lower()
@@ -343,12 +344,12 @@ def _match_address_field(entries: list, query: str, net) -> tuple[list[str], str
 
 @router.get("/ip-search")
 def ip_search(
-    q: str = Query(..., min_length=1, description="IP, Netz (CIDR) oder Hostname-Fragment"),
+    q: str = Query(..., min_length=1, description="IP, network (CIDR) or hostname fragment"),
     vrf: str | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Alle Regeln, in denen die IP / das Netz als Quelle (ausgehend) oder Ziel (eingehend) vorkommt."""
+    """Every rule in which the IP/network appears as source (outbound) or destination (inbound)."""
     net = parse_network(q.strip())
     outgoing, incoming = [], []
     rule_query = active_rules(db).order_by(Rule.rule_id.desc())
@@ -357,11 +358,11 @@ def ip_search(
         vrf_obj = get_vrf(db, vrf)
         vrf_id = vrf_obj.id
         rule_query = rule_query.filter(Rule.vrf_id == vrf_obj.id)
-    # Zone der gesuchten Adresse ermitteln – ein reiner "any"-Treffer wird
-    # verworfen, wenn die Adresse einer anderen Zone angehört als die Regelseite
-    # (z.B. eine PROD-Adresse ist keine Quelle einer INET→…-Regel mit Quelle any)
-    from ..zone_check import zone_for_ip
+    # Determine the zone of the searched address – a pure "any" hit is discarded
+    # when the address belongs to a different zone than that side of the rule
+    # (e.g. a PROD address is no source of an INET→… rule whose source is any)
     from ..models import ZoneNetwork as _ZN
+    from ..zone_check import zone_for_ip
 
     searched_zone = None
     if net is not None:
@@ -377,7 +378,7 @@ def ip_search(
             ("destination", incoming, rule.destination_zone),
         ):
             matched, kind = _match_address_field(getattr(rule, field), q, net)
-            # Nur-über-any-Treffer über Zonengrenzen hinweg herausfiltern
+            # Filter out hits that only match via "any" across zone boundaries
             if kind == "any" and searched_zone and rule_zone \
                     and searched_zone != rule_zone.strip().upper():
                 kind = None
@@ -400,7 +401,7 @@ def ip_search(
                         "match": kind,
                     }
                 )
-    key = lambda item: (item["match"] != "direct", item["rule_id"])  # noqa: E731 – direkte Treffer zuerst
+    key = lambda item: (item["match"] != "direct", item["rule_id"])  # noqa: E731 – direct hits first
     return {
         "query": q,
         "is_network": net is not None,
@@ -411,13 +412,13 @@ def ip_search(
 
 @router.get("/path-search")
 def path_search(
-    src: str = Query(..., min_length=1, description="Quell-IP/Netz/Hostname"),
-    dst: str = Query(..., min_length=1, description="Ziel-IP/Netz/Hostname"),
+    src: str = Query(..., min_length=1, description="Source IP/network/hostname"),
+    dst: str = Query(..., min_length=1, description="Destination IP/network/hostname"),
     vrf: str | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Alle Regeln, die Verkehr von src nach dst abdecken (Quelle UND Ziel treffen)."""
+    """Every rule covering traffic from src to dst (source AND destination must match)."""
     src_net, dst_net = parse_network(src.strip()), parse_network(dst.strip())
     results = []
     rule_query = active_rules(db).order_by(Rule.rule_id.desc())
@@ -446,7 +447,7 @@ def path_search(
                 "justification": rule.justification,
                 "matched_source": src_matched,
                 "matched_destination": dst_matched,
-                # "direct" nur, wenn beide Seiten konkret getroffen sind (nicht nur über any)
+                # "direct" only if both sides match concretely (not merely via any)
                 "match": "direct" if src_kind == "direct" and dst_kind == "direct" else "any",
             }
         )
@@ -461,19 +462,19 @@ def get_next_id(db: Session = Depends(get_db), _: User = Depends(get_current_use
 
 @router.get("/path-analysis")
 def path_analysis(
-    src: str = Query(..., description="Quell-IP oder -Netz"),
-    dst: str = Query(..., description="Ziel-IP oder -Netz"),
+    src: str = Query(..., description="Source IP or network"),
+    dst: str = Query(..., description="Destination IP or network"),
     vrf: str | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Visuelle Pfad-Analyse: Ist Kommunikation src -> dst möglich, über welche
-    Komponenten läuft sie, welche Regel erlaubt sie dort und für welche Dienste?"""
+    """Visual path analysis: is communication src -> dst possible, which components
+    does it traverse, which rule permits it there, and for which services?"""
     src_net, dst_net = parse_network(src.strip()), parse_network(dst.strip())
     if (src_net is None and src.strip().lower() != "any") or (dst_net is None and dst.strip().lower() != "any"):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Quelle und Ziel müssen IP/Netz oder 'any' sein")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Source and destination must be an IP/network or 'any'")
 
-    # Zu passierende Komponenten aus der Adress-Zuordnung (im VRF-Kontext)
+    # Components to be traversed, taken from the address mapping (in the VRF context)
     vrf_obj = get_vrf(db, vrf) if vrf else get_vrf(db)
     mappings = db.query(AddressComponentMap).filter(AddressComponentMap.vrf_id == vrf_obj.id).all()
     map_src, map_dst = find_mapping(src, mappings), find_mapping(dst, mappings)
@@ -485,32 +486,32 @@ def path_analysis(
         db.query(SecurityComponent).filter(SecurityComponent.id.in_(component_ids)).all()
         if component_ids else []
     )
-    # Gleiche Zuordnung (gleiches Netz) => Intra-Zone => ACI; sonst Firewalls
+    # Same mapping (same network) => intra-zone => ACI; otherwise firewalls
     intra = map_src is not None and map_dst is not None and map_src.id == map_dst.id
     filtered = [c for c in components if (c.type == ComponentType.aci) == intra]
     components = filtered or components
 
-    # Mehr-Hop-Reihenfolge: quellseitige Komponenten -> beidseitige -> zielseitige
+    # Multi-hop ordering: source-side components -> both-sided -> destination-side
     def hop_side(component):
         in_src, in_dst = component.id in src_ids, component.id in dst_ids
         if in_src and in_dst:
-            return 1, "beide"
-        return (0, "quelle") if in_src else (2, "ziel")
+            return 1, "both"
+        return (0, "source") if in_src else (2, "destination")
 
     hop_list = [
         {"component": component, "side": hop_side(component)[1], "via_pbr": False}
         for component in components
     ]
 
-    # PBR-Anbindung: liegt src/dst im Netz eines Anycast Gateways mit PBR, wird der
-    # Check Point Cluster zusätzlich passiert (Service-Graph-Umleitung)
-    from ..models import AciGateway  # lokaler Import vermeidet Zyklen beim Modulstart
+    # PBR attachment: if src/dst lies in the network of an anycast gateway with PBR,
+    # the Check Point cluster is traversed as well (service-graph redirection)
+    from ..models import AciGateway  # local import avoids cycles at module load time
 
     for gateway in db.query(AciGateway).filter(AciGateway.pbr_enabled).all():
         gw_net = parse_network(gateway.gateway_ip)
         if not gw_net or not gateway.pbr_component:
             continue
-        for ip, net, side in ((src, src_net, "quelle"), (dst, dst_net, "ziel")):
+        for _ip, net, side in ((src, src_net, "source"), (dst, dst_net, "destination")):
             if net is None or net.version != gw_net.version:
                 continue
             if net.subnet_of(gw_net) and not any(
@@ -521,25 +522,26 @@ def path_analysis(
                      "gateway": gateway.name}
                 )
 
-    # Regeln, die den Verkehr src -> dst abdecken (nur im VRF-Kontext)
+    # Rules covering the traffic src -> dst (only within the VRF context)
     matching = []
     for rule in active_rules(db).filter(Rule.vrf_id == vrf_obj.id).all():
-        src_matched, src_kind = _match_address_field(rule.source, src, src_net)
+        _src_matched, src_kind = _match_address_field(rule.source, src, src_net)
         if not src_kind:
             continue
-        dst_matched, dst_kind = _match_address_field(rule.destination, dst, dst_net)
+        _dst_matched, dst_kind = _match_address_field(rule.destination, dst, dst_net)
         if not dst_kind:
             continue
         matching.append((rule, src_kind, dst_kind))
 
-    # Hop-Reihenfolge: entlang der Nord-Süd-Ordnung in Flussrichtung
-    # (Quelle südlicher als Ziel => Süd->Nord, sonst Nord->Süd); danach quell- vor zielseitig.
+    # Hop ordering: along the north-south tiering, in the direction of flow
+    # (source further south than destination => south->north, else north->south); then
+    # source-side before destination-side.
     def avg_tier(ids):
         tiers = [c.ns_tier for c in components if c.id in ids]
         return sum(tiers) / len(tiers) if tiers else 100
 
     direction = -1 if avg_tier(src_ids) > avg_tier(dst_ids) else 1
-    side_rank = {"quelle": 0, "beide": 1, "ziel": 2}
+    side_rank = {"source": 0, "both": 1, "destination": 2}
     hop_list.sort(
         key=lambda h: (direction * h["component"].ns_tier,
                        side_rank.get(h["side"], 1), h["component"].name)
@@ -588,7 +590,7 @@ def path_analysis(
             }
         )
 
-    # Erlaubte Dienste = Schnittmenge über alle zu passierenden Hops
+    # Permitted services = the intersection across every hop that has to be traversed
     allowed = set.intersection(*allowed_sets) if len(allowed_sets) == len(hop_list) and allowed_sets else set()
     possible = bool(hop_list) and all(c["covered"] for c in component_results) and bool(allowed)
 
@@ -611,7 +613,7 @@ def get_expiring(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Abgelaufene und demnächst ablaufende freigegebene Regeln (Rezertifizierung)."""
+    """Expired and soon-to-expire approved rules (recertification)."""
     expired, expiring = expiring_rules(db, days)
     return ExpiringOut(days=days, expired=expired, expiring=expiring,
                        invalid=invalid_validity_rules(db))
@@ -623,18 +625,18 @@ def resolve_components_endpoint(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Ermittelt aus Quelle/Ziel die Komponenten; meldet Adressen ohne Zuordnung."""
+    """Determine the components from source/destination; report addresses without a mapping."""
     src_entries = [e.model_dump() for e in payload.source]
     dst_entries = [e.model_dump() for e in payload.destination]
     vrf_obj = get_vrf(db, payload.vrf or None)
     zone_issues = []
     src_zone, src_un, src_hits = resolve_zone_for_entries(db, src_entries, vrf_obj.id)
     dst_zone, dst_un, dst_hits = resolve_zone_for_entries(db, dst_entries, vrf_obj.id)
-    for label, un, hits in (("Quelle", src_un, src_hits), ("Ziel", dst_un, dst_hits)):
+    for label, un, hits in (("Source", src_un, src_hits), ("Destination", dst_un, dst_hits)):
         if not un and len(hits) > 1:
-            zone_issues.append(f"{label} umfasst mehrere Zonen: {', '.join(sorted(hits))}")
-    # Adressen aus unbekannten Netzen: erst Netzwerk anlegen und Zone zuordnen –
-    # die Komponenten-Zuordnung wird für sie noch nicht abgefragt
+            zone_issues.append(f"{label} spans several zones: {', '.join(sorted(hits))}")
+    # Addresses from unknown networks: create the network and assign its zone first –
+    # the component mapping is not yet requested for them
     unassigned = list(dict.fromkeys(src_un + dst_un))
     components, unknown = resolve_rule_components(
         db, src_entries, dst_entries, src_zone or "", dst_zone or "", vrf_obj.id
@@ -651,8 +653,8 @@ def create_rule(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.architect)),
 ):
-    # Rule-ID wird immer vom System vergeben (fortlaufend, eindeutig, nicht änderbar).
-    # Bei parallelen Anlagen schützt der Unique-Constraint; dann neue Nummer versuchen.
+    # The rule ID is always assigned by the system (sequential, unique, immutable).
+    # On concurrent creation the unique constraint protects us; then try a new number.
     vrf = get_vrf(db, payload.vrf or None)
     enforce_required_fields(db, payload)
     for _ in range(5):
@@ -672,11 +674,11 @@ def create_rule(
         except IntegrityError:
             db.rollback()
             continue
-        add_version(db, rule, user, "Regel angelegt")
+        add_version(db, rule, user, "Rule created")
         db.commit()
         db.refresh(rule)
         return rule
-    raise HTTPException(status.HTTP_409_CONFLICT, "Rule-ID-Vergabe fehlgeschlagen, bitte erneut versuchen")
+    raise HTTPException(status.HTTP_409_CONFLICT, "Assigning a rule ID failed, try again")
 
 
 @router.get("/{rule_id}", response_model=RuleDetail)
@@ -700,8 +702,8 @@ def update_rule(
     enforce_zone_matrix(
         db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
     )
-    # impl_status pflegt der Betrieb über den eigenen Endpunkt – ein Edit darf ihn
-    # nicht zurücksetzen (die Freigabe setzt umgesetzte Komponenten auf "zu ändern")
+    # impl_status is maintained by operations through its own endpoint – an edit must
+    # not reset it (approval sets already implemented components to "to change")
     data = payload.model_dump(exclude={"change_note", "component_ids", "vrf", "impl_status"})
     data["services"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in payload.services]
     for key, value in data.items():
@@ -709,13 +711,13 @@ def update_rule(
     rule.vrf_id = vrf.id
     rule.components = components
     rule.version += 1
-    # Die Prüfungen oben (Zonen, Matrix, BSI-Firewall) sind durchlaufen – ein
-    # zuvor ausgesprochener Löschvorschlag ist damit gegenstandslos.
+    # The checks above (zones, matrix, BSI firewall) have all passed – any removal
+    # proposal raised earlier is therefore moot.
     rule.removal_reason = ""
-    # Inhaltliche Änderung einer freigegebenen Regel setzt den Review zurück
+    # A substantive change to an approved rule resets the review
     if rule.status in (RuleStatus.approved, RuleStatus.rejected):
         rule.status = RuleStatus.draft
-    add_version(db, rule, user, payload.change_note or "Regel geändert")
+    add_version(db, rule, user, payload.change_note or "Rule changed")
     db.commit()
     db.refresh(rule)
     return rule
@@ -728,9 +730,9 @@ def delete_rule(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.admin)),
 ):
-    """Soft-Delete: die Regel wird als gelöscht markiert (verschwindet aus
-    Listen/Exporten), die Versionshistorie bleibt für den Audit-Trail erhalten.
-    Der Löschvorgang wird revisionssicher protokolliert."""
+    """Soft delete: the rule is marked as deleted (disappearing from lists and
+    exports) while its version history is retained for the audit trail. The
+    deletion itself is logged in a tamper-evident way."""
     from .. import audit
     from ..models import utcnow as _now
 
@@ -740,11 +742,11 @@ def delete_rule(
     rule.deleted_at = _now()
     db.commit()
     audit.record(db, "rule", "rule.deleted", actor=user.username, object=rule.rule_id,
-                 detail=f"Regel gelöscht (Soft-Delete): {rule.name}",
+                 detail=f"Rule deleted (soft delete): {rule.name}",
                  source_ip=(request.client.host if request and request.client else ""))
 
 
-# --- Review-Workflow ---------------------------------------------------------
+# --- Review workflow ---------------------------------------------------------
 
 @router.post("/{rule_id}/restore/{version}", response_model=RuleOut)
 def restore_version(
@@ -753,10 +755,10 @@ def restore_version(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.architect)),
 ):
-    """Rollback: stellt den Snapshot einer früheren Version als neuen Entwurf
-    wieder her. Die wiederhergestellten Inhalte durchlaufen dieselben Prüfungen
-    wie eine Änderung (Zonen-Ableitung, Matrix, BSI, Komponenten) und den
-    normalen Review-Workflow; der Umsetzungsstatus bleibt unangetastet."""
+    """Rollback: restore the snapshot of an earlier version as a new draft. The
+    restored content runs through the same checks as any change (zone derivation,
+    zone matrix, BSI firewall, components) and through the normal review workflow;
+    the implementation status is left untouched."""
     rule = get_rule_or_404(db, rule_id)
     entry = (
         db.query(RuleVersion)
@@ -765,10 +767,10 @@ def restore_version(
     )
     if not entry or not isinstance(entry.snapshot, dict) or "source" not in entry.snapshot:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
-                            f"Version {version} hat keinen wiederherstellbaren Snapshot")
+                            f"Version {version} has no restorable snapshot")
     snap = entry.snapshot
 
-    # Wiederhergestellte Inhalte wie eine normale Änderung validieren
+    # Validate the restored content just like a normal change
     class _Payload:
         pass
 
@@ -795,10 +797,10 @@ def restore_version(
     rule.source_zone = payload.source_zone
     rule.destination_zone = payload.destination_zone
     rule.components = components
-    rule.status = RuleStatus.draft  # Rollback durchläuft den normalen Review
-    rule.removal_reason = ""        # Prüfungen oben bestanden – Vorschlag hinfällig
+    rule.status = RuleStatus.draft  # a rollback goes through the normal review
+    rule.removal_reason = ""        # checks above passed – removal proposal is moot
     rule.version += 1
-    add_version(db, rule, user, f"Rollback auf Version {version}")
+    add_version(db, rule, user, f"Rolled back to version {version}")
     db.commit()
     db.refresh(rule)
     return rule
@@ -812,10 +814,10 @@ def submit_for_review(
 ):
     rule = get_rule_or_404(db, rule_id)
     if rule.status not in (RuleStatus.draft, RuleStatus.rejected):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Regel ist im Status '{rule.status.value}'")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"The rule is in status '{rule.status.value}'")
     rule.status = RuleStatus.in_review
     rule.version += 1
-    add_version(db, rule, user, "Zum Review eingereicht")
+    add_version(db, rule, user, "Submitted for review")
     db.commit()
     db.refresh(rule)
     from .. import change_management, notifications
@@ -831,42 +833,42 @@ def submit_for_review(
 def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus, note: str):
     rule = get_rule_or_404(db, rule_id)
     if new_status in (RuleStatus.approved, RuleStatus.rejected) and rule.status != RuleStatus.in_review:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Regel ist nicht im Review")
-    # Vier-Augen-Prinzip: wer die Regel eingereicht/erstellt hat, darf sie nicht
-    # selbst freigeben (gilt auch für Admins) – BSI-Funktionstrennung
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The rule is not in review")
+    # Four-eyes principle: whoever submitted or created the rule must not approve it
+    # themselves (admins included) – BSI separation of duties
     if new_status == RuleStatus.approved:
         last_version = max(rule.versions, key=lambda v: v.version, default=None)
         submitter = last_version.changed_by if last_version else rule.created_by
         if user.username in {submitter, rule.created_by}:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                "Vier-Augen-Prinzip: eigene bzw. selbst eingereichte Regeln können nicht "
-                "selbst freigegeben werden",
+                "Separation of duties: you cannot approve a rule you created or "
+                "submitted yourself",
             )
-    # Steht die Zonen-Beziehung der Regel auf Block (z.B. nach einer
-    # Matrix-Änderung), ist "Freigeben" die Löschungsfreigabe: Die Regel wird
-    # deaktiviert und je Komponente auf "zu löschen" gesetzt – sie erscheint
-    # damit beim Betrieb als offene Umsetzung (Rückbau auf den Geräten).
+    # If the rule's zone relation is set to block (e.g. after a change to the zone
+    # matrix), "approve" means approving its removal: the rule is deactivated and
+    # set to "to remove" for each component – so it shows up for operations as a
+    # pending implementation (removal from the devices).
     if new_status == RuleStatus.approved:
         verdict = check_zone_pair(db, rule.source_zone, rule.destination_zone,
                                   rule.platforms or [])
-        # Auch ein ausdrücklicher Löschvorschlag zählt hier: Er entsteht z.B.,
-        # wenn ein Netz umgehängt wurde und die Regel dadurch unzulässig ist –
-        # etwa weil eine Seite nun mehrere Zonen umfasst oder dem Zonenübergang
-        # die Firewall fehlt. Beides schlägt in check_zone_pair nicht durch.
+        # An explicit removal proposal counts here as well: it arises e.g. when a
+        # network was moved to another zone and the rule became inadmissible as a
+        # result – because one side now spans several zones, or because the zone
+        # transition lacks a firewall. Neither of those surfaces in check_zone_pair.
         if not verdict.allowed or rule.removal_reason:
             rule.status = RuleStatus.deactivated
             rule.impl_status = {
                 **(rule.impl_status or {}),
-                **{c.name: "zu löschen" for c in rule.components
-                   if (rule.impl_status or {}).get(c.name) != "deaktiviert"},
+                **{c.name: "to remove" for c in rule.components
+                   if (rule.impl_status or {}).get(c.name) != "deactivated"},
             }
             rule.version += 1
-            grund = rule.removal_reason or (
-                f"Zonen-Beziehung {rule.source_zone} → {rule.destination_zone} ist Block")
-            removal_note = (f"Löschung freigegeben: {grund} – "
-                            f"Regel auf den Komponenten entfernen ('zu löschen')")
-            rule.removal_reason = ""   # Vorschlag ist entschieden
+            reason = rule.removal_reason or (
+                f"The zone relation {rule.source_zone} → {rule.destination_zone} is Block")
+            removal_note = (f"Removal approved: {reason} – "
+                            f"remove the rule on the components ('to remove')")
+            rule.removal_reason = ""   # the proposal has been decided
             add_version(db, rule, user, removal_note)
             db.add(Comment(rule_pk=rule.id, author=user.username,
                            text=(decision.comment + "\n" if decision.comment else "") + removal_note))
@@ -881,16 +883,16 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
             )
             notifications.rule_decided(db, rule, True, user.username, decision.comment)
             notifications.rule_implementation_pending(
-                db, rule, "Löschung freigegeben – Regel auf den Komponenten entfernen")
+                db, rule, "Removal approved – remove the rule on the components")
             return rule
     rule.status = new_status
     if new_status == RuleStatus.approved:
-        # Bereits umgesetzte Komponenten müssen nach einer erneuten Freigabe vom
-        # Betrieb angepasst werden -> Umsetzungsstatus "zu ändern"
+        # Components already implemented have to be adjusted by operations after a
+        # renewed approval -> implementation status "to change"
         impl = dict(rule.impl_status or {})
         for c in rule.components:
-            if impl.get(c.name) == "umgesetzt":
-                impl[c.name] = "zu ändern"
+            if impl.get(c.name) == "implemented":
+                impl[c.name] = "to change"
         rule.impl_status = impl
     rule.version += 1
     add_version(db, rule, user, note)
@@ -898,7 +900,7 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
         db.add(Comment(rule_pk=rule.id, author=user.username, text=decision.comment))
     db.commit()
     db.refresh(rule)
-    # Optionaler Change-Management-Webhook (z.B. ServiceNow) – fire-and-forget
+    # Optional change management webhook (e.g. ServiceNow) – fire-and-forget
     from .. import audit, change_management, notifications
 
     change_management.notify(
@@ -913,7 +915,7 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
                                    user.username, decision.comment)
     if new_status == RuleStatus.approved and impl_pending(rule):
         notifications.rule_implementation_pending(
-            db, rule, "Regel freigegeben – Umsetzung auf den Komponenten erforderlich")
+            db, rule, "Rule approved – it has to be implemented on the components")
     return rule
 
 
@@ -924,7 +926,7 @@ def approve(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.change_approver)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.approved, "Regel freigegeben")
+    return _decide(db, rule_id, user, decision, RuleStatus.approved, "Rule approved")
 
 
 @router.post("/{rule_id}/reject", response_model=RuleOut)
@@ -934,7 +936,7 @@ def reject(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.change_approver)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.rejected, "Regel abgelehnt")
+    return _decide(db, rule_id, user, decision, RuleStatus.rejected, "Rule rejected")
 
 
 @router.post("/{rule_id}/deactivate", response_model=RuleOut)
@@ -944,7 +946,7 @@ def deactivate(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.operations, Role.architect)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.deactivated, "Regel deaktiviert")
+    return _decide(db, rule_id, user, decision, RuleStatus.deactivated, "Rule deactivated")
 
 
 @router.post("/{rule_id}/extend", response_model=RuleOut)
@@ -954,24 +956,24 @@ def extend_validity(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.architect, Role.operations, Role.change_approver)),
 ):
-    """Rezertifizierung: Gültigkeit verlängern, ohne den Freigabe-Status zurückzusetzen."""
+    """Recertification: extend the validity without resetting the approval status."""
     from datetime import date
 
     rule = get_rule_or_404(db, rule_id)
     if rule.status != RuleStatus.approved:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Nur freigegebene Regeln können rezertifiziert werden – abgelaufene/deaktivierte bitte neu einreichen",
+            "Only approved rules can be recertified – submit expired or deactivated ones again",
         )
     try:
         new_date = date.fromisoformat(payload.valid_until)
-    except ValueError:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Ungültiges Datum (erwartet YYYY-MM-DD)")
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid date (expected YYYY-MM-DD)") from exc
     if new_date <= date.today():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Neues Gültig-bis muss in der Zukunft liegen")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The new valid-until date must be in the future")
     rule.valid_until = new_date.isoformat()
     rule.version += 1
-    add_version(db, rule, user, f"Rezertifiziert: Gültigkeit verlängert bis {rule.valid_until}")
+    add_version(db, rule, user, f"Recertified: validity extended until {rule.valid_until}")
     if payload.comment:
         db.add(Comment(rule_pk=rule.id, author=user.username, text=payload.comment))
     db.commit()
@@ -986,33 +988,33 @@ def set_impl_status(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.operations)),
 ):
-    """Umsetzungsstatus je Komponente pflegen (Betrieb), z.B. {"FW-Cluster-FFM": "umgesetzt"}."""
+    """Maintain the implementation status per component (operations), e.g. {"FW-Cluster-FFM": "implemented"}."""
     rule = get_rule_or_404(db, rule_id)
-    # Validierung: nur bekannte Statuswerte und nur Komponenten dieser Regel
-    allowed_status = {"offen", "neu", "zu ändern", "zu löschen", "umgesetzt", "deaktiviert"}
+    # Validation: only known status values, and only components of this rule
+    allowed_status = set(IMPL_STATUSES)
     component_names = {c.name for c in rule.components}
     for name, value in impl_status.items():
         if name not in component_names:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                                f"Komponente '{name}' gehört nicht zur Regel {rule_id}")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                f"Component '{name}' does not belong to rule {rule_id}")
         if value not in allowed_status:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                                f"Ungültiger Umsetzungsstatus '{value}' "
-                                f"(erlaubt: {', '.join(sorted(allowed_status))})")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                f"Invalid implementation status '{value}' "
+                                f"(allowed: {', '.join(sorted(allowed_status))})")
     rule.impl_status = {**(rule.impl_status or {}), **impl_status}
     rule.version += 1
-    add_version(db, rule, user, f"Umsetzungsstatus: {impl_status}")
+    add_version(db, rule, user, f"Implementation status: {impl_status}")
     db.commit()
     db.refresh(rule)
     return rule
 
 
-# --- Versionen, Kommentare, Konflikte ---------------------------------------
+# --- Versions, comments, conflicts -------------------------------------------
 
 @router.get("/{rule_id}/implementation")
 def implementation(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """Zeigt je zugeordneter Komponente, wie die Regel dort umgesetzt wird:
-    Juniper set-Kommandos, Check Point mgmt_cli bzw. ACI Contract (mit EPG-Auflösung)."""
+    """Show, for each assigned component, how the rule is implemented there:
+    Juniper set commands, Check Point mgmt_cli, or an ACI contract (with EPG resolution)."""
     from ..exporters import aci, checkpoint, juniper
 
     rule = get_rule_or_404(db, rule_id)
@@ -1022,7 +1024,7 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _: User = Depend
             "component_id": component.id,
             "component": component.name,
             "type": component.type.value,
-            "impl_status": (rule.impl_status or {}).get(component.name, "offen"),
+            "impl_status": (rule.impl_status or {}).get(component.name, "open"),
         }
         if component.type.value == "juniper":
             entry["format"] = "juniper"
@@ -1031,8 +1033,8 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _: User = Depend
             entry["format"] = "checkpoint-cli"
             lines = checkpoint.export_cli([rule]).splitlines()
             entry["preview"] = "\n".join(
-                l for l in lines
-                if l.startswith(("mgmt_cli add", "#")) and not l.startswith("#!")
+                line for line in lines
+                if line.startswith(("mgmt_cli add", "#")) and not line.startswith("#!")
             )
         else:  # aci
             model = aci.build_contract_model([rule], db)
@@ -1050,14 +1052,14 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _: User = Depend
             else:
                 entry["aci"] = None
                 entry["warning"] = (
-                    "Keine EPG-Zuordnung für Quelle/Ziel gepflegt – Export erfolgt als "
-                    "Einzel-Contract (Fallback). EPG-Zuordnung: Seite Objekte → ACI EPGs."
+                    "No EPG mapping maintained for source/destination – the export falls back "
+                    "to a single contract. Maintain it on the Objects page under ACI EPGs."
                 )
         results.append(entry)
     if rule.status.value != "approved":
         for entry in results:
             entry.setdefault(
-                "note", f"Regel ist im Status '{rule.status.value}' – Vorschau zeigt die künftige Umsetzung"
+                "note", f"The rule is in status '{rule.status.value}' – the preview shows the future implementation"
             )
     return {"rule_id": rule.rule_id, "implementations": results}
 
@@ -1088,7 +1090,7 @@ def conflicts(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get
     others = active_rules(db).filter(Rule.status != RuleStatus.deactivated,
                                      Rule.vrf_id == rule.vrf_id).all()
     warnings = find_conflicts(rule, others)
-    # Zusätzlich: Verstöße/Hinweise aus der Zonen-Kommunikationsmatrix
+    # In addition: violations and advisories from the zone communication matrix
     zone_result = check_zone_pair(db, rule.source_zone, rule.destination_zone, rule.platforms or [])
     for msg in zone_result.messages:
         if zone_result.policy in ("intra",):
@@ -1097,7 +1099,7 @@ def conflicts(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get
             {
                 "rule_id": rule.rule_id,
                 "other_rule_id": f"{rule.source_zone or '?'} → {rule.destination_zone or '?'}",
-                "kind": "zone-blocked" if not zone_result.allowed else "zone-hinweis",
+                "kind": "zone-blocked" if not zone_result.allowed else "zone-notice",
                 "detail": msg,
             }
         )
@@ -1106,8 +1108,8 @@ def conflicts(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get
 
 @router.get("/{rule_id}/risk")
 def rule_risk(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """Risikoanalyse einer Regel (any-to-any, breite Netze, riskante Dienste;
-    Schweregrad gewichtet nach Schutzbedarf der Ziel-Zone)."""
+    """Risk analysis of a rule (any-to-any, overly broad networks, risky services;
+    severity weighted by the protection level of the destination zone)."""
     from ..risk import assess_rule
 
     return assess_rule(db, get_rule_or_404(db, rule_id))
@@ -1116,7 +1118,7 @@ def rule_risk(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get
 @router.post("/risk/assess")
 def risk_assess(payload: ResolveRequest, db: Session = Depends(get_db),
                 _: User = Depends(get_current_user)):
-    """Live-Risikobewertung fürs Regelformular (ohne gespeicherte Regel)."""
+    """Live risk assessment for the rule form (without a stored rule)."""
     from types import SimpleNamespace
 
     from ..risk import assess_rule

@@ -1,5 +1,7 @@
-"""Tests für Integritätssicherung (Hash-Kette) und zuverlässige SIEM-
-Zustellung des Audit-Logs (Issue #26)."""
+"""Tests for integrity protection (hash chain) and reliable SIEM delivery of the
+audit log (issue #26)."""
+import itertools
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -28,8 +30,8 @@ def test_chain_links_and_verifies(db):
     _seed(db, 5)
     rows = db.query(AuditEvent).order_by(AuditEvent.id.asc()).all()
     assert rows[0].prev_hash == audit.GENESIS
-    # Jeder Eintrag verweist auf den hash seines Vorgängers
-    for prev, cur in zip(rows, rows[1:]):
+    # Every entry references the hash of its predecessor
+    for prev, cur in itertools.pairwise(rows):
         assert cur.prev_hash == prev.hash
     result = audit.verify_chain(db)
     assert result["ok"] is True
@@ -40,22 +42,22 @@ def test_chain_links_and_verifies(db):
 def test_tamper_content_is_detected(db):
     _seed(db, 4)
     victim = db.query(AuditEvent).order_by(AuditEvent.id.asc()).all()[1]
-    victim.detail = "heimlich geändert"      # Inhalt manipulieren, hash unverändert lassen
+    victim.detail = "changed in secret"      # tamper with the content, leave the hash unchanged
     db.commit()
     result = audit.verify_chain(db)
     assert result["ok"] is False
     assert result["broken_at_id"] == victim.id
-    assert "Inhalt" in result["reason"]
+    assert "content" in result["reason"]
 
 
 def test_deletion_breaks_chain(db):
     _seed(db, 4)
     rows = db.query(AuditEvent).order_by(AuditEvent.id.asc()).all()
-    db.delete(rows[1])                        # einen Eintrag entfernen
+    db.delete(rows[1])                        # remove one entry
     db.commit()
     result = audit.verify_chain(db)
     assert result["ok"] is False
-    # Der Nachfolger des gelöschten Eintrags passt nicht mehr an den Vorgänger
+    # The successor of the deleted entry no longer matches its predecessor
     assert result["broken_at_id"] == rows[2].id
     assert "prev_hash" in result["reason"]
 
@@ -90,7 +92,7 @@ def test_deliver_pending_marks_sent_in_order(db, monkeypatch):
     monkeypatch.setattr(audit, "deliver", lambda ev: (calls.append(ev["object"]) or True))
     result = audit.deliver_pending(db)
     assert result == {"sent": 3, "pending": 0}
-    assert calls == ["key0", "key1", "key2"]      # strenge Reihenfolge
+    assert calls == ["key0", "key1", "key2"]      # strict ordering
     assert all(e.siem_status == "sent" and e.siem_sent_at is not None
                for e in db.query(AuditEvent).all())
 
@@ -99,7 +101,7 @@ def test_deliver_pending_stops_on_failure_preserving_order(db, monkeypatch):
     monkeypatch.setenv("AUDIT_WEBHOOK_URL", "http://siem.example/ingest")
     _seed(db, 4)
 
-    # Zustellung schlägt ab dem dritten Ereignis fehl
+    # Delivery fails starting with the third event
     def flaky(ev):
         return ev["object"] in ("key0", "key1")
     monkeypatch.setattr(audit, "deliver", flaky)
@@ -108,10 +110,10 @@ def test_deliver_pending_stops_on_failure_preserving_order(db, monkeypatch):
     assert result["sent"] == 2 and result["pending"] == 2
     rows = db.query(AuditEvent).order_by(AuditEvent.id.asc()).all()
     assert [r.siem_status for r in rows] == ["sent", "sent", "pending", "pending"]
-    # Der fehlgeschlagene Eintrag wurde ein Mal versucht, der dahinter gar nicht
+    # The failed entry was attempted once, the one behind it not at all
     assert rows[2].siem_attempts == 1 and rows[3].siem_attempts == 0
 
-    # Nächster Lauf stellt die verbliebenen zu, sobald das SIEM wieder verfügbar ist
+    # The next run delivers the remaining ones as soon as the SIEM is available again
     monkeypatch.setattr(audit, "deliver", lambda ev: True)
     result2 = audit.deliver_pending(db)
     assert result2 == {"sent": 2, "pending": 0}

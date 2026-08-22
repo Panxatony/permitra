@@ -1,15 +1,15 @@
-"""Automatische Ermittlung der Umsetzungs-Komponenten einer Regel aus Quelle/Ziel.
+"""Automatic derivation of a rule's enforcing components from source/destination.
 
-Auflösung je Adress-Eintrag über die Tabelle address_component_map:
-  1. exakter Treffer (normalisierte IP bzw. Netz, oder "any")
-  2. spezifischstes gepflegtes Netz, das den Eintrag enthält (Containment)
-Nicht auflösbare Einträge werden als "unknown" gemeldet – der Nutzer legt die
-Zuordnung dann einmalig fest.
+Resolution per address entry via the address_component_map table:
+  1. exact match (normalized IP or network, or "any")
+  2. most specific maintained network containing the entry (containment)
+Entries that cannot be resolved are reported as "unknown" - the user then
+defines the mapping once.
 
-Regel-Komponenten = Vereinigung über alle Quell-/Ziel-Einträge, danach gefiltert:
-  - Intra-Zonen-Regel (Quell-Zone == Ziel-Zone): nur ACI-Komponenten
-  - zonenübergreifend: nur Firewall-Komponenten (Juniper/Check Point)
-  (fällt auf die ungefilterte Menge zurück, wenn der Filter leer wäre)
+Rule components = union over all source/destination entries, then filtered:
+  - intra-zone rule (source zone == destination zone): ACI components only
+  - cross-zone: firewall components only (Juniper/Check Point)
+  (falls back to the unfiltered set if the filter would yield nothing)
 """
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,7 @@ from .validation import parse_network
 
 
 def normalize_ip(ip: str) -> str | None:
-    """Normalisiert eine IP/ein Netz für Vergleich und Speicherung ("10.10.30.5" -> "10.10.30.5/32")."""
+    """Normalizes an IP/network for comparison and storage ("10.10.30.5" -> "10.10.30.5/32")."""
     ip = (ip or "").strip()
     if not ip:
         return None
@@ -42,9 +42,8 @@ def find_mapping(ip: str, mappings: list[AddressComponentMap]) -> AddressCompone
         mapped_net = parse_network(mapping.ip)
         if not mapped_net or mapped_net.version != net.version:
             continue
-        if net == mapped_net or net.subnet_of(mapped_net):
-            if mapped_net.prefixlen > best_prefix:
-                best, best_prefix = mapping, mapped_net.prefixlen
+        if (net == mapped_net or net.subnet_of(mapped_net)) and mapped_net.prefixlen > best_prefix:
+            best, best_prefix = mapping, mapped_net.prefixlen
     return best
 
 
@@ -56,7 +55,7 @@ def resolve_rule_components(
     destination_zone: str = "",
     vrf_id: int | None = None,
 ) -> tuple[list[SecurityComponent], list[dict]]:
-    """Liefert (ermittelte Komponenten, unbekannte Adress-Einträge) – im VRF-Kontext."""
+    """Returns (resolved components, unknown address entries) - within the VRF context."""
     query = db.query(AddressComponentMap)
     if vrf_id is not None:
         query = query.filter(AddressComponentMap.vrf_id == vrf_id)

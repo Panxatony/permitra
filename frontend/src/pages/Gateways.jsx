@@ -64,7 +64,7 @@ export default function Gateways() {
   return (
     <div>
       <div className="page-head">
-        <h1>{t('ACI Gateways')}</h1>
+        <h1>{t('ACI gateways')}</h1>
         <span className="muted">
           Bridge-Domain-Gateways, optional mit PBR-Umleitung auf einen Check Point Cluster
         </span>

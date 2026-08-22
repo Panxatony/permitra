@@ -1,4 +1,4 @@
-"""Tests für die Sicherheits-Audit-Fixes (Issues #16-#22)."""
+"""Tests for the security audit fixes (issues #16-#22)."""
 from datetime import timedelta
 
 import pytest
@@ -9,8 +9,20 @@ from sqlalchemy.orm import sessionmaker
 from app import auth
 from app.database import Base
 from app.models import (
-    ComponentType, Role, Rule, RuleAction, RuleStatus, SecurityComponent, User,
-    Vrf, Zone, ZoneNetwork, ZonePolicy, ZonePolicyChange, ZonePolicyType, utcnow,
+    ComponentType,
+    Role,
+    Rule,
+    RuleAction,
+    RuleStatus,
+    SecurityComponent,
+    User,
+    Vrf,
+    Zone,
+    ZoneNetwork,
+    ZonePolicy,
+    ZonePolicyChange,
+    ZonePolicyType,
+    utcnow,
 )
 from app.routers.rules_router import set_impl_status
 from app.routers.zones_router import _create_batch, _decide_change
@@ -30,11 +42,13 @@ def db():
 def make_user(s, name, role=Role.change_approver, active=True):
     u = User(username=name, password_hash=auth.hash_password("passwort123"),
              role=role, is_active=active)
-    s.add(u); s.commit(); s.refresh(u)
+    s.add(u)
+    s.commit()
+    s.refresh(u)
     return u
 
 
-# --- H1: is_active + Token-Invalidierung -----------------------------------
+# --- H1: is_active + token invalidation ------------------------------------
 
 def test_inactive_user_rejected(db, monkeypatch):
     u = make_user(db, "alex", Role.architect, active=False)
@@ -48,7 +62,7 @@ def test_inactive_user_rejected(db, monkeypatch):
 def test_token_before_invalidation_rejected(db):
     u = make_user(db, "alex", Role.architect)
     old_token = auth.create_token(u)
-    # Passwortwechsel/Deaktivierung setzt token_valid_from in die Zukunft
+    # A password change/deactivation sets token_valid_from into the future
     u.token_valid_from = utcnow() + timedelta(seconds=5)
     db.commit()
     with pytest.raises(HTTPException) as exc:
@@ -64,11 +78,13 @@ def test_valid_token_after_invalidation_accepted(db):
     assert auth.get_current_user(token=fresh, db=db).username == "alex"
 
 
-# --- H2: Vier-Augen-Prinzip auch für Admins --------------------------------
+# --- H2: four-eyes principle applies to admins too -------------------------
 
 def _zone_pair(db):
-    a = Zone(name="MGMT", sort_order=1); b = Zone(name="PROD", sort_order=2)
-    db.add_all([a, b]); db.flush()
+    a = Zone(name="MGMT", sort_order=1)
+    b = Zone(name="PROD", sort_order=2)
+    db.add_all([a, b])
+    db.flush()
     db.add(ZonePolicy(from_zone_id=a.id, to_zone_id=b.id, policy=ZonePolicyType.allow_only))
     db.commit()
 
@@ -85,59 +101,66 @@ def test_admin_cannot_self_approve_zone_change(db):
     assert exc.value.status_code == 403
 
 
-# --- H3: Zonen-Löschung über Freigabe + Integritätsprüfung -----------------
+# --- H3: zone deletion via approval + integrity check ----------------------
 
 def test_zone_delete_requires_no_networks(db):
-    z = Zone(name="OLD", sort_order=1); db.add(z); db.flush()
-    db.add(ZoneNetwork(cidr="10.9.0.0/24", zone_id=z.id, vrf_id=1)); db.commit()
+    z = Zone(name="OLD", sort_order=1)
+    db.add(z)
+    db.flush()
+    db.add(ZoneNetwork(cidr="10.9.0.0/24", zone_id=z.id, vrf_id=1))
+    db.commit()
     arch = make_user(db, "alex", Role.architect)
-    with pytest.raises(HTTPException) as exc:  # Netz-Zuordnung verhindert Antrag
+    with pytest.raises(HTTPException) as exc:  # the network assignment prevents the request
         _create_batch(db, arch, [{"type": "zone_delete", "name": "OLD"}], "")
     assert exc.value.status_code == 409
 
 
 def test_zone_delete_two_approvals(db):
-    db.add(Zone(name="OLD", sort_order=1)); db.commit()
+    db.add(Zone(name="OLD", sort_order=1))
+    db.commit()
     arch = make_user(db, "alex", Role.architect)
-    ap1 = make_user(db, "chris"); ap2 = make_user(db, "kim")
+    ap1 = make_user(db, "chris")
+    ap2 = make_user(db, "kim")
     _create_batch(db, arch, [{"type": "zone_delete", "name": "OLD"}], "")
     change = db.query(ZonePolicyChange).filter(ZonePolicyChange.status == "pending").first()
     _decide_change(db, change.id, ap1, True, "")
-    assert db.query(Zone).filter(Zone.name == "OLD").count() == 1  # noch da
+    assert db.query(Zone).filter(Zone.name == "OLD").count() == 1  # still there
     _decide_change(db, change.id, ap2, True, "")
-    assert db.query(Zone).filter(Zone.name == "OLD").count() == 0  # gelöscht
+    assert db.query(Zone).filter(Zone.name == "OLD").count() == 0  # deleted
 
 
-# --- H4: impl_status-Validierung -------------------------------------------
+# --- H4: impl_status validation --------------------------------------------
 
 def test_impl_status_rejects_unknown_component(db):
     fw = SecurityComponent(name="FW-A", type=ComponentType.juniper)
-    db.add(fw); db.flush()
+    db.add(fw)
+    db.flush()
     rule = Rule(rule_id="SR00001", vrf_id=1, name="r", components=[fw],
                 source=[{"ip": "10.0.0.1", "alias": ""}], destination=[{"ip": "10.0.0.2", "alias": ""}],
                 services=[{"protocol": "TCP", "port": "443"}], action=RuleAction.permit,
                 status=RuleStatus.approved)
-    db.add(rule); db.commit()
+    db.add(rule)
+    db.commit()
     ops = make_user(db, "bob", Role.operations)
     with pytest.raises(HTTPException) as exc:
-        set_impl_status("SR00001", {"FremdKomponente": "umgesetzt"}, db, ops)
+        set_impl_status("SR00001", {"FremdKomponente": "implemented"}, db, ops)
     assert exc.value.status_code == 422
     with pytest.raises(HTTPException) as exc:
         set_impl_status("SR00001", {"FW-A": "quatsch"}, db, ops)
     assert exc.value.status_code == 422
-    # gültig
-    r = set_impl_status("SR00001", {"FW-A": "umgesetzt"}, db, ops)
-    assert r.impl_status["FW-A"] == "umgesetzt"
+    # valid
+    r = set_impl_status("SR00001", {"FW-A": "implemented"}, db, ops)
+    assert r.impl_status["FW-A"] == "implemented"
 
 
-# --- M2: Login-Lockout ------------------------------------------------------
+# --- M2: login lockout ------------------------------------------------------
 
 def test_login_lockout(db, monkeypatch):
     import app.routers.auth_router as ar
     monkeypatch.setattr(ar, "LOGIN_MAX_FAILS", 3)
     monkeypatch.setattr(ar, "LOGIN_LOCK_MINUTES", 15)
     u = make_user(db, "target", Role.architect)
-    # 3 Fehlversuche -> Konto gesperrt
+    # 3 failed attempts -> account locked
     for _ in range(3):
         ar._register_failure(db, u)
     db.refresh(u)
@@ -146,15 +169,16 @@ def test_login_lockout(db, monkeypatch):
     if locked.tzinfo is None:
         locked = locked.replace(tzinfo=timezone.utc)
     assert locked is not None and locked > utcnow()
-    assert u.failed_logins == 0  # Zähler nach Sperre zurückgesetzt
+    assert u.failed_logins == 0  # counter reset after the lockout
 
 
-# --- M4: next_rule_id per SQL-Aggregat --------------------------------------
+# --- M4: next_rule_id via an SQL aggregate ----------------------------------
 
 def test_next_rule_id_uses_max(db):
     from app.routers.rules_router import next_rule_id
     fw = SecurityComponent(name="FW", type=ComponentType.juniper)
-    db.add(fw); db.flush()
+    db.add(fw)
+    db.flush()
     for rid in ("SR00001", "SR00042", "SR00007"):
         db.add(Rule(rule_id=rid, vrf_id=1, name=rid, components=[fw],
                     source=[{"ip": "10.0.0.1", "alias": ""}], destination=[{"ip": "10.0.0.2", "alias": ""}],
@@ -164,14 +188,14 @@ def test_next_rule_id_uses_max(db):
     assert next_rule_id(db) == "SR00043"
 
 
-# --- Analyse: any-Treffer zonen-bewusst (kein Cross-Zone-any) ---------------
+# --- Analysis: 'any' hits are zone-aware (no cross-zone any) ----------------
 
 def test_ip_search_any_match_is_zone_aware(db):
-    # Kernlogik: 'any' matcht technisch; die Zonenfilterung erfolgt im Endpoint
+    # Core logic: 'any' matches technically; the zone filtering happens in the endpoint
     from app.routers.rules_router import _match_address_field
     from app.validation import parse_network
 
-    # Regel mit Quelle 'any' (Zone INET)
+    # Rule with source 'any' (zone INET)
     src_entries = [{"ip": "any", "alias": "Internet"}]
-    matched, kind = _match_address_field(src_entries, "10.10.30.20", parse_network("10.10.30.20"))
-    assert kind == "any"  # matcht technisch – die Zonenfilterung passiert im Endpoint
+    _matched, kind = _match_address_field(src_entries, "10.10.30.20", parse_network("10.10.30.20"))
+    assert kind == "any"  # matches technically - the zone filtering happens in the endpoint

@@ -1,4 +1,4 @@
-"""Tests für die Risikoanalyse (Issue #10)."""
+"""Tests for the risk analysis (issue #10)."""
 from types import SimpleNamespace
 
 import pytest
@@ -17,10 +17,10 @@ def db():
     s = sessionmaker(bind=engine)()
     s.add(Vrf(id=1, name="IT"))
     s.add_all([
-        Zone(name="INET", pap_level="extern", sort_order=0),
-        Zone(name="PROD-DB", pap_level="intern", sort_order=1,
-             cia_c="sehr hoch", cia_i="sehr hoch", cia_a="sehr hoch"),
-        Zone(name="DEV", pap_level="intern", sort_order=2),
+        Zone(name="INET", pap_level="external", sort_order=0),
+        Zone(name="PROD-DB", pap_level="internal", sort_order=1,
+             cia_c="very high", cia_i="very high", cia_a="very high"),
+        Zone(name="DEV", pap_level="internal", sort_order=2),
     ])
     s.commit()
     yield s
@@ -28,8 +28,8 @@ def db():
 
 
 def rule(**kw):
-    base = dict(source=[{"ip": "10.0.0.1", "alias": ""}], destination=[{"ip": "10.0.0.2", "alias": ""}],
-                services=[{"protocol": "TCP", "port": "443"}], source_zone="DEV", destination_zone="DEV")
+    base = {"source": [{"ip": "10.0.0.1", "alias": ""}], "destination": [{"ip": "10.0.0.2", "alias": ""}],
+            "services": [{"protocol": "TCP", "port": "443"}], "source_zone": "DEV", "destination_zone": "DEV"}
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -37,7 +37,7 @@ def rule(**kw):
 def test_any_to_any_is_high(db):
     r = assess_rule(db, rule(source=[{"ip": "any", "alias": ""}],
                              destination=[{"ip": "any", "alias": ""}]))
-    assert r["level"] == "hoch"
+    assert r["level"] == "high"
     assert any(f["code"] == "any-to-any" for f in r["findings"])
 
 
@@ -46,11 +46,11 @@ def test_clean_rule_has_no_findings(db):
 
 
 def test_risky_service_from_internet_to_high_protection(db):
-    # RDP von INET (exponiert) nach PROD-DB (sehr hoch) -> hoch
+    # RDP from INET (exposed) to PROD-DB (very high protection) -> high
     r = assess_rule(db, rule(source=[{"ip": "any", "alias": ""}], source_zone="INET",
                              destination_zone="PROD-DB",
                              services=[{"protocol": "TCP", "port": "3389"}]))
-    assert r["level"] == "hoch"
+    assert r["level"] == "high"
     assert any(f["code"] == "risky-service" for f in r["findings"])
 
 

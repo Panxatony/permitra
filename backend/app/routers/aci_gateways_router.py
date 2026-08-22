@@ -18,22 +18,22 @@ def to_out(gw: AciGateway) -> AciGatewayOut:
 def get_gateway_or_404(db: Session, gateway_id: int) -> AciGateway:
     gateway = db.get(AciGateway, gateway_id)
     if not gateway:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "ACI Gateway nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ACI gateway not found")
     return gateway
 
 
 def validate_pbr_target(db: Session, payload: AciGatewayCreate):
-    """PBR-Ziel muss eine existierende Check Point Komponente sein."""
+    """The PBR target must be an existing Check Point component."""
     if not payload.pbr_component_id:
         return
     component = db.get(SecurityComponent, payload.pbr_component_id)
     if not component:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "PBR-Ziel-Komponente nicht gefunden")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "PBR target component not found")
     if component.type != ComponentType.checkpoint:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"PBR-Anbindung erfolgt an Check Point Firewalls – '{component.name}' "
-            f"ist vom Typ {component.type.value}",
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"PBR attaches to Check Point firewalls – '{component.name}' "
+            f"is of type {component.type.value}",
         )
 
 
@@ -49,7 +49,7 @@ def create_gateway(
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     if db.query(AciGateway).filter(AciGateway.name.ilike(payload.name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Gateway '{payload.name}' existiert bereits")
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Gateway '{payload.name}' already exists")
     validate_pbr_target(db, payload)
     gateway = AciGateway(**payload.model_dump())
     db.add(gateway)
@@ -72,7 +72,7 @@ def update_gateway(
         .first()
     )
     if duplicate:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Gateway '{payload.name}' existiert bereits")
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Gateway '{payload.name}' already exists")
     validate_pbr_target(db, payload)
     for key, value in payload.model_dump().items():
         setattr(gateway, key, value)

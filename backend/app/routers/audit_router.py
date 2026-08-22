@@ -1,5 +1,5 @@
-"""Audit-Log-Endpunkt für SIEM-Integration (Issue #11) sowie Integritäts-
-prüfung und Zustellstatus (Issue #26)."""
+"""Audit log endpoint for SIEM integration (issue #11), plus integrity
+verification and delivery status (issue #26)."""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
@@ -13,13 +13,13 @@ router = APIRouter(prefix="/api/audit-log", tags=["audit"])
 
 @router.get("")
 def audit_log(
-    since: str | None = Query(None, description="Nur Ereignisse ab diesem ISO-Zeitstempel"),
+    since: str | None = Query(None, description="Only events from this ISO timestamp onwards"),
     type: str | None = Query(None, description="'rule' | 'zone_change'"),
     limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.admin)),
 ):
-    """Einheitliches, maschinenlesbares Audit-Log (neueste zuerst) für SIEM-Abruf."""
+    """Unified, machine-readable audit log (newest first) for SIEM retrieval."""
     return collect(db, since=since, limit=limit, event_type=type)
 
 
@@ -28,8 +28,8 @@ def audit_verify(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.admin)),
 ):
-    """Prüft die Integrität der Audit-Hash-Kette (#26). ok=False, sobald ein
-    Eintrag verändert wurde oder die Reihenfolge/Lückenlosigkeit verletzt ist."""
+    """Verify the integrity of the audit hash chain (#26). ok=False as soon as an
+    entry was altered or the ordering/gap-free sequence is broken."""
     return verify_chain(db)
 
 
@@ -38,11 +38,11 @@ def audit_checkpoint(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.admin)),
 ):
-    """Verankert das aktuelle Ketten-Ende sofort (#26), statt auf den
-    periodischen Job zu warten – z.B. vor einer Beweissicherung."""
+    """Anchor the current chain head immediately (#26) instead of waiting for the
+    periodic job – e.g. before securing evidence."""
     cp = create_checkpoint(db)
     if cp is None:
-        return {"detail": "Noch keine Audit-Ereignisse vorhanden – nichts zu verankern."}
+        return {"detail": "No audit events yet – nothing to anchor."}
     return {"event_count": cp.event_count, "head_hash": cp.head_hash,
             "ts": cp.ts.isoformat() if cp.ts else None,
             "delivered": cp.delivered_at is not None}
@@ -53,5 +53,5 @@ def audit_siem_status(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.admin)),
 ):
-    """Zustellzustand an das SIEM (#26): konfiguriert, ausstehend, gesendet."""
+    """Delivery state towards the SIEM (#26): configured, pending, sent."""
     return siem_status(db)

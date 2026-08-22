@@ -1,3 +1,16 @@
+import { translate } from './i18n'
+
+/* The instance language, cached by main.jsx after loading the public setting.
+   This module runs outside the React tree, so it cannot use the context. */
+let instanceLanguage = 'en'
+export function setInstanceLanguage(lang) {
+  instanceLanguage = lang === 'de' ? 'de' : 'en'
+}
+
+function uiLanguage() {
+  return instanceLanguage
+}
+
 const TOKEN_KEY = 'permitra_token'
 const VRF_KEY = 'permitra_vrf'
 
@@ -33,13 +46,13 @@ export async function login(username, password, otp = '') {
   const body = new URLSearchParams({ username, password })
   if (otp) body.set('otp', otp)
   const res = await fetch('/api/auth/login', { method: 'POST', body })
-  if (!res.ok) throw new Error((await res.json()).detail || 'Login fehlgeschlagen')
+  if (!res.ok) throw new Error(translate((await res.json()).detail, uiLanguage()) || 'Login fehlgeschlagen')
   const data = await res.json()
   setSession(data.access_token, data.user)
   return data.user
 }
 
-// WebAuthn: base64url <-> ArrayBuffer für die Browser-Credential-API
+// WebAuthn: base64url <-> ArrayBuffer for the browser credential API
 const b64uToBuf = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))
 const bufToB64u = (b) => btoa(String.fromCharCode(...new Uint8Array(b)))
   .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
@@ -49,7 +62,7 @@ export async function passkeyLogin(username) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username }),
   })
-  if (!optRes.ok) throw new Error((await optRes.json()).detail || 'Passkey nicht verfügbar')
+  if (!optRes.ok) throw new Error(translate((await optRes.json()).detail, uiLanguage()) || 'Passkey nicht verfügbar')
   const options = await optRes.json()
   options.challenge = b64uToBuf(options.challenge)
   options.allowCredentials = (options.allowCredentials || []).map((c) => ({ ...c, id: b64uToBuf(c.id) }))
@@ -68,7 +81,7 @@ export async function passkeyLogin(username) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, credential }),
   })
-  if (!res.ok) throw new Error((await res.json()).detail || 'Passkey-Anmeldung fehlgeschlagen')
+  if (!res.ok) throw new Error(translate((await res.json()).detail, uiLanguage()) || 'Passkey-Anmeldung fehlgeschlagen')
   const data = await res.json()
   setSession(data.access_token, data.user)
   return data.user
@@ -110,8 +123,10 @@ async function request(path, options = {}) {
     try {
       const data = await res.json()
       detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
-    } catch { /* Antwort war kein JSON */ }
-    throw new Error(detail)
+    } catch { /* response was not JSON */ }
+    // The API speaks English; translate for the German interface (see
+    // backendMessages.js). One place covers every caller that shows an error.
+    throw new Error(translate(detail, uiLanguage()))
   }
   const contentType = res.headers.get('content-type') || ''
   return contentType.includes('application/json') ? res.json() : res.text()
@@ -121,6 +136,7 @@ export const api = {
   vrfs: () => request('/api/vrfs'),
   me: () => request('/api/auth/me'),
   settings: () => request('/api/settings'),
+  publicSettings: () => request('/api/settings/public'),
   updateSettings: (p) => request('/api/settings', { method: 'PUT', body: p }),
   users: () => request('/api/users'),
   auditLog: (params = {}) => request(`/api/audit-log?${new URLSearchParams(params)}`),
@@ -145,7 +161,7 @@ export const api = {
   changePassword: (current, next) =>
     request('/api/auth/change-password', { method: 'POST', body: { current, new: next } })
       .then((r) => {
-        // Passwortwechsel entzieht alte Tokens; frisches Token übernehmen
+        // Changing the password revokes old tokens; adopt the fresh one
         if (r?.access_token) localStorage.setItem(TOKEN_KEY, r.access_token)
         return r
       }),

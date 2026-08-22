@@ -21,14 +21,14 @@ function ServiceChips({ services }) {
 }
 
 function ResultTable({ rows, showMatch, t, zoneLabel }) {
-  if (!rows.length) return <p className="muted">{t('Keine Treffer.')}</p>
+  if (!rows.length) return <p className="muted">{t('No matches.')}</p>
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>{t('Rule-ID')}</th><th>{t('Komponenten')}</th><th>{t('Quell-Zone')}</th><th>{t('Quelle')}</th>
-            <th>{t('Ziel-Zone')}</th><th>{t('Ziel')}</th><th>{t('Dienste')}</th><th>{t('Aktion')}</th><th>{t('Status')}</th>
+            <th>{t('Rule ID')}</th><th>{t('Components')}</th><th>{t('Source zone')}</th><th>{t('Source')}</th>
+            <th>{t('Destination zone')}</th><th>{t('Destination')}</th><th>{t('Services')}</th><th>{t('Action')}</th><th>{t('Status')}</th>
           </tr>
         </thead>
         <tbody>
@@ -36,7 +36,7 @@ function ResultTable({ rows, showMatch, t, zoneLabel }) {
             <tr key={r.rule_id} className={r.match === 'any' ? 'row-any' : ''}>
               <td>
                 <Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link>
-                {showMatch && r.match === 'any' && <div className="badge match-any">{t('nur über „any“')}</div>}
+                {showMatch && r.match === 'any' && <div className="badge match-any">{t('only via “any”')}</div>}
               </td>
               <td>{(r.components || []).map((name) => <span key={name} className="badge platform-unknown comp-badge">{name}</span>)}</td>
               <td>{zoneLabel(r.source_zone)}</td>
@@ -54,7 +54,7 @@ function ResultTable({ rows, showMatch, t, zoneLabel }) {
   )
 }
 
-/* Pfad-Diagramm: Quelle -> Hops (Komponenten) -> Ziel mit Urteil */
+/* Path diagram: source -> hops (components) -> destination with a verdict */
 function PathFlow({ result, t }) {
   if (!result) return null
   return (
@@ -89,7 +89,7 @@ function PathFlow({ result, t }) {
 
       <div className="path-flow">
         <div className="path-node">
-          <div className="path-node-title">{t('Quelle')}</div>
+          <div className="path-node-title">{t('Source')}</div>
           <code>{result.src}</code>
         </div>
         {result.components.map((c) => (
@@ -103,7 +103,7 @@ function PathFlow({ result, t }) {
               </div>
               <div className="path-comp-meta">
                 <span className="badge side-badge">
-                  {{ quelle: 'quellseitig', beide: 'beidseitig', ziel: 'zielseitig' }[c.side] || ''}
+                  {{ source: 'quellseitig', both: 'beidseitig', destination: 'zielseitig' }[c.side] || ''}
                 </span>
                 {c.via_pbr && (
                   <span className="badge pbr-badge" title={`PBR-Umleitung über ${c.gateway}`}>
@@ -132,7 +132,7 @@ function PathFlow({ result, t }) {
         <div className="path-step">
           <div className="path-arrow">→</div>
           <div className="path-node">
-            <div className="path-node-title">{t('Ziel')}</div>
+            <div className="path-node-title">{t('Destination')}</div>
             <code>{result.dst}</code>
           </div>
         </div>
@@ -146,9 +146,9 @@ export default function Search() {
   const zoneLabel = useZoneLabels()
   const [src, setSrc] = useState('')
   const [dst, setDst] = useState('')
-  const [result, setResult] = useState(null)       // Adress-Suche (ein Feld)
-  const [pathResult, setPathResult] = useState(null)  // Pfad-Diagramm (beide Felder)
-  const [pathRules, setPathRules] = useState(null)    // Regeln zwischen Quelle und Ziel
+  const [result, setResult] = useState(null)       // address search (one field)
+  const [pathResult, setPathResult] = useState(null)  // path diagram (both fields)
+  const [pathRules, setPathRules] = useState(null)    // rules between source and destination
   const [mode, setMode] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -167,7 +167,7 @@ export default function Search() {
     try {
       if (s && d) {
         setMode('path')
-        // Regel-Tabelle immer; Pfad-Diagramm nur für konkrete IPs/Netze
+        // rule table always; path diagram only for concrete IPs/networks
         const wantFlow = isIpish(s) && isIpish(d)
         const [rules, flow] = await Promise.all([
           api.pathSearch(s, d),
@@ -191,13 +191,13 @@ export default function Search() {
   return (
     <div>
       <div className="page-head">
-        <h1>{t('Analyse')}</h1>
+        <h1>{t('Analysis')}</h1>
         <span className="muted">
-          {t('Nur Quelle ODER Ziel: alle ein-/ausgehenden Regeln der Adresse. Beides: Pfad-Prüfung über die Komponenten plus alle passenden Regeln.')}
+          {t('Source OR destination only: all inbound/outbound rules for the address. Both: path check across the components plus all matching rules.')}
         </span>
         {(result || pathRules) && (
           <button className="btn btn-ghost no-print" style={{ marginLeft: 'auto' }}
-            onClick={() => window.print()}>🖨 {t('Drucken / PDF')}</button>
+            onClick={() => window.print()}>🖨 {t('Print / PDF')}</button>
         )}
       </div>
       {(result || pathRules) && (
@@ -209,22 +209,22 @@ export default function Search() {
 
       <form className="filterbar pair-form no-print" onSubmit={submit}>
         <input value={src} onChange={(e) => setSrc(e.target.value)}
-          placeholder={t('Quelle: IP, Netz (10.10.105.0/24) oder Hostname')} />
+          placeholder={t('Source: IP, network (10.10.105.0/24) or hostname')} />
         <span className="muted">→</span>
         <input value={dst} onChange={(e) => setDst(e.target.value)}
-          placeholder={t('Ziel: IP, Netz oder Hostname (optional)')} />
-        <button className="btn btn-primary" type="submit">{t('Analysieren')}</button>
+          placeholder={t('Destination: IP, network or hostname (optional)')} />
+        <button className="btn btn-primary" type="submit">{t('Analyze')}</button>
       </form>
 
       {error && <div className="error">{error}</div>}
-      {loading && <p className="muted">{t('Lade…')}</p>}
+      {loading && <p className="muted">{t('Loading…')}</p>}
 
       {mode === 'path' && (
         <>
           <PathFlow result={pathResult} t={t} />
           {pathRules && (
             <section>
-              <h2>{t('Regeln')} {pathRules.src} → {pathRules.dst} ({pathRules.results.length})</h2>
+              <h2>{t('Rules')} {pathRules.src} → {pathRules.dst} ({pathRules.results.length})</h2>
               <ResultTable rows={pathRules.results} showMatch t={t} zoneLabel={zoneLabel} />
             </section>
           )}
@@ -234,11 +234,11 @@ export default function Search() {
       {mode === 'ip' && result && (
         <div className="search-results">
           <section>
-            <h2>{t('⬆ Ausgehend – als Quelle')} ({result.outgoing.length})</h2>
+            <h2>{t('⬆ Outbound – as source')} ({result.outgoing.length})</h2>
             <ResultTable rows={result.outgoing} showMatch={result.is_network} t={t} zoneLabel={zoneLabel} />
           </section>
           <section>
-            <h2>{t('⬇ Eingehend – als Ziel')} ({result.incoming.length})</h2>
+            <h2>{t('⬇ Inbound – as destination')} ({result.incoming.length})</h2>
             <ResultTable rows={result.incoming} showMatch={result.is_network} t={t} zoneLabel={zoneLabel} />
           </section>
         </div>

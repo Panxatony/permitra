@@ -1,4 +1,4 @@
-"""VRF-/Mandanten-Verwaltung (z.B. IT und OT mit überlappenden Netzen)."""
+"""VRF/tenant management (e.g. IT and OT with overlapping networks)."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -25,9 +25,9 @@ def create_vrf(
 ):
     name = (payload.get("name") or "").strip()
     if not name:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Name fehlt")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Name is missing")
     if db.query(Vrf).filter(Vrf.name.ilike(name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"VRF '{name}' existiert bereits")
+        raise HTTPException(status.HTTP_409_CONFLICT, f"VRF '{name}' already exists")
     vrf = Vrf(name=name, description=payload.get("description", ""))
     db.add(vrf)
     db.commit()
@@ -42,13 +42,13 @@ def delete_vrf(
 ):
     vrf = db.get(Vrf, vrf_id)
     if not vrf:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "VRF nicht gefunden")
-    # Bewusst inklusive gelöschter Regeln: Rule.vrf_id ist ein Fremdschlüssel,
-    # ein Löschen des VRF würde sie verwaisen lassen.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "VRF not found")
+    # Deliberately including soft-deleted rules: Rule.vrf_id is a foreign key, so
+    # deleting the VRF would leave them orphaned.
     rules = db.query(Rule).filter(Rule.vrf_id == vrf_id).count()
     nets = db.query(ZoneNetwork).filter(ZoneNetwork.vrf_id == vrf_id).count()
     if rules or nets:
         raise HTTPException(status.HTTP_409_CONFLICT,
-                            f"VRF '{vrf.name}' enthält noch {rules} Regel(n) und {nets} Netz(e)")
+                            f"VRF '{vrf.name}' still contains {rules} rule(s) and {nets} network(s)")
     db.delete(vrf)
     db.commit()

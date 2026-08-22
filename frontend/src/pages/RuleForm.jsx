@@ -27,13 +27,13 @@ const EMPTY = {
 }
 
 function ZoneSelect({ label, value, onChange, zones }) {
-  // Bestehende Werte (Altdaten) beibehalten, auch wenn sie keine gepflegte Zone sind
+  // Keep existing values (legacy data) even when they are not a maintained zone
   const known = zones.some((z) => z.name.toUpperCase() === (value || '').toUpperCase())
   return (
     <label>
       {label}
       <select value={value} onChange={onChange}>
-        <option value="">{t('– Zone wählen –')}</option>
+        <option value="">{t('– select zone –')}</option>
         {!known && value && <option value={value}>{value} (nicht gepflegt)</option>}
         {zones.map((z) => <option key={z.id} value={z.name}>{z.name}</option>)}
       </select>
@@ -53,7 +53,7 @@ export default function RuleForm() {
   const [resolved, setResolved] = useState({ components: [], unknown: [] })
   const [reqSettings, setReqSettings] = useState({})
   useEffect(() => { api.settings().then(setReqSettings).catch(() => {}) }, [])
-  const [assignments, setAssignments] = useState({}) // ip -> [componentIds] für neue Adressen
+  const [assignments, setAssignments] = useState({}) // ip -> [componentIds] for new addresses
   const [changeNote, setChangeNote] = useState('')
   const [error, setError] = useState('')
 
@@ -67,14 +67,14 @@ export default function RuleForm() {
     api.serviceObjects().then(setServiceObjects).catch(() => setServiceObjects([]))
   }, [])
 
-  // Nur syntaktisch gültige Einträge an die Auflösung schicken
+  // Only send syntactically valid entries to the resolver
   const validEntries = (entries) =>
     entries.filter((e) => {
       const ip = (e.ip || '').trim()
       return ip && (ip.toLowerCase() === 'any' || /^[0-9a-fA-F.:]+(\/\d{1,3})?$/.test(ip))
     }).map((e) => ({ ip: e.ip.trim(), alias: (e.alias || '').trim() }))
 
-  // Komponenten automatisch aus Quelle/Ziel ermitteln (debounced)
+  // Derive components automatically from source/destination (debounced)
   useEffect(() => {
     const src = validEntries(form.source)
     const dst = validEntries(form.destination)
@@ -88,7 +88,7 @@ export default function RuleForm() {
         source_zone: form.source_zone, destination_zone: form.destination_zone,
       }).then((res) => {
         setResolved(res)
-        // Zonen werden aus den Netzwerk-Zuordnungen abgeleitet
+        // Zones are derived from the network assignments
         setForm((f) => ({
           ...f,
           source_zone: res.source_zone || '',
@@ -100,14 +100,14 @@ export default function RuleForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(form.source), JSON.stringify(form.destination), form.source_zone, form.destination_zone])
 
-  // Plattformen für die Zonen-Matrix-Prüfung: aus ermittelten + neu zugeordneten Komponenten
+  // Platforms for the zone matrix check: from resolved + newly assigned components
   const assignedIds = Object.values(assignments).flat()
   const effectivePlatforms = [...new Set([
     ...resolved.components.map((c) => c.type),
     ...components.filter((c) => assignedIds.includes(c.id)).map((c) => c.type),
   ])]
 
-  // Live-Prüfung gegen die Zonen-Kommunikationsmatrix
+  // Live check against the zone communication matrix
   useEffect(() => {
     if (!form.source_zone || !form.destination_zone) {
       setZoneCheck(null)
@@ -158,7 +158,7 @@ export default function RuleForm() {
   const removeService = (i) =>
     setForm({ ...form, services: form.services.filter((_, j) => j !== i) })
 
-  // Adress-Einträge (Quelle/Ziel): immer IP/Netz + optionaler Alias
+  // Address entries (source/destination): always IP/network + optional alias
   const setEntry = (field, i, key, value) => {
     const entries = form[field].map((e, j) => (i === j ? { ...e, [key]: value } : e))
     setForm({ ...form, [field]: entries })
@@ -168,7 +168,7 @@ export default function RuleForm() {
   const removeEntry = (field, i) =>
     setForm({ ...form, [field]: form[field].filter((_, j) => j !== i) })
 
-  // Als Funktion gerendert (kein eigener Komponenten-Typ), damit Inputs den Fokus behalten
+  // Rendered as a function (not its own component type) so the inputs keep focus
   const renderAddressEditor = (field, label) => (
     <div className="address-editor">
       <span className="addr-label">{label}</span>
@@ -184,7 +184,7 @@ export default function RuleForm() {
         </div>
       ))}
       <div className="catalog-pick">
-        <button type="button" className="btn btn-ghost" onClick={() => addEntry(field)}>{t('+ Eintrag')}</button>
+        <button type="button" className="btn btn-ghost" onClick={() => addEntry(field)}>{t('+ Entry')}</button>
         {addressObjects.length > 0 && (
           <select value="" onChange={(ev) => {
             const obj = addressObjects.find((o) => String(o.id) === ev.target.value)
@@ -200,8 +200,8 @@ export default function RuleForm() {
     </div>
   )
 
-  // Adressen aus unbekannten Netzen: erst das Netzwerk anlegen und einer Zone
-  // zuordnen – die Komponenten-Abfrage erscheint für sie noch nicht
+  // Addresses from unknown networks: the network has to be created and assigned
+  // to a zone first - the component prompt does not appear for them yet
   const unassigned = resolved.unassigned || []
   const unknownAssignable = resolved.unknown.filter((u) => !unassigned.includes(u.ip))
 
@@ -210,12 +210,12 @@ export default function RuleForm() {
     setError('')
     if (unassigned.length) {
       setError(
-        t('Folgende Netze sind keiner Sicherheitszone zugeordnet:') + ` ${unassigned.join(', ')}. `
-        + t('Bitte zuerst auf der Seite „Netzwerke“ anlegen und einer Sicherheitszone zuordnen.'),
+        t('The following networks are not assigned to a security zone:') + ` ${unassigned.join(', ')}. `
+        + t('Please first add them on the "Networks" page and assign them to a security zone.'),
       )
       return
     }
-    // Neue Adressen: Zuordnung muss einmalig festgelegt sein und wird gespeichert
+    // New addresses: the assignment has to be set once and is then stored
     const missing = unknownAssignable.filter((u) => !(assignments[u.ip] || []).length)
     if (missing.length) {
       setError(
@@ -226,7 +226,7 @@ export default function RuleForm() {
     }
     const payload = {
       ...form,
-      component_ids: [],  // Komponenten werden serverseitig aus den Adressen ermittelt
+      component_ids: [],  // components are resolved from the addresses on the server
       valid_from: form.valid_from || null,
       valid_until: form.valid_until || null,
     }
@@ -248,14 +248,14 @@ export default function RuleForm() {
 
   return (
     <form className="rule-form" onSubmit={submit}>
-      <h1>{isEdit ? `${t('Bearbeiten')}: ${id}` : t('Neue Regel anlegen')}</h1>
+      <h1>{isEdit ? `${t('Edit')}: ${id}` : t('Create new rule')}</h1>
       {error && <div className="error">{error}</div>}
 
       <fieldset>
-        <legend>{t('Identifikation')}</legend>
+        <legend>{t('Identification')}</legend>
         <div className="grid-3">
           <label>
-            Rule-ID <span className="muted">{t('(wird automatisch vergeben)')}</span>
+            Rule-ID <span className="muted">{t('(assigned automatically)')}</span>
             <input value={form.rule_id} disabled readOnly />
           </label>
           <label>Name<input value={form.name} onChange={set('name')} placeholder="z.B. HTTPS-Webserver" /></label>
@@ -263,7 +263,7 @@ export default function RuleForm() {
           <label>APP-ID<input value={form.app_id} onChange={set('app_id')} placeholder="z.B. APP-4711" /></label>
         </div>
         <div className="platform-select">
-          <span>{t('Umsetzung auf Komponenten (automatisch aus Quelle/Ziel ermittelt):')}</span>
+          <span>{t('Implemented on components (derived automatically from source/destination):')}</span>
           {resolved.components.length
             ? resolved.components.map((c) => (
                 <span key={c.id} className={`badge platform-${c.type}`}
@@ -271,33 +271,33 @@ export default function RuleForm() {
                   {c.name}
                 </span>
               ))
-            : <span className="muted">{t('– wird nach Eingabe von Quelle und Ziel ermittelt –')}</span>}
+            : <span className="muted">{t('– determined once source and destination are entered –')}</span>}
         </div>
       </fieldset>
 
       <fieldset>
-        <legend>{t('Verkehrsbeziehung')}</legend>
+        <legend>{t('Traffic relationship')}</legend>
         <div className="grid-2">
-          <label>{t('Quell-Zone (automatisch aus den Netzen)')}
+          <label>{t('Source zone (derived from networks)')}
             <div className="derived-zone">{form.source_zone
               ? <span className="badge status-approved">{form.source_zone}</span>
               : <span className="muted">–</span>}</div>
           </label>
-          <label>{t('Ziel-Zone (automatisch aus den Netzen)')}
+          <label>{t('Destination zone (derived from networks)')}
             <div className="derived-zone">{form.destination_zone
               ? <span className="badge status-approved">{form.destination_zone}</span>
               : <span className="muted">–</span>}</div>
           </label>
         </div>
-        {renderAddressEditor('source', t('Quelle (IP/Netz + optionaler Alias)'))}
-        {renderAddressEditor('destination', t('Ziel (IP/Netz + optionaler Alias)'))}
+        {renderAddressEditor('source', t('Source (IP/network + optional alias)'))}
+        {renderAddressEditor('destination', t('Destination (IP/network + optional alias)'))}
         {unassigned.length > 0 && (
           <div className="warnbox">
-            <strong>{t('Unbekanntes Netz:')}</strong>{' '}
+            <strong>{t('Unknown network:')}</strong>{' '}
             {unassigned.map((ip, i) => <span key={ip}>{i > 0 && ', '}<code>{ip}</code></span>)}{' '}
-            {t('ist keinem bekannten Netzwerk zugeordnet. Bitte das Netzwerk zuerst auf der Seite')}{' '}
-            <Link to="/networks">{t('Netzwerke')}</Link>{' '}
-            {t('hinzufügen und einer Sicherheitszone zuordnen (Freigabe durch zwei Change Approver). Danach kann die Regel angelegt werden.')}
+            {t('does not belong to any known network. Please first add the network on the')}{' '}
+            <Link to="/networks">{t('Networks')}</Link>{' '}
+            {t('page and assign it to a security zone (approval by two change approvers). The rule can be created afterwards.')}
           </div>
         )}
         {unknownAssignable.length > 0 && (
@@ -340,7 +340,7 @@ export default function RuleForm() {
           </div>
         )}
         <div className="services-edit">
-          <span>{t('Dienste:')}</span>
+          <span>{t('Services:')}</span>
           {form.services.map((s, i) => (
             <div key={i} className="service-row">
               <select value={s.protocol} onChange={(e) => setService(i, 'protocol', e.target.value)}>
@@ -355,12 +355,12 @@ export default function RuleForm() {
             </div>
           ))}
           <div className="catalog-pick">
-            <button type="button" className="btn btn-ghost" onClick={addService}>{t('+ Dienst')}</button>
+            <button type="button" className="btn btn-ghost" onClick={addService}>{t('+ Service')}</button>
             {serviceObjects.length > 0 && (
               <select value="" onChange={(ev) => {
                 const obj = serviceObjects.find((o) => String(o.id) === ev.target.value)
                 if (!obj) return
-                // leere Default-Zeilen (TCP ohne Port) beim Übernehmen entfernen
+                // drop empty default rows (TCP without a port) when applying
                 const kept = form.services.filter((s) => s.port || s.protocol.startsWith('ICMP'))
                 setForm({ ...form, services: [...kept, { protocol: obj.protocol, port: obj.port }] })
               }}>
@@ -373,7 +373,7 @@ export default function RuleForm() {
           </div>
         </div>
         <label className="inline">
-          {t('Aktion:')}
+          {t('Action:')}
           <select value={form.action} onChange={set('action')}>
             <option value="permit">permit</option>
             <option value="deny">deny</option>
@@ -382,11 +382,11 @@ export default function RuleForm() {
       </fieldset>
 
       <fieldset>
-        <legend>{t('Metadaten')}</legend>
-        <label>{t('Anlass / Begründung')}{reqSettings.require_justification === 'yes' && ' *'}
+        <legend>{t('Metadata')}</legend>
+        <label>{t('Reason / justification')}{reqSettings.require_justification === 'yes' && ' *'}
           <textarea rows={2} value={form.justification} onChange={set('justification')}
             required={reqSettings.require_justification === 'yes'} /></label>
-        <label>{t('Beschreibung')}<textarea rows={2} value={form.description} onChange={set('description')} /></label>
+        <label>{t('Description')}<textarea rows={2} value={form.description} onChange={set('description')} /></label>
         <div className="grid-3">
           <label>Requestor{reqSettings.require_requestor === 'yes' && ' *'}
             <input value={form.requestor} onChange={set('requestor')}
@@ -394,8 +394,8 @@ export default function RuleForm() {
           <label>Bearbeiter / Verantwortlich<input value={form.owner} onChange={set('owner')} /></label>
           <label>Change-ID<input value={form.change_id} onChange={set('change_id')} placeholder="z.B. CHN0000273" /></label>
           <label>Fachlicher Bezug<input value={form.business_context} onChange={set('business_context')} /></label>
-          <label>{t('Gültig ab')}<input type="date" value={form.valid_from} onChange={set('valid_from')} /></label>
-          <label>{t('Gültig bis')}{reqSettings.require_valid_until === 'yes' && ' *'}
+          <label>{t('Valid from')}<input type="date" value={form.valid_from} onChange={set('valid_from')} /></label>
+          <label>{t('Valid until')}{reqSettings.require_valid_until === 'yes' && ' *'}
             <input type="date" value={form.valid_until} onChange={set('valid_until')}
               required={reqSettings.require_valid_until === 'yes'} /></label>
         </div>
@@ -408,8 +408,8 @@ export default function RuleForm() {
       </fieldset>
 
       <div className="actions">
-        <button className="btn btn-primary" type="submit">{isEdit ? t('Änderungen speichern') : t('Regel anlegen')}</button>
-        <button className="btn btn-ghost" type="button" onClick={() => navigate(-1)}>{t('Abbrechen')}</button>
+        <button className="btn btn-primary" type="submit">{isEdit ? t('Save changes') : t('Create rule')}</button>
+        <button className="btn btn-ghost" type="button" onClick={() => navigate(-1)}>{t('Cancel')}</button>
       </div>
     </form>
   )

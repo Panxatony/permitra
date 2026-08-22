@@ -1,11 +1,10 @@
-"""NetBox-Import (Issue #23): Konfiguration/Import durch Admins, Übernahme in
-die Zonen-Registry durch Architekt/Betrieb über den Freigabe-Workflow."""
-from fastapi import APIRouter, Depends, HTTPException, status
+"""NetBox import (issue #23): configuration and import by admins, adoption into
+the zone registry by architects/operations via the approval workflow."""
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from fastapi import Request
-from ..auth import require_roles
 from .. import audit
+from ..auth import require_roles
 from ..database import get_db
 from ..models import NetboxConfig, NetboxPrefix, Role, User, ZoneNetwork
 
@@ -31,8 +30,9 @@ def get_config(db: Session = Depends(get_db), _: User = Depends(require_roles(Ro
 @router.put("/config")
 def set_config(payload: dict, db: Session = Depends(get_db),
                admin: User = Depends(require_roles(Role.admin)), request: Request = None):
-    """URL/Token/TLS speichern. Ein leeres Token-Feld lässt das gespeicherte unverändert."""
-    from ..netbox import encrypt_token, get_config as _get
+    """Store URL/token/TLS. An empty token field leaves the stored token unchanged."""
+    from ..netbox import encrypt_token
+    from ..netbox import get_config as _get
 
     cfg = _get(db) or NetboxConfig()
     cfg.url = (payload.get("url") or "").strip()
@@ -52,14 +52,15 @@ def set_config(payload: dict, db: Session = Depends(get_db),
 
 @router.post("/test")
 def test(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin))):
-    from ..netbox import get_config as _get, test_connection
+    from ..netbox import get_config as _get
+    from ..netbox import test_connection
     cfg = _get(db)
     if not cfg or not cfg.url or not cfg.token_enc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "NetBox ist nicht konfiguriert")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "NetBox is not configured")
     try:
         return test_connection(cfg)
     except Exception as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"NetBox nicht erreichbar: {exc}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"NetBox is not reachable: {exc}") from exc
 
 
 @router.post("/import")
@@ -69,18 +70,18 @@ def run_import(db: Session = Depends(get_db), admin: User = Depends(require_role
     try:
         result = import_prefixes(db)
         audit.record(db, "admin", "netbox.import", actor=admin.username,
-                     detail=f"{result.get('fetched', 0)} Prefixe", source_ip=audit.client_ip(request))
+                     detail=f"{result.get('fetched', 0)} prefixes", source_ip=audit.client_ip(request))
         return result
     except ValueError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"NetBox-Import fehlgeschlagen: {exc}")
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"NetBox import failed: {exc}") from exc
 
 
 @router.get("/prefixes")
 def list_prefixes(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin, Role.architect, Role.operations))):
-    """Importierte, noch nicht übernommene Prefixe (Vorschau vor der Zonen-Zuordnung).
-    Bereits in der Registry vorhandene CIDRs werden markiert."""
+    """Imported prefixes not yet adopted (preview before the zone assignment).
+    CIDRs that already exist in the registry are flagged."""
     existing = {n.cidr for n in db.query(ZoneNetwork.cidr).all()}
     rows = (db.query(NetboxPrefix)
             .filter(NetboxPrefix.adopted == False)  # noqa: E712
@@ -95,9 +96,9 @@ def list_prefixes(db: Session = Depends(get_db), _: User = Depends(require_roles
 @router.post("/adopt")
 def adopt(payload: dict, db: Session = Depends(get_db),
           user: User = Depends(require_roles(Role.architect, Role.operations))):
-    """Übernimmt importierte Prefixe in die Zonen-Registry: erzeugt einen
-    Sammelantrag (net_add, Quelle 'netbox') mit der je Prefix gewählten Zone.
-    Wird nach zwei Freigaben wirksam (wie alle Zonen-Änderungen)."""
+    """Adopt imported prefixes into the zone registry: creates a batch request
+    (net_add, source 'netbox') carrying the zone chosen for each prefix. It takes
+    effect after two approvals (like every zone change)."""
     from .zones_router import _create_batch
 
     items = []
@@ -107,9 +108,9 @@ def adopt(payload: dict, db: Session = Depends(get_db),
         if not prefix or not zone:
             continue
         items.append({"type": "net_add", "zone": zone, "cidr": prefix.cidr,
-                      "description": prefix.description or f"NetBox-Import ({prefix.status})",
+                      "description": prefix.description or f"NetBox import ({prefix.status})",
                       "source": "netbox"})
     if not items:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            "Keine Prefixe mit Zone ausgewählt")
-    return _create_batch(db, user, items, "NetBox-Import")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "No prefixes with a zone selected")
+    return _create_batch(db, user, items, "NetBox import")

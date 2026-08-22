@@ -1,12 +1,12 @@
-# CI-Pipeline für Permitra.
+# CI pipeline for Permitra.
 #
-# Ziel: Jede Änderung wird automatisch geprüft, bevor sie deployt wird –
-# Tests inklusive der Rechteprüfung, Linting, bekannte Schwachstellen in den
-# Abhängigkeiten und ein Build beider Images.
+# Goal: every change is checked automatically before it is deployed –
+# tests including the permission checks, linting, known vulnerabilities in the
+# dependencies and a build of both images.
 #
-# Der Backend-Test läuft zweimal: einmal schnell gegen SQLite und einmal gegen
-# eine echte PostgreSQL-Instanz inklusive Alembic-Migrationen – dort fallen
-# Migrations- und Dialektfehler auf, die SQLite nicht zeigt.
+# The backend test runs twice: once quickly against SQLite and once against a
+# real PostgreSQL instance including the Alembic migrations – that is where
+# migration and dialect errors surface which SQLite does not reveal.
 
 stages:
   - lint
@@ -33,9 +33,11 @@ ruff:
   before_script:
     - pip install --quiet ruff
   script:
-    # E501 (Zeilenlänge) bewusst aus: der Bestand nutzt längere Zeilen.
-    - ruff check backend/app backend/tests --ignore E501 --output-format=concise
-  allow_failure: true   # zunächst berichtend, nicht blockierend
+    # Rules and exceptions live in backend/ruff.toml - the default rule set
+    # drowns real findings in FastAPI idiom (Depends in default arguments).
+    - cd backend && ruff check . --output-format=concise
+  # Blocking: the rule set is tuned to this project and the tree is clean,
+  # so a new finding is a real one and should stop the pipeline.
 
 # ---------------------------------------------------------------- test
 
@@ -46,7 +48,7 @@ backend-tests:
     key: pip-$CI_COMMIT_REF_SLUG
     paths: [.cache/pip]
   variables:
-    PERMITRA_DEV: "1"          # zufälliges Prozess-Secret statt echtem SECRET_KEY
+    PERMITRA_DEV: "1"          # random per-process secret instead of a real SECRET_KEY
   before_script:
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc libpq-dev >/dev/null
     - pip install --quiet -r backend/requirements-dev.txt
@@ -63,8 +65,8 @@ backend-tests:
         path: backend/coverage.xml
     expire_in: 1 week
 
-# Gegen echtes PostgreSQL inklusive Migrationen: fängt Fehler, die SQLite verdeckt
-# (Dialektunterschiede, fehlerhafte Alembic-Schritte, Advisory-Locks).
+# Against real PostgreSQL including migrations: catches errors that SQLite hides
+# (dialect differences, faulty Alembic steps, advisory locks).
 migrations-postgres:
   stage: test
   image: python:3.12-slim
@@ -82,9 +84,9 @@ migrations-postgres:
     - pip install --quiet -r backend/requirements-dev.txt
   script:
     - cd backend
-    # 1) Migrationen von Grund auf anwenden
-    - 'python -c "from app.migrations import run_migrations; run_migrations(); print(chr(10) + \"Migrationen angewendet\")"'
-    # 2) Rauchtest der Audit-Kette auf echtem Postgres (Advisory-Lock-Pfad, #26)
+    # 1) Apply migrations from scratch
+    - 'python -c "from app.migrations import run_migrations; run_migrations(); print(chr(10) + \"Migrations applied\")"'
+    # 2) Smoke test of the audit chain on real Postgres (advisory lock path, #26)
     - |
       python - <<'PY'
       from app.database import SessionLocal
@@ -93,9 +95,9 @@ migrations-postgres:
       for i in range(25):
           audit.record(db, "admin", "ci.check", actor="ci", object=f"o{i}", detail="x")
       result = audit.verify_chain(db)
-      assert result["ok"], f"Hash-Kette gebrochen: {result}"
+      assert result["ok"], f"hash chain broken: {result}"
       assert result["checked"] == 25, result
-      print("Audit-Hash-Kette auf PostgreSQL: ok")
+      print("Audit hash chain on PostgreSQL: ok")
       db.close()
       PY
 
@@ -122,7 +124,7 @@ dependency-audit:
     - pip install --quiet pip-audit
   script:
     - pip-audit -r backend/requirements.txt --progress-spinner off
-  allow_failure: true   # meldet Schwachstellen, blockiert das Deployment aber nicht
+  allow_failure: true   # reports vulnerabilities but does not block the deployment
 
 npm-audit:
   stage: security
@@ -131,26 +133,26 @@ npm-audit:
     - cd frontend && npm audit --audit-level=high
   allow_failure: true
 
-# Kein Geheimnis darf versehentlich ins Repository geraten.
+# No secret must accidentally end up in the repository.
 secret-scan:
   stage: security
   image: python:3.12-slim
   before_script:
-    # Das slim-Image bringt kein git mit, der Scan braucht `git ls-files`
+    # The slim image ships without git, but the scan needs `git ls-files`
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends git >/dev/null
   script:
     - |
       python - <<'PY'
       import re, subprocess, sys
-      # Nachverfolgte Dateien prüfen – .env & Co. sind ohnehin ignoriert
+      # Check tracked files – .env & co. are ignored anyway
       files = subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.split()
       patterns = [
-          (re.compile(r"SECRET_KEY\s*[:=]\s*['\"][A-Za-z0-9+/=_-]{16,}"), "hartkodierter SECRET_KEY"),
-          (re.compile(r"(?i)(password|passwort)\s*[:=]\s*['\"][^'\"]{8,}"), "hartkodiertes Passwort"),
-          (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "privater Schlüssel"),
-          (re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}"), "GitLab-Token"),
+          (re.compile(r"SECRET_KEY\s*[:=]\s*['\"][A-Za-z0-9+/=_-]{16,}"), "hard-coded SECRET_KEY"),
+          (re.compile(r"(?i)(password|passwort)\s*[:=]\s*['\"][^'\"]{8,}"), "hard-coded password"),
+          (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "private key"),
+          (re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}"), "GitLab token"),
       ]
-      # Keine echten Geheimnisse: Shell-/Compose-Variablen und Kommandosubstitution
+      # Not real secrets: shell/compose variables and command substitution
       placeholder = re.compile(r"\$\(|\$\{|\$[A-Z_]+|change-?me|example|xxx|\.\.\.", re.I)
       allow = ("tests/", "seed_demo.py", "seed.py", ".gitlab-ci.yml", "docs/", "README")
       hits = []
@@ -167,10 +169,10 @@ secret-scan:
                       continue
                   hits.append(f"{f}: {label} -> {m.group(0)[:60]}")
       if hits:
-          print("Mögliche Geheimnisse im Repository gefunden:")
+          print("Possible secrets found in the repository:")
           print("\n".join(hits))
           sys.exit(1)
-      print("Keine Geheimnisse in nachverfolgten Dateien gefunden.")
+      print("No secrets found in tracked files.")
       PY
 
 # ---------------------------------------------------------------- build
@@ -181,8 +183,8 @@ docker-build:
   services:
     - docker:27-dind
   variables:
-    # Ohne TLS auf Port 2375; mit DOCKER_TLS_CERTDIR lauscht der Daemon auf 2376
-    # und der Client würde ins Leere greifen.
+    # Without TLS on port 2375; with DOCKER_TLS_CERTDIR the daemon listens on
+    # 2376 and the client would reach into the void.
     DOCKER_HOST: "tcp://docker:2375"
     DOCKER_TLS_CERTDIR: ""
   script:
@@ -190,6 +192,6 @@ docker-build:
     - docker build -t permitra-frontend:$CI_COMMIT_SHORT_SHA frontend
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  # Benötigt einen Runner im privileged-Modus (Docker-in-Docker). Steht der
-  # nicht zur Verfügung, meldet der Job das, blockiert aber nicht die Pipeline.
+  # Requires a runner in privileged mode (Docker-in-Docker). If none is
+  # available, the job reports that but does not block the pipeline.
   allow_failure: true

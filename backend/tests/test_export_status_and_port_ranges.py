@@ -1,13 +1,15 @@
-"""Zwei Befunde aus dem Audit:
+"""Two findings from the audit:
 
-M2 – Export per ausdrücklicher Rule-ID übersprang den Statusfilter. Damit ließ
-sich eine deaktivierte oder abgelaufene Regel als fertige Geräte-Konfiguration
-exportieren und geriet unbemerkt zurück auf die Firewall.
+M2 - Export by explicit rule ID skipped the status filter. That made it possible
+to export a deactivated or expired rule as a ready-made device configuration,
+so it silently found its way back onto the firewall.
 
-M3 – Die Risikoprüfung schlug nur bei exakten Einzelports an. Bereiche wie
-"20-25" (enthält FTP und Telnet) oder Listen wie "22,23" erzeugten keinen
-Hinweis – gerade die weit gefassten Regeln blieben also stumm.
+M3 - The risk check only fired on exact single ports. Ranges such as "20-25"
+(which contains FTP and Telnet) or lists such as "22,23" produced no warning -
+so the broadly scoped rules of all things stayed silent.
 """
+from typing import ClassVar
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -16,12 +18,12 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.models import (
     ComponentType,
+    Role,
     Rule,
     RuleAction,
     RuleStatus,
     SecurityComponent,
     User,
-    Role,
     Vrf,
     Zone,
 )
@@ -36,8 +38,8 @@ def db():
     s = sessionmaker(bind=engine)()
     s.add(Vrf(id=1, name="IT"))
     s.add(SecurityComponent(id=1, name="FW-BER", type=ComponentType.juniper))
-    s.add(Zone(id=1, code="Z010", name="DMZ", sort_order=10, pap_level="extern"))
-    s.add(Zone(id=2, code="Z020", name="PROD", sort_order=20, cia_c="hoch"))
+    s.add(Zone(id=1, code="Z010", name="DMZ", sort_order=10, pap_level="external"))
+    s.add(Zone(id=2, code="Z020", name="PROD", sort_order=20, cia_c="high"))
     s.commit()
     yield s
     s.close()
@@ -61,7 +63,7 @@ def make_rule(db, rule_id, status=RuleStatus.approved, services=None,
 
 
 class Req:
-    headers = {}
+    headers: ClassVar[dict] = {}
 
     class client:
         host = "203.0.113.9"
@@ -72,23 +74,23 @@ def _user():
 
 
 def _export(db, **kw):
-    params = dict(request=Req(), fmt="csv", ids=None, component_id=None, app_id=None,
-                  only_approved=True, platform_filter=True, download=False,
-                  db=db, user=_user())
+    params = {"request": Req(), "fmt": "csv", "ids": None, "component_id": None, "app_id": None,
+              "only_approved": True, "platform_filter": True, "download": False,
+              "db": db, "user": _user()}
     params.update(kw)
     return export(**params)
 
 
-# ---------- M2: Statusfilter gilt auch bei genannten IDs ----------
+# ---------- M2: the status filter also applies to explicitly named IDs ----------
 
 def test_deactivated_rule_is_not_exported_by_id(db):
-    """Der Kern des Befunds: eine deaktivierte Regel geriet über ?ids= zurück
-    in eine Geräte-Konfiguration."""
+    """The core of the finding: a deactivated rule found its way back into a
+    device configuration via ?ids=."""
     make_rule(db, "SR00001", status=RuleStatus.deactivated)
     with pytest.raises(HTTPException) as exc:
         _export(db, ids="SR00001")
     assert exc.value.status_code == 404
-    assert "Nicht freigegeben" in exc.value.detail
+    assert "Not approved" in exc.value.detail
     assert "SR00001" in exc.value.detail
 
 
@@ -100,14 +102,14 @@ def test_draft_rule_is_not_exported_by_id(db):
 
 
 def test_approved_rule_is_still_exported_by_id(db):
-    """Gegenprobe – der Normalfall muss unverändert funktionieren."""
+    """Counter-check - the normal case must keep working unchanged."""
     make_rule(db, "SR00003")
     result = _export(db, ids="SR00003")
     assert "SR00003" in result.body.decode()
 
 
 def test_preview_of_unapproved_rule_needs_explicit_opt_in(db):
-    """Vorschau bleibt möglich, aber nur als bewusste Entscheidung."""
+    """A preview stays possible, but only as a deliberate decision."""
     make_rule(db, "SR00004", status=RuleStatus.draft)
     result = _export(db, ids="SR00004", only_approved=False)
     assert "SR00004" in result.body.decode()
@@ -121,15 +123,15 @@ def test_mixed_ids_export_only_the_approved_ones(db):
 
 
 def test_unapproved_export_is_marked_in_the_audit_trail(db):
-    """Wenn nicht freigegebene Regeln bewusst exportiert werden, muss das in
-    der Spur stehen – sonst ist später nicht nachvollziehbar, was das Gerät
-    bekommen hat."""
+    """When unapproved rules are exported deliberately, that has to appear in
+    the trail - otherwise it cannot be reconstructed later what the device
+    actually received."""
     from app.models import AuditEvent
 
     make_rule(db, "SR00020", status=RuleStatus.draft)
     _export(db, ids="SR00020", only_approved=False)
     entry = db.query(AuditEvent).filter(AuditEvent.event == "export.rules").one()
-    assert "NICHT freigegeben" in entry.detail and "SR00020" in entry.detail
+    assert "NOT approved" in entry.detail and "SR00020" in entry.detail
 
 
 def test_normal_export_trail_stays_clean(db):
@@ -141,26 +143,26 @@ def test_normal_export_trail_stays_clean(db):
     assert "NICHT freigegeben" not in entry.detail
 
 
-# ---------- M3: Port-Bereiche und -Listen ----------
+# ---------- M3: port ranges and port lists ----------
 
-@pytest.mark.parametrize("spec,erwartet", [
-    ("23", {"23"}),                       # Einzelport – Bestandsverhalten
-    ("20-25", {"21", "23"}),              # FTP und Telnet im Bereich
-    ("22,23", {"23"}),                    # Liste
-    ("22, 23", {"23"}),                   # Liste mit Leerzeichen
-    ("80,3300-3400", {"3306", "3389"}),   # gemischt – der Bereich deckt MySQL UND RDP ab
-    ("25-20", {"21", "23"}),              # verdrehte Grenzen
-    ("443", set()),                       # unauffällig
+@pytest.mark.parametrize("spec,expected", [
+    ("23", {"23"}),                       # single port - existing behaviour
+    ("20-25", {"21", "23"}),              # FTP and Telnet inside the range
+    ("22,23", {"23"}),                    # list
+    ("22, 23", {"23"}),                   # list with spaces
+    ("80,3300-3400", {"3306", "3389"}),   # mixed - the range covers MySQL AND RDP
+    ("25-20", {"21", "23"}),              # inverted bounds
+    ("443", set()),                       # inconspicuous
     ("80,8000-8080", set()),
-    ("any", set()),                       # nicht numerisch
+    ("any", set()),                       # not numeric
     ("", set()),
 ])
-def test_risky_ports_in_spec(spec, erwartet):
-    assert {p for p, _ in risky_ports_in(spec)} == erwartet
+def test_risky_ports_in_spec(spec, expected):
+    assert {p for p, _ in risky_ports_in(spec)} == expected
 
 
 def test_range_triggers_a_risk_finding(db):
-    """Vorher stumm: der Bereich enthält FTP und Telnet."""
+    """Silent before: the range contains FTP and Telnet."""
     rule = make_rule(db, "SR00030", services=[{"protocol": "TCP", "port": "20-25"}])
     findings = assess_rule(db, rule)["findings"]
     risky = [f for f in findings if f["code"] == "risky-service"]
@@ -170,7 +172,7 @@ def test_range_triggers_a_risk_finding(db):
 
 
 def test_finding_names_the_concrete_port_inside_the_range(db):
-    """Sonst sucht der Prüfer in '20-25' vergeblich nach dem Problem."""
+    """Otherwise the reviewer searches '20-25' for the problem in vain."""
     rule = make_rule(db, "SR00031", services=[{"protocol": "TCP", "port": "20-25"}])
     risky = [f for f in assess_rule(db, rule)["findings"] if f["code"] == "risky-service"]
     assert any("Port 23 in 20-25" in f["detail"] for f in risky)

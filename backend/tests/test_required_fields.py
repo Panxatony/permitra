@@ -1,4 +1,4 @@
-"""Tests für konfigurierbare Pflichtfelder (Issue #8)."""
+"""Tests for configurable required fields (issue #8)."""
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -26,11 +26,11 @@ class Payload:
 
 
 def test_defaults_enforce(db):
-    # Pflichtfelder sind standardmäßig aktiv
+    # Required fields are active by default
     with pytest.raises(HTTPException) as exc:
         enforce_required_fields(db, Payload())
-    assert "Begründung" in exc.value.detail
-    # Admin kann sie abschalten
+    assert "Justification" in exc.value.detail
+    # The admin can switch them off
     for key in ("require_justification", "require_requestor", "require_valid_until"):
         set_setting(db, key, "no")
     enforce_required_fields(db, Payload())
@@ -41,8 +41,8 @@ def test_enforced_fields_rejected_when_missing(db):
     with pytest.raises(HTTPException) as exc:
         enforce_required_fields(db, Payload(requestor="egal"))
     assert exc.value.status_code == 422
-    assert "Begründung" in exc.value.detail and "Gültig-bis" in exc.value.detail
-    # Vollständig -> ok
+    assert "Justification" in exc.value.detail and "Valid until" in exc.value.detail
+    # Complete -> ok
     enforce_required_fields(db, Payload(justification="HTTPS", valid_until="2027-01-01"))
 
 

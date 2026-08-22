@@ -1,16 +1,16 @@
-"""Read-only API-Tokens für Automatisierung (Ansible/Terraform, Issue #14).
+"""Read-only API tokens for automation (Ansible/Terraform, issue #14).
 
-Verwaltung nur durch Admins. Der Klartext-Token wird einmalig bei Erstellung
-ausgegeben; gespeichert wird nur der Hash. Tokens erlauben ausschließlich
-lesende Zugriffe (GET); die Durchsetzung erfolgt in auth.get_current_user."""
+Managed by admins only. The plaintext token is shown exactly once, at creation
+time; only its hash is stored. Tokens grant read access (GET) exclusively; that
+restriction is enforced in auth.get_current_user."""
 import hashlib
 import secrets
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from .. import audit
 from sqlalchemy.orm import Session
 
+from .. import audit
 from ..auth import API_TOKEN_PREFIX, require_roles
 from ..database import get_db
 from ..models import ApiToken, Role, User, utcnow
@@ -41,17 +41,17 @@ def create_token(
     admin: User = Depends(require_roles(Role.admin)),
     request: Request = None,
 ):
-    """Erzeugt einen read-only Token. Der Klartext wird NUR hier zurückgegeben."""
+    """Create a read-only token. The plaintext is returned ONLY here."""
     name = (payload.get("name") or "").strip()
     if not name:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Name ist erforderlich")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Name is required")
     expires_at = None
     days = payload.get("expires_days")
     if days:
         try:
             expires_at = utcnow() + timedelta(days=int(days))
-        except (TypeError, ValueError):
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "expires_days muss eine Zahl sein")
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "expires_days must be a number") from exc
 
     raw = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
     token = ApiToken(
@@ -65,7 +65,7 @@ def create_token(
     audit.record(db, "admin", "apitoken.created", actor=admin.username, object=token.name,
                  source_ip=audit.client_ip(request))
     return {**_out(token), "token": raw,
-            "detail": "Token wird nur jetzt angezeigt – bitte sicher hinterlegen."}
+            "detail": "The token is shown only now – store it somewhere safe."}
 
 
 @router.delete("/{token_id}", status_code=204)
@@ -77,7 +77,7 @@ def revoke_token(
 ):
     token = db.get(ApiToken, token_id)
     if not token:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Token nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Token not found")
     token.revoked = True
     db.commit()
     audit.record(db, "admin", "apitoken.revoked", actor=admin.username, object=token.name,

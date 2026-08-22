@@ -1,4 +1,4 @@
-"""Generische Exporte: CSV (Excel-kompatibel, Spalten wie die Kommunikationsmatrix) und JSON."""
+"""Generic exports: CSV (Excel-compatible, columns as in the communication matrix) and JSON."""
 import csv
 import io
 import json
@@ -7,10 +7,10 @@ from ..models import Rule
 from ..validation import format_entry
 
 CSV_COLUMNS = [
-    "Rule-ID", "Application", "APP-ID", "Sicherheitselement", "Komponenten", "Source SZ",
-    "Quelle/Quellsystem", "Destination-SZ", "Ziel/Zielsystem", "Protokoll", "Port",
-    "Anlass", "Requestor", "Bearbeiter", "Umsetzungsstatus", "Status",
-    "Change-ID", "Letzte Änderung", "Info", "Fachlicher Bezug",
+    "Rule-ID", "Application", "APP-ID", "Platform", "Components", "Source SZ",
+    "Source system", "Destination-SZ", "Destination system", "Protocol", "Port",
+    "Justification", "Requestor", "Owner", "Implementation status", "Status",
+    "Change-ID", "Last change", "Info", "Business context",
 ]
 
 PLATFORM_LABELS = {"juniper": "Juniper", "checkpoint": "Check Point", "aci": "ACI"}

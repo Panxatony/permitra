@@ -1,33 +1,34 @@
-"""Cisco ACI: EPG-basierter, aggregierender Contract-Export.
+"""Cisco ACI: EPG-based, aggregating contract export.
 
-Idiomatische Abbildung statt "ein Contract pro Regel":
-  - Adressen werden über AddressEpgMap zu EPGs aufgelöst (exakt oder spezifischstes
-    enthaltendes Netz); Quelle -> Consumer, Ziel -> Provider; ip='any' -> vzAny.
-  - Alle Regeln eines (Consumer-EPG, Provider-EPG)-Paars werden zu EINEM Contract
-    (con-<consumer>-to-<provider>) mit einem Subject je Filter zusammengefasst.
-  - Filter werden aus dem Dienst-Objektkatalog wiederverwendet (flt-<objektname>),
-    sonst generisch benannt (flt-tcp-443) und über alle Contracts dedupliziert.
-  - Trägt die Bridge Domain des Provider-EPG ein PBR-Gateway, referenziert das
-    Subject dessen Service-Graph-Template.
-  - Die SR-IDs bleiben in den Subject-Beschreibungen erhalten (Drift-Abgleich).
-Regeln ohne EPG-Zuordnung werden als Einzel-Contract exportiert (Fallback) und in
-den Warnungen ausgewiesen.
+Idiomatic mapping instead of "one contract per rule":
+  - addresses are resolved to EPGs through AddressEpgMap (exact match or the most
+    specific containing network); source -> consumer, destination -> provider;
+    ip='any' -> vzAny.
+  - all rules of a (consumer EPG, provider EPG) pair are merged into ONE contract
+    (con-<consumer>-to-<provider>) with one subject per filter.
+  - filters are reused from the service object catalogue (flt-<object name>),
+    otherwise named generically (flt-tcp-443) and deduplicated across all contracts.
+  - if the bridge domain of the provider EPG carries a PBR gateway, the subject
+    references its service graph template.
+  - the SR IDs are preserved in the subject descriptions (drift comparison).
+Rules without an EPG mapping are exported as an individual contract (fallback) and
+reported in the warnings.
 """
 import json
 
 import yaml
 
-from ..models import AciGateway, AddressEpgMap, Epg, Rule, ServiceObject
+from ..models import AciGateway, AddressEpgMap, Rule, ServiceObject
 from ..validation import parse_network
 from .common import sanitize_name, service_ports, split_protocols
 
 DEFAULT_TENANT = "Permitra"
 
 
-# --- EPG-Auflösung -----------------------------------------------------------
+# --- EPG resolution -----------------------------------------------------------
 
 def resolve_epg(ip: str, mappings: list[AddressEpgMap]):
-    """Liefert Epg, "vzAny" oder None (keine Zuordnung)."""
+    """Returns an Epg, "vzAny" or None (no mapping)."""
     ip = (ip or "").strip()
     if not ip:
         return None
@@ -43,14 +44,13 @@ def resolve_epg(ip: str, mappings: list[AddressEpgMap]):
         mapped = parse_network(mapping.ip)
         if not mapped or mapped.version != net.version:
             continue
-        if net == mapped or net.subnet_of(mapped):
-            if mapped.prefixlen > best_prefix:
-                best, best_prefix = mapping.epg, mapped.prefixlen
+        if (net == mapped or net.subnet_of(mapped)) and mapped.prefixlen > best_prefix:
+            best, best_prefix = mapping.epg, mapped.prefixlen
     return best
 
 
 def _epgs_for(entries: list, mappings) -> tuple[set, bool]:
-    """(aufgelöste EPGs, alles auflösbar?)"""
+    """(resolved EPGs, everything resolvable?)"""
     epgs, complete = set(), True
     for entry in entries or []:
         resolved = resolve_epg(entry.get("ip", ""), mappings)
@@ -95,7 +95,7 @@ def _filter_name(svc: dict, service_objects: list[ServiceObject]) -> str:
     return sanitize_name(f"flt-{base}-{port}" if port else f"flt-{base}")
 
 
-# --- Modellaufbau ------------------------------------------------------------
+# --- Model assembly -----------------------------------------------------------
 
 def build_contract_model(rules: list[Rule], db) -> dict:
     all_mappings = db.query(AddressEpgMap).all() if db else []
@@ -118,11 +118,11 @@ def build_contract_model(rules: list[Rule], db) -> dict:
         mappings = mappings_by_vrf.get(getattr(rule, "vrf_id", None), [])
         consumers, src_ok = _epgs_for(rule.source, mappings)
         providers, dst_ok = _epgs_for(rule.destination, mappings)
-        providers = {p for p in providers if p != "vzAny"}  # Provider vzAny ist nicht sinnvoll
+        providers = {p for p in providers if p != "vzAny"}  # vzAny as provider makes no sense
         if not src_ok or not dst_ok or not consumers or not providers:
             legacy.append(rule)
             warnings.append(
-                f"{rule.rule_id}: Adressen ohne EPG-Zuordnung – als Einzel-Contract exportiert"
+                f"{rule.rule_id}: addresses without an EPG mapping – exported as a single contract"
             )
             continue
 
@@ -163,7 +163,7 @@ def build_contract_model(rules: list[Rule], db) -> dict:
     }
 
 
-# --- Legacy-Fallback (Regel ohne EPG-Zuordnung) ------------------------------
+# --- Legacy fallback (rule without EPG mapping) -------------------------------
 
 def _legacy_tree(rule: Rule) -> list[dict]:
     flt_name = sanitize_name(f"flt-{rule.rule_id}")
@@ -174,14 +174,14 @@ def _legacy_tree(rule: Rule) -> list[dict]:
         {"vzFilter": {"attributes": {"name": flt_name, "descr": (rule.justification or "")[:128]},
                       "children": [{"vzEntry": {"attributes": e}} for e in entries]}},
         {"vzBrCP": {"attributes": {"name": sanitize_name(f"con-{rule.rule_id}"), "scope": "context",
-                                   "descr": f"{rule.rule_id} | ohne EPG-Zuordnung"[:128]},
+                                   "descr": f"{rule.rule_id} | no EPG mapping"[:128]},
                     "children": [{"vzSubj": {"attributes": {"name": f"subj-{sanitize_name(rule.rule_id)}",
                                                             "revFltPorts": "yes"},
                                              "children": [{"vzRsSubjFiltAtt": {"attributes": {"tnVzFilterName": flt_name}}}]}}]}},
     ]
 
 
-# --- Exporte -----------------------------------------------------------------
+# --- Exports ------------------------------------------------------------------
 
 def export_json(rules: list[Rule], db=None) -> str:
     model = build_contract_model(rules, db)
@@ -202,7 +202,7 @@ def export_json(rules: list[Rule], db=None) -> str:
                     "attributes": {
                         "name": sanitize_name(f"subj-{fname.removeprefix('flt-')}"),
                         "revFltPorts": "yes",
-                        "descr": ("Regeln: " + ", ".join(sorted(rule_ids)))[:128],
+                        "descr": ("Rules: " + ", ".join(sorted(rule_ids)))[:128],
                     },
                     "children": [{"vzRsSubjFiltAtt": {"attributes": {"tnVzFilterName": fname}}}],
                 }
@@ -224,7 +224,7 @@ def export_json(rules: list[Rule], db=None) -> str:
             binding = epg_bindings.setdefault(key, {"prov": set(), "cons": set(), "epg": epg})
             binding[role].add(contract["name"])
 
-    # EPG-Bindings je Application Profile (fvAp > fvAEPg > fvRsProv/fvRsCons)
+    # EPG bindings per application profile (fvAp > fvAEPg > fvRsProv/fvRsCons)
     by_ap: dict[str, list] = {}
     for (ap, _epg_name), binding in sorted(epg_bindings.items()):
         epg_children = [
@@ -255,7 +255,7 @@ def export_json(rules: list[Rule], db=None) -> str:
 
 
 def export_yaml(rules: list[Rule], db=None) -> str:
-    """Aggregierte, menschenlesbare Sicht (z.B. für Review oder Ansible)."""
+    """Aggregated, human-readable view (e.g. for review or Ansible)."""
     model = build_contract_model(rules, db)
     doc = {
         "tenant": model["tenant"],
@@ -276,7 +276,7 @@ def export_yaml(rules: list[Rule], db=None) -> str:
             }
             for c in sorted(model["contracts"], key=lambda c: c["name"])
         ],
-        "legacy_rules_ohne_epg": [r.rule_id for r in model["legacy"]],
+        "legacy_rules_without_epg": [r.rule_id for r in model["legacy"]],
         "warnings": model["warnings"],
     }
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)

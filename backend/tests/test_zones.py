@@ -1,4 +1,4 @@
-"""Tests für Zonen-Matrix: Zell-Parsing und Regel-Prüfung."""
+"""Tests for the zone matrix: cell parsing and rule checking."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -29,7 +29,7 @@ def db():
 
 
 def test_parse_cell():
-    # Durchsetzungselement in Klammern wird ignoriert – es zählt nur Allow/Block
+    # The enforcement element in parentheses is ignored - only allow/block counts
     assert parse_cell("Allow Only (FW)") == (ZonePolicyType.allow_only, False)
     assert parse_cell("Allow Only (FW/ACI)") == (ZonePolicyType.allow_only, False)
     assert parse_cell("Allow Only (ACI)") == (ZonePolicyType.allow_only, False)
@@ -50,10 +50,10 @@ def test_allow_with_firewall_platform(db):
 
 
 def test_aci_cross_zone_hint(db):
-    # ACI ist nur intra-zonal – zonenübergreifende ACI-Regel erzeugt einen Hinweis
+    # ACI is intra-zone only - a cross-zone ACI rule produces a hint
     result = check_zone_pair(db, "d-prd", "d-shs", ["juniper", "aci"])
     assert result.allowed
-    assert any("ACI" in m and "innerhalb" in m for m in result.messages)
+    assert any("ACI" in m and "within a single zone" in m for m in result.messages)
 
 
 def test_block_all(db):
@@ -89,19 +89,19 @@ def test_ip_search_matching():
         {"ip": "any", "alias": ""},
     ]
 
-    # Exakte IP trifft den Hosteintrag direkt, "any" nur nachrangig
+    # An exact IP hits the host entry directly, "any" only as a fallback
     matched, kind = _match_address_field(entries, "10.40.105.13", parse_network("10.40.105.13"))
     assert kind == "direct" and "10.40.105.13" in matched[0] and "any" in matched
 
-    # Netz-Überlappung
+    # Network overlap
     matched, kind = _match_address_field(entries, "10.0.1.128/25", parse_network("10.0.1.128/25"))
     assert kind == "direct" and any("10.0.1.0/24" in m for m in matched)
 
-    # IP ohne Überlappung: nur any-Treffer
+    # IP without overlap: only the any hit
     matched, kind = _match_address_field(entries, "192.168.5.5", parse_network("192.168.5.5"))
     assert kind == "any" and matched == ["any"]
 
-    # Alias-Fragment (keine gültige IP -> Textsuche)
+    # Alias fragment (not a valid IP -> text search)
     matched, kind = _match_address_field(entries, "dc0007", None)
     assert kind == "direct" and len(matched) == 2
 
@@ -111,6 +111,6 @@ def test_ip_search_matching():
     )
     assert kind == "direct"
 
-    # Kein Treffer
+    # No hit
     matched, kind = _match_address_field([{"ip": "10.99.0.0/16", "alias": ""}], "kein-treffer", None)
     assert kind is None and matched == []

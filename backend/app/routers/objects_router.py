@@ -1,16 +1,16 @@
-"""Objektkatalog: wiederverwendbare Adress- und Dienst-Objekte.
+"""Object catalogue: reusable address and service objects.
 
-Adress-Objekte verbinden einen Namen (Alias) mit einer IP/einem Netz. Ändert sich
-die IP eines Objekts, werden alle Regel-Adresseinträge mit diesem Alias automatisch
-mitgezogen (inkl. Versionseintrag je betroffener Regel).
+Address objects tie a name (alias) to an IP or network. When an object's IP changes,
+every rule address entry carrying that alias is updated along with it automatically
+(including a version entry for each affected rule).
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_roles
 from ..database import get_db
-from ..models import AddressObject, Role, Rule, RuleVersion, ServiceObject, User, active_rules
+from ..models import AddressObject, Role, RuleVersion, ServiceObject, User, active_rules
 from ..validation import validate_ip_entry, validate_service
 
 router = APIRouter(prefix="/api/objects", tags=["objects"])
@@ -40,21 +40,19 @@ class ServiceObjectIn(BaseModel):
 
 
 class AddressObjectOut(AddressObjectIn):
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
 
 
 class ServiceObjectOut(ServiceObjectIn):
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     id: int
 
 
 def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: str) -> int:
-    """Zieht die neue IP in alle Regel-Einträge mit diesem Alias nach."""
+    """Propagate the new IP into every rule entry that carries this alias."""
     changed = 0
     for rule in active_rules(db).all():
         touched = False
@@ -75,7 +73,7 @@ def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: 
                 RuleVersion(
                     rule_pk=rule.id, version=rule.version,
                     snapshot={"auto": "address-object-update"},
-                    change_note=f"Adress-Objekt '{obj.name}': IP {old_ip} → {obj.ip}",
+                    change_note=f"Address object '{obj.name}': IP {old_ip} → {obj.ip}",
                     changed_by=username,
                 )
             )
@@ -83,7 +81,7 @@ def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: 
     return changed
 
 
-# --- Adress-Objekte ----------------------------------------------------------
+# --- Address objects ---------------------------------------------------------
 
 @router.get("/addresses", response_model=list[AddressObjectOut])
 def list_addresses(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -97,7 +95,7 @@ def create_address(
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     if db.query(AddressObject).filter(AddressObject.name.ilike(payload.name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Adress-Objekt '{payload.name}' existiert bereits")
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Address object '{payload.name}' already exists")
     obj = AddressObject(**payload.model_dump())
     db.add(obj)
     db.commit()
@@ -114,7 +112,7 @@ def update_address(
 ):
     obj = db.get(AddressObject, object_id)
     if not obj:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Adress-Objekt nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Address object not found")
     old_ip = obj.ip
     obj.name = payload.name
     obj.ip = payload.ip
@@ -122,10 +120,10 @@ def update_address(
     changed = propagate_ip_change(db, obj, old_ip, user.username) if old_ip != obj.ip else 0
     db.commit()
     db.refresh(obj)
-    # Anzahl aktualisierter Regeln als Header-Ersatz in der Beschreibungszeile zurückgeben
+    # Report the number of updated rules in the description line, standing in for a header
     out = AddressObjectOut.model_validate(obj)
     if changed:
-        out.description = f"{obj.description} [{changed} Regel(n) aktualisiert]".strip()
+        out.description = f"{obj.description} [{changed} rule(s) updated]".strip()
     return out
 
 
@@ -137,12 +135,12 @@ def delete_address(
 ):
     obj = db.get(AddressObject, object_id)
     if not obj:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Adress-Objekt nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Address object not found")
     db.delete(obj)
     db.commit()
 
 
-# --- Dienst-Objekte ----------------------------------------------------------
+# --- Service objects ---------------------------------------------------------
 
 @router.get("/services", response_model=list[ServiceObjectOut])
 def list_services(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
@@ -158,9 +156,9 @@ def create_service(
     try:
         validate_service(payload.protocol, payload.port)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     if db.query(ServiceObject).filter(ServiceObject.name.ilike(payload.name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Dienst-Objekt '{payload.name}' existiert bereits")
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Service object '{payload.name}' already exists")
     obj = ServiceObject(**payload.model_dump())
     db.add(obj)
     db.commit()
@@ -176,6 +174,6 @@ def delete_service(
 ):
     obj = db.get(ServiceObject, object_id)
     if not obj:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Dienst-Objekt nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Service object not found")
     db.delete(obj)
     db.commit()

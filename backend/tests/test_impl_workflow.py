@@ -1,4 +1,4 @@
-"""Tests für den Umsetzungs-Workflow: erneute Freigabe -> "zu ändern" für den Betrieb."""
+"""Tests for the implementation workflow: re-approval -> "to change" for operations."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -49,16 +49,16 @@ def test_reapproval_marks_implemented_components_as_change(db):
     fw = SecurityComponent(name="FW-Test", type=ComponentType.juniper)
     db.add(fw)
     db.flush()
-    rule = make_rule(db, fw, impl={"FW-Test": "umgesetzt"})
+    rule = make_rule(db, fw, impl={"FW-Test": "implemented"})
 
     _decide(db, "SR0001", approver(), ReviewDecision(comment=""), RuleStatus.approved, "Regel freigegeben")
     db.refresh(rule)
     assert rule.status == RuleStatus.approved
-    assert rule.impl_status["FW-Test"] == "zu ändern"
+    assert rule.impl_status["FW-Test"] == "to change"
     assert impl_pending(rule)
 
-    # Betrieb setzt nach der Anpassung wieder auf "umgesetzt" -> nicht mehr offen
-    rule.impl_status = {"FW-Test": "umgesetzt"}
+    # After the change, operations sets it back to "implemented" -> no longer open
+    rule.impl_status = {"FW-Test": "implemented"}
     db.commit()
     assert not impl_pending(rule)
 
@@ -67,12 +67,12 @@ def test_first_approval_keeps_open_status(db):
     fw = SecurityComponent(name="FW-Test", type=ComponentType.juniper)
     db.add(fw)
     db.flush()
-    rule = make_rule(db, fw)  # neue Regel, noch nie umgesetzt
+    rule = make_rule(db, fw)  # new rule, never implemented before
 
     _decide(db, "SR0001", approver(), ReviewDecision(comment=""), RuleStatus.approved, "Regel freigegeben")
     db.refresh(rule)
-    # kein "zu ändern" (war nie umgesetzt), aber als umzusetzend gezählt
-    assert rule.impl_status.get("FW-Test") in (None, "offen")
+    # no "to change" (it was never implemented), but counted as to be implemented
+    assert rule.impl_status.get("FW-Test") in (None, "open")
     assert impl_pending(rule)
 
 
@@ -81,7 +81,7 @@ def test_impl_pending_only_for_approved_rules_with_components(db):
     db.add(fw)
     db.flush()
     draft = make_rule(db, fw, status=RuleStatus.draft)
-    assert not impl_pending(draft)  # nur freigegebene Regeln zählen
+    assert not impl_pending(draft)  # only approved rules count
     draft.status = RuleStatus.approved
-    draft.impl_status = {"FW-Test": "deaktiviert"}
-    assert not impl_pending(draft)  # deaktiviert gilt nicht als offen
+    draft.impl_status = {"FW-Test": "deactivated"}
+    assert not impl_pending(draft)  # "deactivated" does not count as open

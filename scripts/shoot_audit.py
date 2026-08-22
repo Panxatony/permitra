@@ -1,5 +1,5 @@
-"""Erzeugt ein paar Audit-Ereignisse und nimmt die Audit-Log-Karte im
-Admin-Bereich als Screenshot auf (Feature #25: Quell-IP je Ereignis)."""
+"""Generates a few audit events and captures the audit log card in the
+admin area as a screenshot (feature #25: source IP per event)."""
 import json
 import sys
 import time
@@ -38,14 +38,14 @@ def api(method, path, token, body=None):
         return e.code
 
 
-# --- ein paar realistische Ereignisse erzeugen -------------------------------
+# --- generate a few realistic events -----------------------------------------
 admin = login("admin", "admin123")["access_token"]
 login("architekt", "architekt123")            # auth.login
 login("betrieb", "betrieb123")                # auth.login
 login("approver", "falsch")                   # auth.login_failed
 api("PUT", "/api/settings", admin, {"require_justification": "yes"})   # setting.changed
 api("POST", "/api/api-tokens", admin, {"name": "ansible-readonly"})    # apitoken.created
-# Export protokollieren
+# Log an export
 urllib.request.urlopen(urllib.request.Request(
     f"{BASE}/api/export/csv",
     headers={"Authorization": f"Bearer {admin}"}), timeout=15).read()
@@ -68,7 +68,7 @@ with sync_playwright() as p:
     )
     page.goto(f"{BASE}/admin", wait_until="networkidle")
     time.sleep(2.5)
-    # Audit-Log-Karte gezielt aufnehmen – vorher die Integritätsprüfung auslösen (#26)
+    # Capture just the audit log card - trigger the integrity check first (#26)
     card = page.locator("section.card", has=page.get_by_text("Audit-Log")).last
     card.scroll_into_view_if_needed()
     time.sleep(0.5)
@@ -77,7 +77,7 @@ with sync_playwright() as p:
         page.wait_for_load_state("networkidle")
         time.sleep(1.0)
     except Exception as exc:
-        print(f"Hinweis: Integritätsprüfung nicht ausgelöst ({exc})")
+        print(f"Note: integrity check not triggered ({exc})")
     card.screenshot(path=f"{OUT}/admin-audit.png")
     print("shot admin-audit.png (audit card)")
     browser.close()

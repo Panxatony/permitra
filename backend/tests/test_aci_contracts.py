@@ -1,4 +1,4 @@
-"""Tests für den EPG-basierten, aggregierenden ACI-Contract-Export."""
+"""Tests for the EPG-based, aggregating ACI contract export."""
 import json
 
 import pytest
@@ -9,7 +9,6 @@ from app.database import Base
 from app.exporters import aci
 from app.models import (
     AciGateway,
-    Vrf,
     AddressEpgMap,
     ComponentType,
     Epg,
@@ -18,6 +17,7 @@ from app.models import (
     RuleStatus,
     SecurityComponent,
     ServiceObject,
+    Vrf,
 )
 
 
@@ -62,25 +62,25 @@ def make_rule(rid, src, dst, port="5432"):
 def test_rules_aggregate_into_one_contract(db):
     rules = [
         make_rule("SR0001", "10.10.30.5", "10.10.31.7"),
-        make_rule("SR0002", "10.10.30.9", "10.10.31.8"),         # gleiches EPG-Paar, gleicher Dienst
-        make_rule("SR0003", "10.10.30.0/24", "10.10.31.7", "443"),  # gleiches Paar, anderer Dienst
+        make_rule("SR0002", "10.10.30.9", "10.10.31.8"),         # same EPG pair, same service
+        make_rule("SR0003", "10.10.30.0/24", "10.10.31.7", "443"),  # same pair, different service
     ]
     model = aci.build_contract_model(rules, db)
     assert len(model["contracts"]) == 1
     contract = model["contracts"][0]
     assert contract["name"] == "con-epg-prod-app-to-epg-prod-db"
-    # Filter aus dem Objektkatalog wiederverwendet, generischer Name für 443
+    # Filter reused from the object catalog, generic name for 443
     assert set(contract["subjects"].keys()) == {"flt-postgres", "flt-tcp-443"}
     assert contract["subjects"]["flt-postgres"] == {"SR0001", "SR0002"}
-    # PBR: Provider-BD hat Service Graph
+    # PBR: the provider BD has a service graph
     assert contract["service_graph"] == "SG-CHKP"
     assert not model["legacy"]
 
 
 def test_vzany_and_unknown(db):
     rules = [
-        make_rule("SR0010", "any", "10.10.31.7"),          # Consumer vzAny
-        make_rule("SR0011", "192.168.1.1", "10.10.31.7"),  # keine EPG-Zuordnung -> legacy
+        make_rule("SR0010", "any", "10.10.31.7"),          # consumer vzAny
+        make_rule("SR0011", "192.168.1.1", "10.10.31.7"),  # no EPG mapping -> legacy
     ]
     model = aci.build_contract_model(rules, db)
     assert any(c["consumer"] == "vzAny" for c in model["contracts"])
@@ -92,11 +92,11 @@ def test_json_structure(db):
     out = json.loads(aci.export_json([make_rule("SR0001", "10.10.30.5", "10.10.31.7")], db))
     tenant = out["fvTenant"]
     assert tenant["attributes"]["name"] == "DEMO"
-    kinds = [list(c.keys())[0] for c in tenant["children"]]
+    kinds = [next(iter(c.keys())) for c in tenant["children"]]
     assert "vzFilter" in kinds and "vzBrCP" in kinds and "fvAp" in kinds
-    # EPG-Bindings: Provider/Consumer-Referenzen vorhanden
+    # EPG bindings: provider/consumer references present
     ap = next(c["fvAp"] for c in tenant["children"] if "fvAp" in c)
     epg_names = [e["fvAEPg"]["attributes"]["name"] for e in ap["children"]]
     assert "epg-prod-app" in epg_names and "epg-prod-db" in epg_names
-    # SR-IDs in Subject-Beschreibung (Drift-Rückverfolgbarkeit)
+    # SR IDs in the subject description (drift traceability)
     assert "SR0001" in json.dumps(out)

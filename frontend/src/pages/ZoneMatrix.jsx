@@ -4,10 +4,10 @@ import { api, getUser } from '../api'
 import { Modal } from '../components/shared'
 import { useLang } from '../i18n'
 
-const SB_BADGE = { normal: 'status-draft', 'hoch': 'status-in_review', 'sehr hoch': 'status-rejected' }
+const SB_BADGE = { normal: 'status-draft', 'high': 'status-in_review', 'very high': 'status-rejected' }
 const zoneLabel = (z) => (z.code ? `${z.code}-${z.name}` : z.name)
 const zref = (z) => z.code || z.name
-const SB_LABEL = (z) => `${z.schutzbedarf || 'normal'} (C:${z.cia_c || 'normal'} I:${z.cia_i || 'normal'} V:${z.cia_a || 'normal'})`
+const SB_LABEL = (z, t) => `${t(z.protection_level || 'normal')} (C:${z.cia_c || 'normal'} I:${z.cia_i || 'normal'} V:${z.cia_a || 'normal'})`
 
 function cellLabel(p) {
   if (!p) return ''
@@ -16,12 +16,12 @@ function cellLabel(p) {
 }
 
 const FW_COLORS = {
-  juniper: { fill: '#dbe9ff', stroke: '#1c53b8' },
-  checkpoint: { fill: '#ffe4e0', stroke: '#b83a1c' },
+  juniper: 'fw-juniper',
+  checkpoint: 'fw-checkpoint',
 }
 
-/* Zonenplan-Exporte (Issue #15): SVG mit einkopierten Stilen -> PNG/Druck-PDF,
-   Mermaid über den Backend-Endpunkt (für Wikis/GitLab, die Mermaid rendern). */
+/* Zone plan exports (issue #15): SVG with inlined styles -> PNG/print PDF,
+   Mermaid via the backend endpoint (for wikis/GitLab that render Mermaid). */
 const SVG_STYLE_PROPS = ['fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'opacity',
   'font-size', 'font-weight', 'font-family', 'text-anchor', 'font-style']
 
@@ -57,9 +57,11 @@ function exportPlanPng() {
     canvas.width = plan.w * scale
     canvas.height = plan.h * scale + 60
     const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#ffffff'
+    // The PNG export follows the current color scheme so the image matches the view
+    const css = getComputedStyle(document.documentElement)
+    ctx.fillStyle = css.getPropertyValue('--panel').trim() || '#ffffff'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#1d2733'
+    ctx.fillStyle = css.getPropertyValue('--text').trim() || '#1d2733'
     ctx.font = 'bold 22px sans-serif'
     ctx.fillText(planTitle(), 20, 38)
     ctx.drawImage(img, 0, 60, plan.w * scale, plan.h * scale)
@@ -96,10 +98,11 @@ async function exportPlanMermaid() {
   a.click()
 }
 
-/* Nord-Süd-Sicht nach BSI P-A-P: externe Zonen (Nord) – P-A-P-Ebene mit den
-   Firewall-Clustern und DMZ-/Transferzonen – interne Zonen (Süd). */
+/* North-south view following BSI P-A-P: external zones (north) - P-A-P layer with
+   the firewall clusters and DMZ/transfer zones - internal zones (south). */
 function ZoneReachability({ overview }) {
-  // Hover auf Zone/Firewall hebt alle zugehörigen Verbindungen hervor
+  const { t } = useLang()
+  // Hovering a zone/firewall highlights all of its connections
   const [hover, setHover] = useState(null)
   if (!overview || !overview.zones.length) return null
   const zones = overview.zones
@@ -108,7 +111,7 @@ function ZoneReachability({ overview }) {
   const fwList = Object.values(firewalls).sort(
     (a, b) => (a.ns_tier ?? 100) - (b.ns_tier ?? 100) || a.name.localeCompare(b.name))
 
-  const byLevel = (lvl) => zones.filter((z) => (z.pap_level || 'intern') === lvl)
+  const byLevel = (lvl) => zones.filter((z) => (z.pap_level || 'internal') === lvl)
   const chunk = (arr, n = 6) => {
     const out = []
     for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n))
@@ -135,8 +138,8 @@ function ZoneReachability({ overview }) {
 
   const layoutZoneRowsHeight = (list) => chunk(list).length * ROW_H
 
-  // Firewall-x-Positionen vorab bestimmen (nur x nötig), damit die Zonen nach dem
-  // "Schwerpunkt" ihrer Firewalls sortiert werden können -> weniger Überschneidungen
+  // Determine the firewall x positions up front (only x is needed) so the zones can be
+  // sorted by the "barycenter" of their firewalls -> fewer crossings
   const fwTiersPre = [...new Set(fwList.map((f) => f.ns_tier ?? 100))].sort((a, b) => a - b)
   const northPre = fwTiersPre.length > 1 ? fwList.filter((f) => (f.ns_tier ?? 100) === fwTiersPre[0]) : []
   const southPre = fwTiersPre.length > 1 ? fwList.filter((f) => (f.ns_tier ?? 100) !== fwTiersPre[0]) : fwList
@@ -152,14 +155,14 @@ function ZoneReachability({ overview }) {
     return bary(a) - bary(b) || a.name.localeCompare(b.name)
   })
 
-  // Band 1: Extern (Nord)
-  const extern = sortByBarycenter(byLevel('extern'))
-  bands.push({ key: 'extern', label: 'Extern (Nord) — Internet / Partner', y, h: LABEL_H + layoutZoneRowsHeight(extern) + PAD })
+  // Band 1: external (north)
+  const extern = sortByBarycenter(byLevel('external'))
+  bands.push({ key: 'external', label: 'Extern (Nord) — Internet / Partner', y, h: LABEL_H + layoutZoneRowsHeight(extern) + PAD })
   layoutZoneRows(extern, y + LABEL_H)
   y += bands[0].h
 
-  // Band 2: P-A-P-Ebene, geschichtet nach Nord-Süd-Ebene der Firewalls:
-  // nördlichste FW-Gruppe (z.B. Provider) -> DMZ-/Transferzonen -> übrige FW-Cluster
+  // Band 2: P-A-P layer, stacked by the north-south tier of the firewalls:
+  // northernmost FW group (e.g. provider) -> DMZ/transfer zones -> remaining FW clusters
   const pap = sortByBarycenter(byLevel('pap'))
   const northFws = northPre
   const southFws = southPre
@@ -176,14 +179,14 @@ function ZoneReachability({ overview }) {
   placeFwRow(southFws, y + LABEL_H + northRowH + papZonesH)
   y += papH
 
-  // Band 3: Intern (Süd), vertikal zweigeteilt:
-  // OBEN die Zonen mit mehreren (oder ohne) Firewall-Anbindungen – nah an den
-  // Clustern, mit aufgefächerten Kanten; DARUNTER die Spalten der Zonen mit
-  // genau einer Firewall, direkt unter ihrem Cluster (gerade Spine-Verbindung).
-  const intern = byLevel('intern')
+  // Band 3: internal (south), split vertically in two:
+  // ON TOP the zones with several (or no) firewall attachments - close to the
+  // clusters, with fanned-out edges; BELOW the columns of the zones with
+  // exactly one firewall, right under their cluster (straight spine connection).
+  const intern = byLevel('internal')
   const southIds = new Set(southFws.map((f) => f.id))
-  const columns = {}  // fwId -> Zonen (genau eine Anbindung)
-  const multi = []    // mehrere oder keine Anbindungen
+  const columns = {}  // fwId -> zones (exactly one attachment)
+  const multi = []    // several or no attachments
   intern.forEach((z) => {
     const attached = z.firewalls.filter((f) => southIds.has(f.id))
     if (attached.length === 1) {
@@ -197,15 +200,15 @@ function ZoneReachability({ overview }) {
 
   const S_ROW = BOX_H + 18
 
-  // Oberer Bereich: Mehrfach-Zonen in den LÜCKEN zwischen den Firewall-Spalten,
-  // damit die Spine-Linien der Spalten nicht durch die Boxen laufen
+  // Upper area: multi-attachment zones in the GAPS between the firewall columns
+  // so the spine lines of the columns do not run through the boxes
   const colXs = southFws.map((f) => fwX[f.id]).sort((a, b) => a - b)
   const slotEdges = [70, ...colXs, W - 70]
   const slots = []
   for (let i = 0; i < slotEdges.length - 1; i += 1) slots.push((slotEdges[i] + slotEdges[i + 1]) / 2)
   const multiRows = []
   for (let i = 0; i < multi.length; i += slots.length) multiRows.push(multi.slice(i, i + slots.length))
-  const S_TOP = 12  // Label steht unten – oben reicht ein kleiner Abstand
+  const S_TOP = 12  // the label sits at the bottom - a small gap suffices on top
   multiRows.forEach((row, ri) => {
     row.forEach((z, i) => {
       const idx = row.length >= slots.length
@@ -216,7 +219,7 @@ function ZoneReachability({ overview }) {
   })
   const multiH = multiRows.length * S_ROW + (multiRows.length ? 10 : 0)
 
-  // Unterer Bereich: Spalten unter den Firewalls
+  // Lower area: columns underneath the firewalls
   let maxColumn = 0
   southFws.forEach((f) => {
     const list = columns[f.id] || []
@@ -227,7 +230,7 @@ function ZoneReachability({ overview }) {
   })
 
   const internH = S_TOP + multiH + Math.max(maxColumn, multiRows.length ? 0 : 1) * S_ROW + 26
-  bands.push({ key: 'intern', label: 'Intern (Süd) — unterhalb der P-A-P-Struktur', y, h: internH })
+  bands.push({ key: 'internal', label: 'Intern (Süd) — unterhalb der P-A-P-Struktur', y, h: internH })
   y += internH
   const H = y
 
@@ -250,11 +253,11 @@ function ZoneReachability({ overview }) {
         {bands.map((b) => (
           <g key={b.key}>
             <rect x={4} y={b.y + 2} width={W - 8} height={b.h - 6} rx={10} className={`pap-band band-${b.key}`} />
-            <text x={16} y={b.key === 'intern' ? b.y + b.h - 12 : b.y + 19} className="pap-band-label">{b.label}</text>
+            <text x={16} y={b.key === 'internal' ? b.y + b.h - 12 : b.y + 19} className="pap-band-label">{b.label}</text>
           </g>
         ))}
         {(() => {
-          // Anschlusspunkte je Firewall auffächern (statt alle Linien am Mittelpunkt)
+          // Fan out the attachment points per firewall (instead of all lines at the center)
           const anchors = {}
           fwList.forEach((f) => {
             const connected = zones
@@ -271,7 +274,7 @@ function ZoneReachability({ overview }) {
             const up = fp.y < zp.y
             const zy = zp.y + (up ? -BOX_H / 2 : BOX_H / 2)
             const fy = fp.y + (up ? BOX_H / 2 : -BOX_H / 2)
-            // Zonen direkt unter ihrem Cluster: gerade Verbindung (Spine-Optik)
+            // Zones directly below their cluster: straight connection (spine look)
             const sameColumn = Math.abs(zp.x - fp.x) < 20
             const ax = sameColumn ? fp.x : (anchors[`${f.id}|${z.name}`] ?? fp.x)
             const my = (zy + fy) / 2
@@ -287,11 +290,11 @@ function ZoneReachability({ overview }) {
         })()}
         {fwList.map((f) => {
           const p = fwPos[f.id]
-          const color = FW_COLORS[f.type] || { fill: '#eef1f6', stroke: '#66707c' }
+          const cls = FW_COLORS[f.type] || 'fw-unknown'
           return (
             <g key={f.id} onMouseEnter={() => setHover(`fw:${f.id}`)} onMouseLeave={() => setHover(null)}>
               <rect x={p.x - 85} y={p.y - BOX_H / 2} width={170} height={BOX_H} rx={8}
-                fill={color.fill} stroke={color.stroke} strokeWidth="2.5">
+                className={`fw-box ${cls}`} strokeWidth="2.5">
                 <title>{`${f.name} (${f.type === 'juniper' ? 'Juniper SRX' : 'Check Point'}) – ${f.location}`}</title>
               </rect>
               <text x={p.x} y={p.y + 4.5} className="zone-node-text fw-text">{f.name}</text>
@@ -301,19 +304,19 @@ function ZoneReachability({ overview }) {
         {zones.map((z) => {
           const p = zonePos[z.name]
           if (!p) return null
-          const sub = `${z.schutzbedarf || 'normal'}${z.owner ? ' · ' + z.owner : ''}`
+          const sub = `${t(z.protection_level || 'normal')}${z.owner ? ' · ' + z.owner : ''}`
           const subShort = sub.length > 24 ? sub.slice(0, 23) + '…' : sub
           return (
             <g key={z.name} onMouseEnter={() => setHover(z.name)} onMouseLeave={() => setHover(null)}>
               <rect x={p.x - BOX_W / 2} y={p.y - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
-                className={`zone-box zone-sb-${(z.schutzbedarf || 'normal').replace(' ', '_')}`
+                className={`zone-box zone-sb-${(z.protection_level || 'normal').replace(' ', '_')}`
                   + (z.has_firewall ? '' : ' zone-box-warn')}>
                 <title>{(z.has_firewall
-                  ? `${z.name}: erreichbar über ${z.firewalls.map((f) => f.name).join(', ')}`
-                  : `${z.name}: kein Firewall-Cluster angebunden („Angebunden an“ pflegen)`)
-                  + `\nSchutzbedarf: ${SB_LABEL(z)}`
-                  + (z.owner ? `\nVerantwortlich: ${z.owner}` : '')
-                  + (z.aci?.length ? `\nACI intra-zonal: ${z.aci.map((a) => a.name).join(', ')}` : '')}</title>
+                  ? `${z.name}: ${t('reachable via')} ${z.firewalls.map((f) => f.name).join(', ')}`
+                  : `${z.name}: ${t('no firewall cluster attached (maintain "Attached to")')}`)
+                  + `\n${t('Protection level')}: ${SB_LABEL(z, t)}`
+                  + (z.owner ? `\n${t('Owner')}: ${z.owner}` : '')
+                  + (z.aci?.length ? `\n${t('ACI intra-zone')}: ${z.aci.map((a) => a.name).join(', ')}` : '')}</title>
               </rect>
               <text x={p.x} y={p.y - 3} className="zone-node-text">{zoneLabel(z)}</text>
               <text x={p.x} y={p.y + 12} className="zone-node-sub">{subShort}</text>
@@ -330,9 +333,9 @@ function ZoneReachability({ overview }) {
       </svg>
       <div className="sb-legend">
         <span><strong>Schutzbedarf:</strong></span>
-        <span><span className="sb-swatch" style={{ background: '#eef1f6' }} />normal</span>
-        <span><span className="sb-swatch" style={{ background: '#fff0d2', borderColor: '#cfa64e' }} />hoch</span>
-        <span><span className="sb-swatch" style={{ background: '#fadddd', borderColor: '#cf7b7b' }} />sehr hoch</span>
+        <span><span className="sb-swatch" style={{ background: 'var(--diagram-fill)', borderColor: 'var(--diagram-stroke)' }} />normal</span>
+        <span><span className="sb-swatch" style={{ background: 'var(--amber-bg)', borderColor: 'var(--amber-border)' }} />hoch</span>
+        <span><span className="sb-swatch" style={{ background: 'var(--red-bg)', borderColor: 'var(--red-border)' }} />sehr hoch</span>
         <span><span className="sb-swatch" style={{ borderColor: 'var(--red)', borderStyle: 'dashed' }} />keine Firewall-Anbindung</span>
       </div>
     </div>
@@ -352,14 +355,14 @@ export default function ZoneMatrix() {
   const [error, setError] = useState('')
   const [newZone, setNewZone] = useState('')
   const [newZoneCode, setNewZoneCode] = useState('')
-  const [newZoneLevel, setNewZoneLevel] = useState('intern')
+  const [newZoneLevel, setNewZoneLevel] = useState('internal')
   const [newZoneCia, setNewZoneCia] = useState({ cia_c: 'normal', cia_i: 'normal', cia_a: 'normal' })
-  const [netInputs, setNetInputs] = useState({})  // Zone -> CIDR-Eingabe
+  const [netInputs, setNetInputs] = useState({})  // zone -> CIDR input
   const [saving, setSaving] = useState('')
   const [settings, setSettings] = useState({})
-  const [metaZone, setMetaZone] = useState(null)  // Zone im BSI-Doku-Editor
+  const [metaZone, setMetaZone] = useState(null)  // zone in the BSI documentation editor
   const [editMode, setEditMode] = useState(false)
-  const [draft, setDraft] = useState({})        // "from|to" -> neue Policy
+  const [draft, setDraft] = useState({})        // "from|to" -> new policy
   const [draftZones, setDraftZones] = useState([])  // [{name, pap_level}]
 
   const isApprover = ['change_approver', 'admin'].includes(user.role)
@@ -367,7 +370,7 @@ export default function ZoneMatrix() {
   changes.filter((c) => c.status === 'pending' && c.change_type === 'policy')
     .forEach((c) => { pendingMap[`${c.from_zone}|${c.to_zone}`] = c })
 
-  // Anträge nach Batch gruppieren (ein Sammelantrag = eine Entscheidung)
+  // Group requests by batch (one batch request = one decision)
   const batches = []
   {
     const byBatch = {}
@@ -417,8 +420,8 @@ export default function ZoneMatrix() {
 
   useEffect(() => { load() }, [load])
 
-  // Im Editier-Modus werden Klicks lokal gesammelt und erst mit
-  // „Matrixänderungen beantragen“ als EIN Sammelantrag eingereicht.
+  // In edit mode clicks are collected locally and only submitted as ONE batch
+  // request via "Matrixänderungen beantragen".
   const cycle = (from, to) => {
     if (!canEdit || from === to) return
     if (!editMode) {
@@ -436,7 +439,7 @@ export default function ZoneMatrix() {
     const next = effective === 'allow_only' ? 'block_all' : 'allow_only'
     setDraft((d) => {
       const copy = { ...d }
-      if (next === original && policies[key]) delete copy[key]  // zurück auf Ausgangswert
+      if (next === original && policies[key]) delete copy[key]  // back to the original value
       else copy[key] = next
       return copy
     })
@@ -494,8 +497,8 @@ export default function ZoneMatrix() {
     }
   }
 
-  // Zonen-Anlage läuft über den Sammelantrag; das Formular ist immer sichtbar
-  // und aktiviert den Editier-Modus bei Bedarf automatisch
+  // Creating a zone goes through the batch request; the form is always visible
+  // and switches on edit mode automatically when needed
   const addZone = (e) => {
     e.preventDefault()
     const name = newZone.trim()
@@ -520,7 +523,7 @@ export default function ZoneMatrix() {
       const r = await api.deleteZone(name)
       if (r?.status === 'pending') {
         setError('')
-        alert('Löschung beantragt – wird erst nach Freigabe durch zwei Change Approver wirksam.')
+        alert('Removal requested – it takes effect only after approval by two change approvers.')
       }
       load()
     } catch (err) {
@@ -531,7 +534,7 @@ export default function ZoneMatrix() {
   return (
     <div>
       <div className="page-head">
-        <h1>{t('Sicherheitszonen')}</h1>
+        <h1>{t('Security zones')}</h1>
         <span className="muted">
           Übersicht, Firewall-Erreichbarkeit und Kommunikationsmatrix der Zonen
         </span>
@@ -550,16 +553,16 @@ export default function ZoneMatrix() {
       {notice && <div className="okbox">{notice}</div>}
 
       <section className="card wide zone-overview">
-        <h2>{t('Zonen-Übersicht & Firewall-Erreichbarkeit')}</h2>
+        <h2>{t('Zone overview & firewall reachability')}</h2>
         <ZoneReachability overview={overview} />
         {overview && (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>{t('Zone')}</th><th>{t('Schutzbedarf & Verantwortlicher')}</th>
-                  <th>{t('Netzwerke')}</th><th>{t('P-A-P-Einstufung')}</th><th>{t('Regeln')}</th>
-                  <th>{t('Angebunden an')}</th><th>{t('ACI (intra-zonal)')}</th><th></th>
+                  <th>{t('Zone')}</th><th>{t('Protection level & owner')}</th>
+                  <th>{t('Networks')}</th><th>{t('P-A-P classification')}</th><th>{t('Rules')}</th>
+                  <th>{t('Attached to')}</th><th>{t('ACI (intra-zone)')}</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -567,20 +570,20 @@ export default function ZoneMatrix() {
                   <tr key={z.name}>
                     <td><strong>{zoneLabel(z)}</strong><div className="muted small">{z.description}</div></td>
                     <td>
-                      <span className={`badge ${SB_BADGE[z.schutzbedarf] || 'status-draft'}`}
+                      <span className={`badge ${SB_BADGE[z.protection_level] || 'status-draft'}`}
                         title={`C: ${z.cia_c} · I: ${z.cia_i} · V: ${z.cia_a} (Maximumprinzip)`}>
-                        {z.schutzbedarf || 'normal'}
+                        {t(z.protection_level || 'normal')}
                       </span>
-                      <div className="muted small">{z.owner || t('kein Verantwortlicher')}</div>
+                      <div className="muted small">{z.owner || t('no owner assigned')}</div>
                     </td>
                     <td>
                       <Link to="/networks" className="rule-link"
-                        title={(z.networks || []).map((n) => n.cidr).join(', ') || t('Zonen-Zuordnung auf der Seite Netzwerke pflegen')}>
-                        {(z.networks || []).length} {t('Netzwerke')}
+                        title={(z.networks || []).map((n) => n.cidr).join(', ') || t('Maintain the zone mapping on the Networks page')}>
+                        {(z.networks || []).length} {t('Networks')}
                       </Link>
                     </td>
                     <td>
-                      {{ extern: 'extern (Nord)', pap: 'P-A-P-Ebene', intern: 'intern (Süd)' }[z.pap_level || 'intern']}
+                      {{ external: 'extern (Nord)', pap: 'P-A-P-Ebene', internal: 'intern (Süd)' }[z.pap_level || 'internal']}
                     </td>
                     <td>{z.rule_count}</td>
                     <td>
@@ -588,7 +591,7 @@ export default function ZoneMatrix() {
                         ? z.firewalls.map((f) => (
                             <span key={f.id} className={`badge platform-${f.type}`}>{f.name}</span>
                           ))
-                        : <span className="badge status-rejected">{t('keine Firewall-Anbindung')}</span>}
+                        : <span className="badge status-rejected">{t('no firewall connectivity')}</span>}
                     </td>
                     <td>
                       {z.aci.map((a) => <span key={a.id} className="badge platform-aci">{a.name}</span>)}
@@ -597,7 +600,7 @@ export default function ZoneMatrix() {
                       {canEdit && (
                         <button className="btn btn-ghost"
                           onClick={() => setMetaZone({ ...z, component_ids: z.firewalls.map((f) => f.id) })}>
-                          {t('Bearbeiten')}
+                          {t('Edit')}
                         </button>
                       )}
                     </td>
@@ -610,7 +613,7 @@ export default function ZoneMatrix() {
       </section>
 
       {metaZone && (
-        <Modal title={`${t('Zone bearbeiten')}: ${metaZone.name}`} onClose={() => setMetaZone(null)}>
+        <Modal title={`${t('Edit zone')}: ${metaZone.name}`} onClose={() => setMetaZone(null)}>
           <form className="modal-form" onSubmit={async (e) => {
             e.preventDefault()
             try {
@@ -618,48 +621,48 @@ export default function ZoneMatrix() {
                 owner: metaZone.owner, description: metaZone.description, code: metaZone.code,
                 cia_c: metaZone.cia_c, cia_i: metaZone.cia_i, cia_a: metaZone.cia_a,
               })
-              await api.setZonePapLevel(metaZone.name, metaZone.pap_level || 'intern')
+              await api.setZonePapLevel(metaZone.name, metaZone.pap_level || 'internal')
               await api.setZoneComponents(metaZone.name, metaZone.component_ids || [])
               setMetaZone(null)
               load()
             } catch (err) { setError(err.message) }
           }}>
             <div className="grid-2">
-              <label>{t('Kennung (z.B. Z020)')}
+              <label>{t('Code (e.g. Z020)')}
                 <input value={metaZone.code || ''} autoFocus placeholder="Z020"
                   onChange={(e) => setMetaZone({ ...metaZone, code: e.target.value })} />
               </label>
-              <label>{t('Verantwortlicher (Person/Team)')}
+              <label>{t('Owner (person/team)')}
                 <input value={metaZone.owner || ''}
                   onChange={(e) => setMetaZone({ ...metaZone, owner: e.target.value })} />
               </label>
             </div>
-            <label>{t('Beschreibung (Zweck der Zone)')}
+            <label>{t('Description (purpose of the zone)')}
               <input value={metaZone.description || ''}
                 onChange={(e) => setMetaZone({ ...metaZone, description: e.target.value })} />
             </label>
             <div className="grid-3">
-              {[['cia_c', t('Vertraulichkeit')], ['cia_i', t('Integrität')], ['cia_a', t('Verfügbarkeit')]].map(([field, label]) => (
+              {[['cia_c', t('Confidentiality')], ['cia_i', t('Integrity')], ['cia_a', t('Availability')]].map(([field, label]) => (
                 <label key={field}>{label}
                   <select value={metaZone[field] || 'normal'}
                     onChange={(e) => setMetaZone({ ...metaZone, [field]: e.target.value })}>
                     <option value="normal">normal</option>
-                    <option value="hoch">hoch</option>
-                    <option value="sehr hoch">sehr hoch</option>
+                    <option value="high">hoch</option>
+                    <option value="very high">sehr hoch</option>
                   </select>
                 </label>
               ))}
             </div>
             <div className="grid-2">
-              <label>{t('P-A-P-Einstufung')}
-                <select value={metaZone.pap_level || 'intern'}
+              <label>{t('P-A-P classification')}
+                <select value={metaZone.pap_level || 'internal'}
                   onChange={(e) => setMetaZone({ ...metaZone, pap_level: e.target.value })}>
-                  <option value="extern">extern (Nord)</option>
+                  <option value="external">extern (Nord)</option>
                   <option value="pap">P-A-P-Ebene</option>
-                  <option value="intern">intern (Süd)</option>
+                  <option value="internal">intern (Süd)</option>
                 </select>
               </label>
-              <label>{t('Angebunden an')}
+              <label>{t('Attached to')}
                 <span className="attach-select">
                   {fwComponents.map((f) => {
                     const ids = metaZone.component_ids || []
@@ -679,20 +682,20 @@ export default function ZoneMatrix() {
               </label>
             </div>
             <p className="muted small">
-              {t('Gesamt-Schutzbedarf nach Maximumprinzip:')}{' '}
-              <strong>{['sehr hoch', 'hoch'].find((l) =>
+              {t('Overall protection level (maximum principle):')}{' '}
+              <strong>{['very high', 'high'].find((l) =>
                 [metaZone.cia_c, metaZone.cia_i, metaZone.cia_a].includes(l)) || 'normal'}</strong>
             </p>
             <div className="actions">
-              <button className="btn btn-primary" type="submit">{t('Speichern')}</button>
-              <button className="btn btn-ghost" type="button" onClick={() => setMetaZone(null)}>{t('Abbrechen')}</button>
+              <button className="btn btn-primary" type="submit">{t('Save')}</button>
+              <button className="btn btn-ghost" type="button" onClick={() => setMetaZone(null)}>{t('Cancel')}</button>
             </div>
           </form>
         </Modal>
       )}
 
       <div className="matrix-toolbar">
-        <h2>{t('Kommunikationsmatrix')} <span className="muted small">{t('(Zeile = Quelle, Spalte = Ziel)')}</span></h2>
+        <h2>{t('Communication matrix')} <span className="muted small">{t('(row = source, column = destination)')}</span></h2>
         {canEdit && !editMode && (
           <button className="btn btn-primary" onClick={startEdit}>Matrix ändern</button>
         )}
@@ -709,7 +712,7 @@ export default function ZoneMatrix() {
 
       {settings.zone_matrix_default === 'deny' && (
         <div className="infobox">
-          {t('Minimalprinzip aktiv (default-deny): Für Zonen-Beziehungen ohne Matrix-Eintrag werden Sicherheitsregeln abgelehnt, bis die Beziehung hier per Antrag auf Allow gesetzt ist.')}
+          {t('Least privilege active (default-deny): security rules for zone relationships without a matrix entry are rejected until the relationship is set to Allow via a request here.')}
         </div>
       )}
       <div className="matrix-legend">
@@ -775,26 +778,26 @@ export default function ZoneMatrix() {
               <input value={newZone} onChange={(e) => setNewZone(e.target.value)}
                 placeholder="Zonen-Name, z.B. T-NEW" />
               <select value={newZoneLevel} onChange={(e) => setNewZoneLevel(e.target.value)}>
-                <option value="extern">extern (Nord)</option>
+                <option value="external">extern (Nord)</option>
                 <option value="pap">P-A-P-Ebene</option>
-                <option value="intern">intern (Süd)</option>
+                <option value="internal">intern (Süd)</option>
               </select>
               {[['cia_c', 'C'], ['cia_i', 'I'], ['cia_a', 'V']].map(([f, lbl]) => (
-                <select key={f} title={t('Schutzbedarf')} value={newZoneCia[f]}
+                <select key={f} title={t('Protection level')} value={newZoneCia[f]}
                   onChange={(e) => setNewZoneCia({ ...newZoneCia, [f]: e.target.value })}
                   style={{ maxWidth: '110px' }}>
                   <option value="normal">{lbl}: normal</option>
-                  <option value="hoch">{lbl}: hoch</option>
-                  <option value="sehr hoch">{lbl}: sehr hoch</option>
+                  <option value="high">{lbl}: hoch</option>
+                  <option value="very high">{lbl}: sehr hoch</option>
                 </select>
               ))}
               <span className="muted small">
-                {t('Schutzbedarf')}: <strong>{['sehr hoch', 'hoch'].find((l) => Object.values(newZoneCia).includes(l)) || 'normal'}</strong>
+                {t('Protection level')}: <strong>{['very high', 'high'].find((l) => Object.values(newZoneCia).includes(l)) || 'normal'}</strong>
               </span>
-              <button className="btn btn-primary" type="submit">{t('Zone anlegen')} (in Antrag)</button>
+              <button className="btn btn-primary" type="submit">{t('Create zone')} (in Antrag)</button>
               {draftZones.map((z) => (
                 <span key={z.name} className="zone-chip">
-                  ✎ {z.code}-{z.name} <span className="muted small">({z.pap_level})</span>
+                  ✎ {z.code}-{z.name} <span className="muted small">({t(z.pap_level)})</span>
                   <button type="button"
                     onClick={() => setDraftZones(draftZones.filter((x) => x.name !== z.name))}>✕</button>
                 </span>
@@ -831,7 +834,7 @@ export default function ZoneMatrix() {
           <table>
             <thead>
               <tr>
-                <th>{t('Änderung')}en</th><th>{t('Status')}</th>
+                <th>{t('Changes')}</th><th>{t('Status')}</th>
                 <th>Beantragt</th><th>Entschieden</th><th></th>
               </tr>
             </thead>
@@ -870,8 +873,8 @@ export default function ZoneMatrix() {
                   <td className="row-actions">
                     {b.status === 'pending' && isApprover && (
                       <>
-                        <button className="btn btn-approve" onClick={() => decide(b.items[0], true)}>{t('✓ Freigeben')}</button>
-                        <button className="btn btn-reject" onClick={() => decide(b.items[0], false)}>{t('✕ Ablehnen')}</button>
+                        <button className="btn btn-approve" onClick={() => decide(b.items[0], true)}>{t('✓ Approve')}</button>
+                        <button className="btn btn-reject" onClick={() => decide(b.items[0], false)}>{t('✕ Reject')}</button>
                       </>
                     )}
                   </td>

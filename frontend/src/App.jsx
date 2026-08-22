@@ -2,6 +2,7 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-r
 import { useEffect, useState } from 'react'
 import { api, clearSession, getUser, getVrfName, setVrfName } from './api'
 import { useLang } from './i18n'
+import { useTheme } from './theme'
 import Components from './pages/Components'
 import Dashboard from './pages/Dashboard'
 import Gateways from './pages/Gateways'
@@ -20,13 +21,17 @@ import RuleList from './pages/RuleList'
 import Search from './pages/Search'
 import ZoneMatrix from './pages/ZoneMatrix'
 
+const THEME_ICONS = { system: '🖥️', light: '☀️', dark: '🌙' }
+const THEME_LABELS = { system: 'System', light: 'Hell', dark: 'Dunkel' }
+
 const ROLE_LABELS = { architect: 'Architekt', operations: 'Betrieb', change_approver: 'Change Approver', admin: 'Administrator' }
 
 function Layout({ children }) {
   const user = getUser()
   const navigate = useNavigate()
   const location = useLocation()
-  const { lang, t, toggle } = useLang()
+  const { t } = useLang()
+  const { theme, cycle: cycleTheme } = useTheme()
   const [vrfs, setVrfs] = useState([])
   useEffect(() => {
     api.vrfs().then(setVrfs).catch(() => setVrfs([]))
@@ -34,7 +39,7 @@ function Layout({ children }) {
   const currentVrf = getVrfName() || (vrfs[0]?.name ?? '')
   const switchVrf = (name) => {
     setVrfName(name)
-    window.location.reload()  // alle Ansichten im neuen Umgebungs-Kontext laden
+    window.location.reload()  // load every view in the new environment context
   }
   if (!user) return <Navigate to="/login" state={{ from: location }} />
 
@@ -51,7 +56,7 @@ function Layout({ children }) {
           <div className="userbox">
             {vrfs.length > 1 && (
               <label className="vrf-select" title="Umgebung/VRF – getrennte Welten mit ggf. überlappenden IP-Bereichen (z.B. IT und OT)">
-                <span className="muted-light">{t('Umgebung')}:</span>
+                <span className="muted-light">{t('Environment')}:</span>
                 <select value={currentVrf} onChange={(e) => switchVrf(e.target.value)}>
                   {vrfs.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}
                 </select>
@@ -61,37 +66,38 @@ function Layout({ children }) {
               {user.full_name || user.username}
             </Link>
             <span className={`badge role-${user.role}`}>{t(ROLE_LABELS[user.role])}</span>
-            <button className="btn btn-topbar btn-lang" onClick={toggle}
-              title={lang === 'de' ? 'Switch to English' : 'Auf Deutsch umstellen'}>
-              {lang === 'de' ? 'EN' : 'DE'}
+            <button className="btn btn-topbar btn-theme" onClick={cycleTheme}
+              title={`${t('Colour scheme')}: ${t(THEME_LABELS[theme])} – ${t('click to switch')}`}
+              aria-label={`${t('Colour scheme')}: ${t(THEME_LABELS[theme])}`}>
+              {THEME_ICONS[theme]}
             </button>
-            <button className="btn btn-topbar" onClick={logout}>{t('Abmelden')}</button>
+            <button className="btn btn-topbar" onClick={logout}>{t('Sign out')}</button>
           </div>
         </div>
         <nav>
           {user.role === 'admin' ? (
-            /* Fokussierte Ansicht: Admins verwalten Permitra, keine Regel-Sichten */
+            /* Focused view: admins manage Permitra, no rule views */
             <Link to="/admin">{t('Administration')}</Link>
           ) : user.role === 'change_approver' ? (
             <>
-              {/* Verschlankte Ansicht: Approver sehen nur, was sie für Entscheidungen brauchen */}
-              <Link to="/approvals">{t('Freigaben')}</Link>
-              <Link to="/rules">{t('Regeln')}</Link>
-              <Link to="/zones">{t('Sicherheitszonen')}</Link>
-              <Link to="/networks">{t('Netzwerke')}</Link>
+              {/* Slimmed-down view: approvers only see what they need to decide */}
+              <Link to="/approvals">{t('Approvals')}</Link>
+              <Link to="/rules">{t('Rules')}</Link>
+              <Link to="/zones">{t('Security zones')}</Link>
+              <Link to="/networks">{t('Networks')}</Link>
             </>
           ) : (
             <>
               <Link to="/">{t('Dashboard')}</Link>
-              <Link to="/rules">{t('Regeln')}</Link>
-              {user.role === 'architect' && <Link to="/rules/new">{t('Neue Regel')}</Link>}
-              <Link to="/search">{t('Analyse')}</Link>
-              <Link to="/recertification">{t('Rezertifizierung')}</Link>
-              <Link to="/zones">{t('Sicherheitszonen')}</Link>
-              <Link to="/networks">{t('Netzwerke')}</Link>
-              <Link to="/components">{t('Komponenten')}</Link>
-              <Link to="/gateways">{t('ACI Gateways')}</Link>
-              <Link to="/objects">{t('Objekte')}</Link>
+              <Link to="/rules">{t('Rules')}</Link>
+              {user.role === 'architect' && <Link to="/rules/new">{t('New rule')}</Link>}
+              <Link to="/search">{t('Analysis')}</Link>
+              <Link to="/recertification">{t('Recertification')}</Link>
+              <Link to="/zones">{t('Security zones')}</Link>
+              <Link to="/networks">{t('Networks')}</Link>
+              <Link to="/components">{t('Components')}</Link>
+              <Link to="/gateways">{t('ACI gateways')}</Link>
+              <Link to="/objects">{t('Objects')}</Link>
               <Link to="/export">{t('Export')}</Link>
             </>
           )}
@@ -103,7 +109,7 @@ function Layout({ children }) {
 }
 
 function Home() {
-  // Change Approver starten fokussiert auf der Freigaben-Seite
+  // Change approvers start focused on the approvals page
   const user = getUser()
   if (user?.role === 'admin') return <Navigate to="/admin" replace />
   if (user?.role === 'change_approver') return <Navigate to="/approvals" replace />

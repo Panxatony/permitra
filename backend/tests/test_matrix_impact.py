@@ -1,12 +1,20 @@
-"""Tests für die Auswirkungsanalyse von Matrix-Änderungen (Allow -> Block):
-betroffene freigegebene Regeln werden bei Freigabe in den Review zurückgesetzt."""
+"""Tests for the impact analysis of matrix changes (allow -> block): affected
+approved rules are reset to review once the change is approved."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import (
-    Role, Rule, RuleAction, RuleStatus, User, Vrf, Zone, ZonePolicy, ZonePolicyType,
+    Role,
+    Rule,
+    RuleAction,
+    RuleStatus,
+    User,
+    Vrf,
+    Zone,
+    ZonePolicy,
+    ZonePolicyType,
 )
 from app.routers.zones_router import _affected_rules, _create_batch, _decide_change
 
@@ -41,9 +49,9 @@ def user(name, role=Role.architect):
 
 def test_affected_rules_analysis(db):
     rules = _affected_rules(db, "MGMT", "PROD")
-    # deaktivierte Regel zählt nicht, Entwurf und freigegebene schon
+    # A deactivated rule does not count, drafts and approved ones do
     assert [r.rule_id for r in rules] == ["SR00001", "SR00002", "SR00003"]
-    # Gegenrichtung ist nicht betroffen (Matrix ist gerichtet)
+    # The reverse direction is not affected (the matrix is directed)
     assert _affected_rules(db, "PROD", "MGMT") == []
 
 
@@ -55,7 +63,7 @@ def test_block_resets_approved_rules_to_review(db):
     change = db.query(ZonePolicyChange).filter(ZonePolicyChange.status == "pending").first()
 
     _decide_change(db, change.id, user("chris", Role.change_approver), True, "")
-    # Nach der ersten Freigabe: noch nichts passiert
+    # After the first approval: nothing has happened yet
     assert db.query(Rule).filter(Rule.status == RuleStatus.approved).count() == 2
 
     result = _decide_change(db, change.id, user("kim", Role.change_approver), True, "")
@@ -65,7 +73,7 @@ def test_block_resets_approved_rules_to_review(db):
     assert reset.status == RuleStatus.in_review
     assert any("Block" in c.text for c in reset.comments)
     assert any("Block" in v.change_note for v in reset.versions)
-    # Entwurf und deaktivierte Regel bleiben unverändert
+    # The draft and the deactivated rule stay unchanged
     assert db.query(Rule).filter(Rule.rule_id == "SR00003").one().status == RuleStatus.draft
     assert db.query(Rule).filter(Rule.rule_id == "SR00004").one().status == RuleStatus.deactivated
 
@@ -85,7 +93,7 @@ def test_allow_change_has_no_rule_impact(db):
 
 
 def test_approve_of_blocked_rule_becomes_removal(db):
-    """Nach Matrix-Block: 'Freigeben' im Review = Löschungsfreigabe."""
+    """After a matrix block: 'approve' in the review means approving removal."""
     from app.models import ComponentType, SecurityComponent, ZonePolicyChange
     from app.routers.rules_router import _decide, impl_pending
     from app.schemas import ReviewDecision
@@ -95,10 +103,10 @@ def test_approve_of_blocked_rule_becomes_removal(db):
     db.flush()
     rule = db.query(Rule).filter(Rule.rule_id == "SR00001").one()
     rule.components = [fw]
-    rule.impl_status = {"FW-Test": "umgesetzt"}
+    rule.impl_status = {"FW-Test": "implemented"}
     db.commit()
 
-    # Matrix auf Block stellen (setzt SR00001/SR00002 in den Review)
+    # Switch the matrix to block (puts SR00001/SR00002 into review)
     _create_batch(db, user("alex"), [
         {"type": "policy", "from_zone": "MGMT", "to_zone": "PROD", "policy": "block_all"},
     ], "")
@@ -111,10 +119,10 @@ def test_approve_of_blocked_rule_becomes_removal(db):
     result = _decide(db, "SR00001", user("chris", Role.change_approver),
                      ReviewDecision(comment="Rückbau ok"), RuleStatus.approved, "Regel freigegeben")
     assert result.status == RuleStatus.deactivated
-    assert result.impl_status["FW-Test"] == "zu löschen"
-    assert impl_pending(result)  # erscheint beim Betrieb als offene Umsetzung
-    assert any("Löschung freigegeben" in v.change_note for v in result.versions)
+    assert result.impl_status["FW-Test"] == "to remove"
+    assert impl_pending(result)  # shows up for operations as an open implementation
+    assert any("Removal approved" in v.change_note for v in result.versions)
 
-    # Betrieb baut zurück und setzt "deaktiviert" -> nicht mehr offen
-    result.impl_status = {"FW-Test": "deaktiviert"}
+    # Operations rolls it back and sets "deactivated" -> no longer open
+    result.impl_status = {"FW-Test": "deactivated"}
     assert not impl_pending(result)

@@ -1,7 +1,6 @@
-"""Anmeldung und Konto-Sicherheit: Login (mit optionalem TOTP-Zweitfaktor),
-Passwort vergessen/setzen, 2FA-Verwaltung und WebAuthn-Passkeys."""
+"""Sign-in and account security: login (with optional TOTP second factor),
+forgotten/new password, 2FA management and WebAuthn passkeys."""
 import base64
-import json
 import os
 import time
 from urllib.parse import urlparse
@@ -11,9 +10,9 @@ from fastapi.responses import PlainTextResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from .. import audit, mailer, totp
 from ..auth import create_token, get_current_user, hash_password, verify_password
 from ..database import get_db
-from .. import audit, mailer, totp
 from ..models import Passkey, User, utcnow
 from ..schemas import Token, UserOut
 from .users_router import consume_token, issue_token
@@ -25,7 +24,7 @@ def _login_ok(user: User) -> Token:
     return Token(access_token=create_token(user), user=UserOut.model_validate(user))
 
 
-# Brute-Force-Schutz: nach LOGIN_MAX_FAILS Fehlversuchen Konto für LOGIN_LOCK_MINUTES sperren
+# Brute-force protection: after LOGIN_MAX_FAILS failed attempts, lock the account for LOGIN_LOCK_MINUTES
 LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "5"))
 LOGIN_LOCK_MINUTES = int(os.environ.get("LOGIN_LOCK_MINUTES", "15"))
 
@@ -46,7 +45,7 @@ async def login(
     db: Session = Depends(get_db),
 ):
     user = db.query(User).filter(User.username == form.username).first()
-    # Kontosperre prüfen (fail-secure; identische Meldung, kein Enumerieren)
+    # Check the account lock (fail-secure; identical message, no user enumeration)
     if user and user.locked_until is not None:
         locked_until = user.locked_until
         if locked_until.tzinfo is None:
@@ -56,30 +55,30 @@ async def login(
             audit.record(db, "auth", "auth.login_locked", actor=form.username,
                          source_ip=audit.client_ip(request))
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
-                                "Konto vorübergehend gesperrt – bitte später erneut versuchen")
+                                "Account temporarily locked – try again later")
     if not user or not verify_password(form.password, user.password_hash):
         if user:
             _register_failure(db, user)
         audit.record(db, "auth", "auth.login_failed", actor=form.username,
                      source_ip=audit.client_ip(request),
-                     detail="Konto gesperrt" if (user and user.locked_until) else "")
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Benutzername oder Passwort falsch")
+                     detail="account locked" if (user and user.locked_until) else "")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong username or password")
     if not user.is_active:
         audit.record(db, "auth", "auth.login_denied", actor=user.username,
-                     source_ip=audit.client_ip(request), detail="Konto deaktiviert")
+                     source_ip=audit.client_ip(request), detail="account deactivated")
         raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            "Konto ist deaktiviert bzw. noch nicht aktiviert")
+                            "The account is deactivated or not activated yet")
     if user.totp_enabled:
-        # Zweiter Faktor: optionales Formularfeld "otp"
+        # Second factor: optional form field "otp"
         otp = ((await request.form()).get("otp") or "").strip()
         if not otp:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_required")
         if not totp.verify(user.totp_secret, otp):
             _register_failure(db, user)
             audit.record(db, "auth", "auth.login_failed", actor=user.username,
-                         source_ip=audit.client_ip(request), detail="2FA-Code falsch")
+                         source_ip=audit.client_ip(request), detail="wrong 2FA code")
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_invalid")
-    # Erfolg: Fehlversuchszähler und Sperre zurücksetzen
+    # Success: reset the failure counter and the lock
     if user.failed_logins or user.locked_until:
         user.failed_logins = 0
         user.locked_until = None
@@ -100,18 +99,18 @@ def set_notifications(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """E-Mail-Benachrichtigungen ein-/ausschalten (Self-Service)."""
+    """Turn email notifications on or off (self-service)."""
     user.notify_email = bool(payload.get("notify_email", True))
     db.commit()
     db.refresh(user)
     return user
 
 
-# ---------- Passwort vergessen / setzen ----------
+# ---------- Forgotten password / set password ----------
 
 @router.post("/forgot")
 def forgot_password(payload: dict, db: Session = Depends(get_db)):
-    """Reset-Link anfordern. Antwort ist immer gleich (kein Nutzer-Enumerieren)."""
+    """Request a reset link. The response is always the same (no user enumeration)."""
     ident = (payload.get("username") or "").strip()
     user = None
     if ident:
@@ -120,28 +119,28 @@ def forgot_password(payload: dict, db: Session = Depends(get_db)):
         ).first()
     if user and user.email:
         mailer.reset_mail(user, issue_token(db, user, "reset"))
-    return {"detail": "Falls das Konto existiert und eine E-Mail-Adresse hinterlegt ist, "
-                      "wurde ein Reset-Link versendet."}
+    return {"detail": "If the account exists and has an e-mail address on file, "
+                      "a reset link has been sent."}
 
 
 @router.post("/set-password")
 def set_password(request: Request, payload: dict, db: Session = Depends(get_db)):
-    """Passwort über Aktivierungs- oder Reset-Link setzen; aktiviert das Konto."""
+    """Set the password via an activation or reset link; this activates the account."""
     password = payload.get("password") or ""
     if len(password) < 8:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            "Passwort muss mindestens 8 Zeichen haben")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "Password must be at least 8 characters long")
     user, purpose = consume_token(db, payload.get("token") or "")
     user.password_hash = hash_password(password)
     user.is_active = True
-    user.token_valid_from = utcnow()  # Passwortänderung entzieht bestehende Tokens
+    user.token_valid_from = utcnow()  # a password change revokes existing tokens
     user.failed_logins = 0
     user.locked_until = None
     db.commit()
     audit.record(db, "auth", "auth.activated" if purpose == "activate" else "auth.password_reset",
                  actor=user.username, source_ip=audit.client_ip(request))
-    return {"detail": ("Konto aktiviert – du kannst dich jetzt anmelden"
-                       if purpose == "activate" else "Passwort geändert"),
+    return {"detail": ("Account activated – you can sign in now"
+                       if purpose == "activate" else "Password changed"),
             "username": user.username}
 
 
@@ -153,27 +152,27 @@ def change_password(
     user: User = Depends(get_current_user),
 ):
     if not verify_password(payload.get("current") or "", user.password_hash):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Aktuelles Passwort ist falsch")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "The current password is wrong")
     new = payload.get("new") or ""
     if len(new) < 8:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            "Passwort muss mindestens 8 Zeichen haben")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "Password must be at least 8 characters long")
     user.password_hash = hash_password(new)
-    user.token_valid_from = utcnow()  # entzieht andere bestehende Sitzungen
+    user.token_valid_from = utcnow()  # revokes other existing sessions
     db.commit()
     audit.record(db, "auth", "auth.password_changed", actor=user.username,
                  source_ip=audit.client_ip(request))
-    # Frisches Token für die aktuelle Sitzung, damit sie nicht selbst abläuft
-    return {"detail": "Passwort geändert", "access_token": create_token(user)}
+    # Fresh token for the current session so it does not expire itself
+    return {"detail": "Password changed", "access_token": create_token(user)}
 
 
-# ---------- Zwei-Faktor (TOTP) ----------
+# ---------- Two-factor (TOTP) ----------
 
 @router.post("/totp/setup")
 def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """Neues Secret erzeugen (aktiv erst nach Bestätigung mit gültigem Code)."""
+    """Generate a new secret (only becomes active once confirmed with a valid code)."""
     if user.totp_enabled:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "2FA ist bereits aktiviert")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Two-factor authentication is already enabled")
     user.totp_secret = totp.new_secret()
     db.commit()
     return {"secret": user.totp_secret,
@@ -183,29 +182,29 @@ def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_u
 @router.post("/totp/enable")
 def totp_enable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not user.totp_secret:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Bitte zuerst das Setup starten")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Start the setup first")
     if not totp.verify(user.totp_secret, payload.get("code") or ""):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Code ist ungültig")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The code is invalid")
     user.totp_enabled = True
     db.commit()
     audit.record(db, "auth", "auth.totp_enabled", actor=user.username)
-    return {"detail": "Zwei-Faktor-Authentifizierung aktiviert"}
+    return {"detail": "Two-factor authentication enabled"}
 
 
 @router.post("/totp/disable")
 def totp_disable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not verify_password(payload.get("password") or "", user.password_hash):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Passwort ist falsch")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "The password is wrong")
     user.totp_enabled = False
     user.totp_secret = None
     db.commit()
     audit.record(db, "auth", "auth.totp_disabled", actor=user.username)
-    return {"detail": "Zwei-Faktor-Authentifizierung deaktiviert"}
+    return {"detail": "Two-factor authentication disabled"}
 
 
 # ---------- Passkeys (WebAuthn) ----------
 
-# Challenges kurzlebig im Prozess halten (Single-Worker-Deployment)
+# Keep challenges short-lived in-process (single-worker deployment)
 _challenges: dict[str, tuple[bytes, float]] = {}
 
 
@@ -234,7 +233,7 @@ def _take_challenge(key: str) -> bytes:
     entry = _challenges.pop(key, None)
     if not entry or entry[1] < time.time():
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "Anfrage abgelaufen – bitte erneut versuchen")
+                            "The request has expired – try again")
     return entry[0]
 
 
@@ -271,7 +270,7 @@ def passkey_register(payload: dict, db: Session = Depends(get_db), user: User = 
             expected_origin=_origins(),
         )
     except Exception as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Passkey-Registrierung fehlgeschlagen: {exc}")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Passkey registration failed: {exc}") from exc
     db.add(Passkey(
         user_id=user.id,
         credential_id=bytes_to_base64url(verification.credential_id),
@@ -280,7 +279,7 @@ def passkey_register(payload: dict, db: Session = Depends(get_db), user: User = 
         name=(payload.get("name") or "Passkey")[:64],
     ))
     db.commit()
-    return {"detail": "Passkey registriert"}
+    return {"detail": "Passkey registered"}
 
 
 @router.get("/passkeys")
@@ -296,7 +295,7 @@ def list_passkeys(user: User = Depends(get_current_user)):
 def delete_passkey(passkey_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     passkey = db.query(Passkey).filter(Passkey.id == passkey_id, Passkey.user_id == user.id).first()
     if not passkey:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Passkey nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Passkey not found")
     db.delete(passkey)
     db.commit()
 
@@ -311,7 +310,7 @@ def passkey_login_options(payload: dict, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.passkeys or not user.is_active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "Für dieses Konto ist kein Passkey hinterlegt")
+                            "No passkey is registered for this account")
     options = generate_authentication_options(
         rp_id=_rp_id(),
         allow_credentials=[
@@ -326,16 +325,15 @@ def passkey_login_options(payload: dict, db: Session = Depends(get_db)):
 @router.post("/passkey/login", response_model=Token)
 def passkey_login(payload: dict, db: Session = Depends(get_db)):
     from webauthn import verify_authentication_response
-    from webauthn.helpers import bytes_to_base64url
 
     username = (payload.get("username") or "").strip()
     credential = payload.get("credential") or {}
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.is_active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Anmeldung fehlgeschlagen")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign-in failed")
     passkey = next((p for p in user.passkeys if p.credential_id == credential.get("id")), None)
     if not passkey:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Anmeldung fehlgeschlagen")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign-in failed")
     challenge = _take_challenge(f"auth:{username}")
     try:
         verification = verify_authentication_response(
@@ -346,9 +344,9 @@ def passkey_login(payload: dict, db: Session = Depends(get_db)):
             credential_public_key=base64.b64decode(passkey.public_key),
             credential_current_sign_count=passkey.sign_count,
         )
-    except Exception:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Anmeldung fehlgeschlagen")
+    except Exception as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign-in failed") from exc
     passkey.sign_count = verification.new_sign_count
     db.commit()
-    # Passkey gilt als starker Faktor – kein zusätzliches TOTP nötig
+    # A passkey counts as a strong factor – no additional TOTP required
     return _login_ok(user)

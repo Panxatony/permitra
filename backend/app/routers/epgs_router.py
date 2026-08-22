@@ -1,4 +1,4 @@
-"""ACI EPG-Katalog und Adresse->EPG-Zuordnung (Basis des Contract-Exports)."""
+"""ACI EPG catalogue and address->EPG mapping (basis of the contract export)."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
@@ -65,7 +65,7 @@ def create_epg(
     _: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     if db.query(Epg).filter(Epg.name.ilike(payload.name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"EPG '{payload.name}' existiert bereits")
+        raise HTTPException(status.HTTP_409_CONFLICT, f"EPG '{payload.name}' already exists")
     epg = Epg(**payload.model_dump())
     db.add(epg)
     db.commit()
@@ -81,10 +81,10 @@ def delete_epg(
 ):
     epg = db.get(Epg, epg_id)
     if not epg:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "EPG nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "EPG not found")
     used = db.query(AddressEpgMap).filter(AddressEpgMap.epg_id == epg_id).count()
     if used:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"EPG wird von {used} Adress-Zuordnung(en) verwendet")
+        raise HTTPException(status.HTTP_409_CONFLICT, f"EPG is used by {used} address mapping(s)")
     db.delete(epg)
     db.commit()
 
@@ -101,10 +101,10 @@ def upsert_map(
     user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     if not db.get(Epg, payload.epg_id):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "EPG nicht gefunden")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "EPG not found")
     norm = normalize_ip(payload.ip)
     if norm is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Ungültige Adresse: '{payload.ip}'")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Invalid address: '{payload.ip}'")
     vrf = get_vrf(db, payload.vrf or None)
     mapping = db.query(AddressEpgMap).filter(AddressEpgMap.ip == norm,
                                              AddressEpgMap.vrf_id == vrf.id).first()
@@ -126,6 +126,6 @@ def delete_map(
 ):
     mapping = db.get(AddressEpgMap, mapping_id)
     if not mapping:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Zuordnung nicht gefunden")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mapping not found")
     db.delete(mapping)
     db.commit()

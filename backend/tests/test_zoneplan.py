@@ -1,11 +1,17 @@
-"""Tests für den Mermaid-Zonenplan (Issue #15)."""
+"""Tests for the Mermaid zone plan (issue #15)."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import (
-    ComponentType, Rule, RuleAction, RuleStatus, SecurityComponent, Vrf, Zone,
+    ComponentType,
+    Rule,
+    RuleAction,
+    RuleStatus,
+    SecurityComponent,
+    Vrf,
+    Zone,
 )
 from app.zoneplan import build_mermaid
 
@@ -20,9 +26,9 @@ def db():
     aci = SecurityComponent(name="ACI-Fabric-FFM", type=ComponentType.aci)
     session.add_all([fw, aci])
     session.flush()
-    inet = Zone(name="INET", pap_level="extern", sort_order=0)
-    prod = Zone(name="PROD-APP", pap_level="intern", sort_order=1,
-                owner="Team Applikationen", cia_c="hoch", cia_i="hoch", cia_a="sehr hoch")
+    inet = Zone(name="INET", pap_level="external", sort_order=0)
+    prod = Zone(name="PROD-APP", pap_level="internal", sort_order=1,
+                owner="Team Applikationen", cia_c="high", cia_i="high", cia_a="very high")
     prod.components = [fw]
     session.add_all([inet, prod])
     session.add(Rule(
@@ -38,17 +44,17 @@ def db():
 
 def test_mermaid_plan(db):
     plan = build_mermaid(db, generated_at="2026-08-23 12:00 UTC")
-    assert plan.startswith("%% Permitra Zonenplan")
+    assert plan.startswith("%% Permitra zone plan")
     assert "NET.1.1" in plan and "NET.3.2" in plan
-    assert "Stand: 2026-08-23 12:00 UTC" in plan
+    assert "Generated: 2026-08-23 12:00 UTC" in plan
     assert "flowchart TB" in plan
-    # Bänder, Zonen mit Schutzbedarf/Verantwortlichem, Firewall als Hexagon
-    assert 'subgraph BAND_extern' in plan and 'subgraph BAND_intern' in plan
-    assert "Schutzbedarf: sehr hoch" in plan and "Verantwortlich: Team Applikationen" in plan
+    # Bands, zones with protection level/owner, firewall as a hexagon
+    assert 'subgraph BAND_external' in plan and 'subgraph BAND_internal' in plan
+    assert "Protection level: very high" in plan and "Owner: Team Applikationen" in plan
     assert 'FW_FW_Cluster_BER{{"FW-Cluster-BER<br/><i>Juniper SRX</i>"}}' in plan
-    # Intra-zonale ACI-Segmentierung am Zonen-Knoten
-    assert "ACI intra-zonal: ACI-Fabric-FFM" in plan
-    # Kante Zone -- Firewall und Farbklassen
+    # Intra-zone ACI segmentation on the zone node
+    assert "ACI intra-zone: ACI-Fabric-FFM" in plan
+    # Edge zone -- firewall and colour classes
     assert "Z_PROD_APP --- FW_FW_Cluster_BER" in plan
-    assert "class Z_PROD_APP sbSehrhoch;" in plan
+    assert "class Z_PROD_APP sbVeryhigh;" in plan
     assert "class Z_INET sbNormal;" in plan

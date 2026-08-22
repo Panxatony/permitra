@@ -1,11 +1,11 @@
-"""Alembic-Umgebung: nutzt DATABASE_URL aus app.database und die App-Metadaten."""
+"""Alembic environment: uses DATABASE_URL from app.database and the app metadata."""
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.database import DATABASE_URL, Base
-from app import models  # noqa: F401 – Modelle registrieren
+from app import models  # noqa: F401 – register models
 
 config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL)

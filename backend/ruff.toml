@@ -1,0 +1,59 @@
+# Ruff configuration for Permitra.
+#
+# On this project the default rule set mostly reports one thing: 293 hits for
+# B008 ("function call in default argument"). Those are without exception the
+# Depends()/Query() calls in the FastAPI signatures – the notation intended by
+# the framework, not a defect. Such hits make a linter worthless, because real
+# findings drown in them. That is why the sections below define what actually
+# counts for this project.
+
+line-length = 120           # the existing code deliberately uses longer lines
+target-version = "py312"
+
+[lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes: unused imports/variables, real errors
+    "I",         # import order
+    "B",         # bugbear: typical pitfalls
+    "C4",        # redundant comprehensions/calls
+    "SIM",       # obvious simplifications
+    "RUF",       # Ruff's own rules
+    "S",         # bandit: security patterns
+]
+ignore = [
+    "E501",      # line length – see line-length above
+    "DTZ011",    # date.today(): validity dates are deliberately plain date values
+    "S101",      # assert – the normal case in tests
+    # Comments and messages use typographic characters: en dash, arrow and
+    # typographic quotation marks are intentional, not an oversight.
+    "RUF001", "RUF002", "RUF003",
+]
+
+[lint.flake8-bugbear]
+# FastAPI idiom: dependencies are declared in the default argument.
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body",
+    "fastapi.Header", "fastapi.Form", "fastapi.File",
+    # Own dependency factory, used with the same pattern
+    "require_roles", "app.auth.require_roles",
+]
+
+[lint.per-file-ignores]
+# The background jobs and the audit path deliberately catch every exception:
+# an error there must not drag down either the application or the business
+# operation. Each of those places carries a justification in the code.
+"app/main.py" = ["BLE001"]
+"app/audit.py" = ["BLE001", "S110"]
+"app/netbox.py" = ["BLE001"]
+"app/mailer.py" = ["BLE001"]
+"app/notifications.py" = ["BLE001"]
+"app/change_management.py" = ["BLE001"]
+"app/zone_check.py" = ["BLE001"]
+# Tests may hard-wire test data and check private functions.
+"tests/*" = ["S105", "S106", "S311"]
+# Demo data is deliberately generated with random (deterministically seeded),
+# this is not a cryptographic use.
+"seed_demo.py" = ["S311"]
+# Migrations are generated and follow Alembic's layout.
+"alembic/*" = ["I001", "E402"]

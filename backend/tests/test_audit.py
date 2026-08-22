@@ -1,4 +1,4 @@
-"""Tests für das einheitliche Audit-Log (Issue #11)."""
+"""Tests for the unified audit log (issue #11)."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -6,7 +6,12 @@ from sqlalchemy.orm import sessionmaker
 from app.audit import collect
 from app.database import Base
 from app.models import (
-    Rule, RuleAction, RuleStatus, RuleVersion, Vrf, ZonePolicyChange,
+    Rule,
+    RuleAction,
+    RuleStatus,
+    RuleVersion,
+    Vrf,
+    ZonePolicyChange,
 )
 
 
@@ -20,7 +25,8 @@ def db():
              source=[{"ip": "10.0.0.1", "alias": ""}], destination=[{"ip": "10.0.0.2", "alias": ""}],
              services=[{"protocol": "TCP", "port": "443"}], action=RuleAction.permit,
              status=RuleStatus.approved)
-    s.add(r); s.flush()
+    s.add(r)
+    s.flush()
     s.add(RuleVersion(rule_pk=r.id, version=1, snapshot={}, change_note="angelegt", changed_by="alex"))
     s.add(ZonePolicyChange(batch_id="b1", change_type="policy", from_zone="A", to_zone="B",
                            new_policy="block_all", status="approved",

@@ -1,7 +1,7 @@
-"""Tests für den Freigabe-Workflow von Netzwerk-Zuordnungen (Netz → Zone).
+"""Tests for the approval workflow of network assignments (network -> zone).
 
-Wie Matrix-/Zonen-Änderungen brauchen auch Änderungen an der Netzwerk-Zuordnung
-zwei Freigaben durch verschiedene Change Approver, bevor sie angewendet werden.
+Like matrix/zone changes, changes to the network assignment also need two
+approvals by different change approvers before they are applied.
 """
 import pytest
 from fastapi import HTTPException
@@ -31,9 +31,16 @@ def user(name, role=Role.architect):
     return User(username=name, password_hash="x", role=role)
 
 
-ARCHITECT = lambda: user("alex")
-APPROVER1 = lambda: user("chris", Role.change_approver)
-APPROVER2 = lambda: user("kim", Role.change_approver)
+def ARCHITECT():
+    return user("alex")
+
+
+def APPROVER1():
+    return user("chris", Role.change_approver)
+
+
+def APPROVER2():
+    return user("kim", Role.change_approver)
 
 
 def pending_change(db):
@@ -45,7 +52,7 @@ def test_net_add_needs_two_approvals(db):
         {"type": "net_add", "zone": "DMZ-WEB", "cidr": "10.10.99.0/24", "description": "Neu"},
     ], "")
     assert result["status"] == "pending"
-    # Noch nicht angewendet
+    # Not applied yet
     assert not db.query(ZoneNetwork).filter(ZoneNetwork.cidr == "10.10.99.0/24").first()
 
     change = pending_change(db)
@@ -53,7 +60,7 @@ def test_net_add_needs_two_approvals(db):
     assert first["approvals"] == "1/2"
     assert not db.query(ZoneNetwork).filter(ZoneNetwork.cidr == "10.10.99.0/24").first()
 
-    # Zweite Freigabe durch denselben Approver ist verboten
+    # A second approval by the same approver is forbidden
     with pytest.raises(HTTPException) as exc:
         _decide_change(db, change.id, APPROVER1(), True, "")
     assert exc.value.status_code == 403
@@ -68,7 +75,7 @@ def test_net_update_reassigns_zone_after_approval(db):
     _create_batch(db, ARCHITECT(), [
         {"type": "net_update", "network_id": network.id, "zone": "DMZ-WEB"},
     ], "Umzug")
-    assert network.zone.name == "PROD-APP"  # bis zur Freigabe unverändert
+    assert network.zone.name == "PROD-APP"  # unchanged until the approval
 
     change = pending_change(db)
     assert change.extra["old_zone"] == "PROD-APP"
@@ -83,7 +90,7 @@ def test_net_delete_and_rejection(db):
     _create_batch(db, ARCHITECT(), [{"type": "net_delete", "network_id": network.id}], "")
     change = pending_change(db)
     _decide_change(db, change.id, APPROVER1(), False, "abgelehnt")
-    assert db.query(ZoneNetwork).count() == 1  # Ablehnung: nichts passiert
+    assert db.query(ZoneNetwork).count() == 1  # rejection: nothing happens
 
     _create_batch(db, ARCHITECT(), [{"type": "net_delete", "network_id": network.id}], "")
     change = pending_change(db)
@@ -119,4 +126,4 @@ def test_noop_update_rejected(db):
         _create_batch(db, ARCHITECT(), [
             {"type": "net_update", "network_id": network.id, "zone": "PROD-APP"},
         ], "")
-    assert exc.value.status_code == 400  # keine Änderung gegenüber dem aktuellen Stand
+    assert exc.value.status_code == 400  # no change compared to the current state

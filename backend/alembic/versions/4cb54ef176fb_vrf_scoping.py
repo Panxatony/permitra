@@ -19,9 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """VRF als Scoping-Dimension: Netze, Adress-Zuordnungen und Regeln je VRF.
+    """VRF as a scoping dimension: networks, address mappings and rules per VRF.
 
-    Bestehende Daten werden dem Default-VRF "IT" zugeordnet."""
+    Existing data is assigned to the default VRF "IT"."""
     bind = op.get_bind()
     op.create_table(
         'vrfs',
@@ -35,10 +35,11 @@ def upgrade() -> None:
 
     for table in ('zone_networks', 'address_component_map', 'address_epg_map', 'rules'):
         op.add_column(table, sa.Column('vrf_id', sa.Integer(), nullable=True))
-        op.execute(f"UPDATE {table} SET vrf_id = (SELECT id FROM vrfs WHERE name = 'IT')")
+        # S608 rationale: `table` comes from the hardcoded tuple above, never from input
+        op.execute(f"UPDATE {table} SET vrf_id = (SELECT id FROM vrfs WHERE name = 'IT')")  # noqa: S608
 
     if bind.dialect.name == 'postgresql':
-        # Alte globale Eindeutigkeit durch (vrf, key) ersetzen
+        # Replace the old global uniqueness with (vrf, key)
         op.execute('ALTER TABLE zone_networks DROP CONSTRAINT IF EXISTS zone_networks_cidr_key')
         op.execute('DROP INDEX IF EXISTS ix_zone_networks_cidr')
         op.execute('ALTER TABLE address_component_map DROP CONSTRAINT IF EXISTS address_component_map_ip_key')
@@ -56,9 +57,9 @@ def upgrade() -> None:
         op.create_index('ix_zone_networks_cidr', 'zone_networks', ['cidr'])
         op.create_index('ix_address_component_map_ip', 'address_component_map', ['ip'])
         op.create_index('ix_address_epg_map_ip', 'address_epg_map', ['ip'])
-    # SQLite (nur Dev): Spalten + Backfill genügen; frische DBs entstehen ohnehin
-    # über create_all mit dem korrekten Schema.
+    # SQLite (dev only): columns + backfill are sufficient; fresh DBs are created
+    # via create_all with the correct schema anyway.
 
 
 def downgrade() -> None:
-    raise NotImplementedError("VRF-Scoping ist nicht rückwärts migrierbar")
+    raise NotImplementedError("VRF scoping cannot be migrated backwards")

@@ -43,10 +43,10 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         for c in db.query(SecurityComponent).order_by(SecurityComponent.name).all()
     ]
 
-    # Umzusetzende Regeln: freigegeben, aber auf mind. einer Komponente noch offen
+    # Rules awaiting implementation: approved, but still open on at least one component
     from .rules_router import impl_pending
 
-    # Freigegebene mit offener Umsetzung + deaktivierte mit Rückbau ("zu löschen")
+    # Approved ones with pending implementation + deactivated ones awaiting removal ("to remove")
     candidate_rules = db.query(Rule).filter(
         Rule.status.in_((RuleStatus.approved, RuleStatus.deactivated)),
         Rule.deleted_at.is_(None)

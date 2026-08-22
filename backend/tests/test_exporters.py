@@ -1,4 +1,4 @@
-"""Tests für Validierung, Konflikt-Erkennung und die drei Geräte-Exporter."""
+"""Tests for validation, conflict detection and the three device exporters."""
 import pytest
 
 from app.conflicts import find_conflicts
@@ -16,23 +16,23 @@ def demo_components() -> list[SecurityComponent]:
 
 
 def make_rule(**overrides) -> Rule:
-    defaults = dict(
-        id=1,
-        rule_id="SR0900",
-        name="HTTPS-Webserver",
-        application="Control",
-        components=demo_components(),
-        source_zone="trust",
-        destination_zone="untrust",
-        source=[{"ip": "10.0.1.0/24", "alias": ""}],
-        destination=[{"ip": "192.168.1.0/24", "alias": ""}],
-        services=[{"protocol": "TCP", "port": "443"}],
-        action=RuleAction.permit,
-        justification="Erlaubt HTTPS-Verkehr für Webserver",
-        change_id="CHN0001000",
-        status=RuleStatus.approved,
-        impl_status={},
-    )
+    defaults = {
+        "id": 1,
+        "rule_id": "SR0900",
+        "name": "HTTPS-Webserver",
+        "application": "Control",
+        "components": demo_components(),
+        "source_zone": "trust",
+        "destination_zone": "untrust",
+        "source": [{"ip": "10.0.1.0/24", "alias": ""}],
+        "destination": [{"ip": "192.168.1.0/24", "alias": ""}],
+        "services": [{"protocol": "TCP", "port": "443"}],
+        "action": RuleAction.permit,
+        "justification": "Erlaubt HTTPS-Verkehr für Webserver",
+        "change_id": "CHN0001000",
+        "status": RuleStatus.approved,
+        "impl_status": {},
+    }
     defaults.update(overrides)
     rule = Rule(**defaults)
     return rule
@@ -59,7 +59,7 @@ def test_validate_ip_entry():
     with pytest.raises(ValueError):
         validate_ip_entry("10.0.1.999/24")
     with pytest.raises(ValueError):
-        validate_ip_entry("host.example.de")  # Hostnamen gehören in den Alias
+        validate_ip_entry("host.example.de")  # host names belong in the alias
     with pytest.raises(ValueError):
         validate_ip_entry("")
 
@@ -100,7 +100,7 @@ def test_checkpoint_export():
 
 
 def test_checkpoint_host_object():
-    # Alias wird zum Objektnamen, die IP zum Host-Objekt
+    # The alias becomes the object name, the IP becomes the host object
     rule = make_rule(destination=[{"ip": "10.40.72.5", "alias": "web01.example.de"}])
     out = checkpoint.export_api_json([rule])
     assert '"type": "host"' in out
@@ -109,14 +109,14 @@ def test_checkpoint_host_object():
 
 
 def test_aci_export_legacy_fallback():
-    # Ohne DB/EPG-Zuordnung: Einzel-Contract-Fallback je Regel
+    # Without a DB/EPG mapping: single-contract fallback per rule
     out_json = aci.export_json([make_rule()])
     assert '"fvTenant"' in out_json
     assert '"vzBrCP"' in out_json
     assert 'con-SR0900' in out_json
     assert '"dFromPort": "443"' in out_json
     out_yaml = aci.export_yaml([make_rule()])
-    assert "legacy_rules_ohne_epg:" in out_yaml
+    assert "legacy_rules_without_epg:" in out_yaml
     assert "SR0900" in out_yaml
 
 
@@ -160,7 +160,7 @@ def test_host_firewall_exports():
     draft = make_rule(id=3, rule_id="SR0902", status=RuleStatus.draft)
 
     content, used = hostfw.export("debian", "10.10.80.10", [rule, other, draft])
-    assert used == ["SR0900"]  # nur freigegebene Regel mit passendem Ziel
+    assert used == ["SR0900"]  # only the approved rule with a matching destination
     assert "tcp dport 22 accept" in content and "10.10.20.0/24" in content
     assert "policy drop" in content
 
@@ -172,7 +172,7 @@ def test_host_firewall_exports():
     assert "iptables -A INPUT -s 10.10.20.0/24 -p tcp --dport 22" in content
     assert "iptables -P INPUT DROP" in content
 
-    # Netz-Ziel deckt Host ab (Containment)
+    # A network destination covers the host (containment)
     net_rule = make_rule(id=4, rule_id="SR0903",
                          destination=[{"ip": "10.10.80.0/24", "alias": "NET-MGMT"}])
     _, used = hostfw.export("debian", "10.10.80.10", [net_rule])
