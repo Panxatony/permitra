@@ -201,12 +201,13 @@ function ZoneReachability({ overview }) {
   for (let i = 0; i < slotEdges.length - 1; i += 1) slots.push((slotEdges[i] + slotEdges[i + 1]) / 2)
   const multiRows = []
   for (let i = 0; i < multi.length; i += slots.length) multiRows.push(multi.slice(i, i + slots.length))
+  const S_TOP = 12  // Label steht unten – oben reicht ein kleiner Abstand
   multiRows.forEach((row, ri) => {
     row.forEach((z, i) => {
       const idx = row.length >= slots.length
         ? i
         : Math.min(slots.length - 1, Math.round((i + 0.5) * (slots.length / row.length) - 0.5))
-      zonePos[z.name] = { x: slots[idx], y: y + LABEL_H + ri * S_ROW + S_ROW / 2 }
+      zonePos[z.name] = { x: slots[idx], y: y + S_TOP + ri * S_ROW + S_ROW / 2 }
     })
   })
   const multiH = multiRows.length * S_ROW + (multiRows.length ? 10 : 0)
@@ -216,12 +217,12 @@ function ZoneReachability({ overview }) {
   southFws.forEach((f) => {
     const list = columns[f.id] || []
     list.forEach((z, i) => {
-      zonePos[z.name] = { x: fwX[f.id], y: y + LABEL_H + multiH + i * S_ROW + S_ROW / 2 }
+      zonePos[z.name] = { x: fwX[f.id], y: y + S_TOP + multiH + i * S_ROW + S_ROW / 2 }
     })
     maxColumn = Math.max(maxColumn, list.length)
   })
 
-  const internH = LABEL_H + multiH + Math.max(maxColumn, multiRows.length ? 0 : 1) * S_ROW + PAD
+  const internH = S_TOP + multiH + Math.max(maxColumn, multiRows.length ? 0 : 1) * S_ROW + 26
   bands.push({ key: 'intern', label: 'Intern (Süd) — unterhalb der P-A-P-Struktur', y, h: internH })
   y += internH
   const H = y
@@ -245,7 +246,7 @@ function ZoneReachability({ overview }) {
         {bands.map((b) => (
           <g key={b.key}>
             <rect x={4} y={b.y + 2} width={W - 8} height={b.h - 6} rx={10} className={`pap-band band-${b.key}`} />
-            <text x={16} y={b.y + 19} className="pap-band-label">{b.label}</text>
+            <text x={16} y={b.key === 'intern' ? b.y + b.h - 12 : b.y + 19} className="pap-band-label">{b.label}</text>
           </g>
         ))}
         {(() => {
