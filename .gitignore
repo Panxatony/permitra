@@ -10,3 +10,10 @@ frontend/dist/
 data/
 backups/
 .env
+
+# Test-Artefakte
+.coverage
+coverage.xml
+report.xml
+htmlcov/
+.pytest_cache/
