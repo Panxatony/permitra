@@ -243,10 +243,26 @@ def seed(wipe: bool):
     # Zonen + vollständige Matrix; BSI P-A-P-Einstufung:
     # extern = nördlich der P-A-P, pap = innerhalb (DMZ/Transfer), intern = unterhalb
     PAP_LEVELS = {"INET": "extern", "DMZ-WEB": "pap", "VPN": "pap"}
+    # BSI-Doku je Zone: Verantwortlicher + Schutzbedarf (C, I, A)
+    ZONE_META = {
+        "INET":     ("",                    "normal", "normal", "normal"),
+        "DMZ-WEB":  ("Team Web-Betrieb",    "hoch",   "hoch",   "hoch"),
+        "VPN":      ("Team Netzwerk",       "hoch",   "hoch",   "hoch"),
+        "PROD-APP": ("Team Applikationen",  "hoch",   "hoch",   "sehr hoch"),
+        "PROD-DB":  ("Team Datenbanken",    "sehr hoch", "sehr hoch", "sehr hoch"),
+        "TEST":     ("Team Applikationen",  "normal", "normal", "normal"),
+        "DEV":      ("Team Entwicklung",    "normal", "normal", "normal"),
+        "CICD":     ("Team Entwicklung",    "hoch",   "hoch",   "normal"),
+        "SHARED":   ("Team Infrastruktur",  "normal", "hoch",   "hoch"),
+        "MGMT":     ("Team Infrastruktur",  "sehr hoch", "sehr hoch", "hoch"),
+        "MON":      ("Team Betrieb",        "hoch",   "hoch",   "hoch"),
+    }
     zones = {}
     for order, (name, descr, _net) in enumerate(ZONES):
+        owner, cia_c, cia_i, cia_a = ZONE_META.get(name, ("", "normal", "normal", "normal"))
         zone = Zone(name=name, description=descr, sort_order=order,
-                    pap_level=PAP_LEVELS.get(name, "intern"))
+                    pap_level=PAP_LEVELS.get(name, "intern"),
+                    owner=owner, cia_c=cia_c, cia_i=cia_i, cia_a=cia_a)
         db.add(zone)
         zones[name] = zone
     db.flush()

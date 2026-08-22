@@ -83,6 +83,18 @@ class Zone(Base):
     # P-A-P-Ebene, z.B. DMZ), "intern" (unterhalb der P-A-P-Struktur)
     pap_level: Mapped[str] = mapped_column(String(16), default="intern")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # BSI-Dokumentation: Verantwortlicher und Schutzbedarf je Schutzziel (CIA),
+    # jeweils "normal" | "hoch" | "sehr hoch"; Gesamt-Schutzbedarf = Maximumprinzip
+    owner: Mapped[str] = mapped_column(String(128), default="")
+    cia_c: Mapped[str] = mapped_column(String(16), default="normal")  # Vertraulichkeit
+    cia_i: Mapped[str] = mapped_column(String(16), default="normal")  # Integrität
+    cia_a: Mapped[str] = mapped_column(String(16), default="normal")  # Verfügbarkeit
+
+    @property
+    def schutzbedarf(self) -> str:
+        order = {"normal": 0, "hoch": 1, "sehr hoch": 2}
+        return max((self.cia_c, self.cia_i, self.cia_a),
+                   key=lambda v: order.get(v, 0))
 
     # "Angebunden an": Firewall-Cluster, über die diese Zone erreichbar ist
     components: Mapped[list["SecurityComponent"]] = relationship(secondary=zone_components)

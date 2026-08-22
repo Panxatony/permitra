@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, getUser } from '../api'
+import { Modal } from '../components/shared'
 import { useLang } from '../i18n'
+
+const SB_BADGE = { normal: 'status-draft', 'hoch': 'status-in_review', 'sehr hoch': 'status-rejected' }
+const SB_LABEL = (z) => `${z.schutzbedarf || 'normal'} (C:${z.cia_c || 'normal'} I:${z.cia_i || 'normal'} V:${z.cia_a || 'normal'})`
 
 function cellLabel(p) {
   if (!p) return ''
@@ -159,9 +163,11 @@ function ZoneReachability({ overview }) {
             <g key={z.name}>
               <rect x={p.x - BOX_W / 2} y={p.y - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
                 className={z.has_firewall ? 'zone-box' : 'zone-box zone-box-warn'}>
-                <title>{z.has_firewall
+                <title>{(z.has_firewall
                   ? `${z.name}: erreichbar über ${z.firewalls.map((f) => f.name).join(', ')}`
-                  : `${z.name}: keine Firewall-Anbindung über aktive Regeln dokumentiert`}</title>
+                  : `${z.name}: keine Firewall-Anbindung über aktive Regeln dokumentiert`)
+                  + `\nSchutzbedarf: ${SB_LABEL(z)}`
+                  + (z.owner ? `\nVerantwortlich: ${z.owner}` : '')}</title>
               </rect>
               <text x={p.x} y={p.y + 4.5} className="zone-node-text">{z.name}</text>
             </g>
@@ -188,6 +194,7 @@ export default function ZoneMatrix() {
   const [netInputs, setNetInputs] = useState({})  // Zone -> CIDR-Eingabe
   const [saving, setSaving] = useState('')
   const [settings, setSettings] = useState({})
+  const [metaZone, setMetaZone] = useState(null)  // Zone im BSI-Doku-Editor
   const [editMode, setEditMode] = useState(false)
   const [draft, setDraft] = useState({})        // "from|to" -> neue Policy
   const [draftZones, setDraftZones] = useState([])  // [{name, pap_level}]
@@ -379,7 +386,8 @@ export default function ZoneMatrix() {
             <table>
               <thead>
                 <tr>
-                  <th>{t('Zone')}</th><th>{t('Netzwerke')}</th><th>{t('P-A-P-Einstufung')}</th><th>{t('Regeln')}</th>
+                  <th>{t('Zone')}</th><th>{t('Schutzbedarf & Verantwortlicher')}</th>
+                  <th>{t('Netzwerke')}</th><th>{t('P-A-P-Einstufung')}</th><th>{t('Regeln')}</th>
                   <th>{t('Angebunden an')}</th><th>{t('ACI (intra-zonal)')}</th>
                 </tr>
               </thead>
@@ -387,6 +395,17 @@ export default function ZoneMatrix() {
                 {overview.zones.map((z) => (
                   <tr key={z.name}>
                     <td><strong>{z.name}</strong><div className="muted small">{z.description}</div></td>
+                    <td>
+                      <span className={`badge ${SB_BADGE[z.schutzbedarf] || 'status-draft'}`}
+                        title={`C: ${z.cia_c} · I: ${z.cia_i} · V: ${z.cia_a} (Maximumprinzip)`}>
+                        {z.schutzbedarf || 'normal'}
+                      </span>
+                      <div className="muted small">{z.owner || t('kein Verantwortlicher')}</div>
+                      {canEdit && (
+                        <button className="btn btn-ghost" style={{ padding: '.1rem .45rem', fontSize: '.75rem' }}
+                          onClick={() => setMetaZone({ ...z })}>{t('Bearbeiten')}</button>
+                      )}
+                    </td>
                     <td>
                       <Link to="/networks" className="rule-link" title="Zonen-Zuordnung auf der Seite Netzwerke pflegen">
                         {(z.networks || []).length} {t('Netzwerke')}
@@ -452,6 +471,52 @@ export default function ZoneMatrix() {
           </div>
         )}
       </section>
+
+      {metaZone && (
+        <Modal title={`${t('BSI-Dokumentation')}: ${metaZone.name}`} onClose={() => setMetaZone(null)}>
+          <form className="modal-form" onSubmit={async (e) => {
+            e.preventDefault()
+            try {
+              await api.setZoneMeta(metaZone.name, {
+                owner: metaZone.owner, description: metaZone.description,
+                cia_c: metaZone.cia_c, cia_i: metaZone.cia_i, cia_a: metaZone.cia_a,
+              })
+              setMetaZone(null)
+              load()
+            } catch (err) { setError(err.message) }
+          }}>
+            <label>{t('Verantwortlicher (Person/Team)')}
+              <input value={metaZone.owner || ''} autoFocus
+                onChange={(e) => setMetaZone({ ...metaZone, owner: e.target.value })} />
+            </label>
+            <label>{t('Beschreibung (Zweck der Zone)')}
+              <input value={metaZone.description || ''}
+                onChange={(e) => setMetaZone({ ...metaZone, description: e.target.value })} />
+            </label>
+            <div className="grid-3">
+              {[['cia_c', t('Vertraulichkeit')], ['cia_i', t('Integrität')], ['cia_a', t('Verfügbarkeit')]].map(([field, label]) => (
+                <label key={field}>{label}
+                  <select value={metaZone[field] || 'normal'}
+                    onChange={(e) => setMetaZone({ ...metaZone, [field]: e.target.value })}>
+                    <option value="normal">normal</option>
+                    <option value="hoch">hoch</option>
+                    <option value="sehr hoch">sehr hoch</option>
+                  </select>
+                </label>
+              ))}
+            </div>
+            <p className="muted small">
+              {t('Gesamt-Schutzbedarf nach Maximumprinzip:')}{' '}
+              <strong>{['sehr hoch', 'hoch'].find((l) =>
+                [metaZone.cia_c, metaZone.cia_i, metaZone.cia_a].includes(l)) || 'normal'}</strong>
+            </p>
+            <div className="actions">
+              <button className="btn btn-primary" type="submit">{t('Speichern')}</button>
+              <button className="btn btn-ghost" type="button" onClick={() => setMetaZone(null)}>{t('Abbrechen')}</button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       <div className="matrix-toolbar">
         <h2>{t('Kommunikationsmatrix')} <span className="muted small">{t('(Zeile = Quelle, Spalte = Ziel)')}</span></h2>

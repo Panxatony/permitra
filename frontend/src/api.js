@@ -208,6 +208,8 @@ export const api = {
   deleteZoneNetwork: (id) => request(`/api/zones/networks/${id}`, { method: 'DELETE' }),
   setZoneComponents: (name, componentIds) =>
     request(`/api/zones/${encodeURIComponent(name)}/components`, { method: 'PUT', body: { component_ids: componentIds } }),
+  setZoneMeta: (name, payload) =>
+    request(`/api/zones/${encodeURIComponent(name)}/meta`, { method: 'PUT', body: payload }),
   setZonePapLevel: (name, level) =>
     request(`/api/zones/${encodeURIComponent(name)}/pap-level`, { method: 'PUT', body: { pap_level: level } }),
   setZonePolicy: (from, to, payload) =>

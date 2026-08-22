@@ -204,11 +204,26 @@ class ConflictOut(BaseModel):
 PAP_LEVELS = ("extern", "pap", "intern")
 
 
+CIA_LEVELS = ("normal", "hoch", "sehr hoch")
+
+
 class ZoneCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=64)
     description: str = ""
     pap_level: str = Field("intern", description="BSI P-A-P-Einstufung: extern | pap | intern")
     sort_order: int = 0
+    owner: str = Field("", max_length=128, description="Verantwortlicher (Person/Team)")
+    cia_c: str = Field("normal", description="Schutzbedarf Vertraulichkeit")
+    cia_i: str = Field("normal", description="Schutzbedarf Integrität")
+    cia_a: str = Field("normal", description="Schutzbedarf Verfügbarkeit")
+
+    @field_validator("cia_c", "cia_i", "cia_a")
+    @classmethod
+    def check_cia(cls, v):
+        v = v.strip().lower()
+        if v not in CIA_LEVELS:
+            raise ValueError(f"Schutzbedarf muss einer von {', '.join(CIA_LEVELS)} sein")
+        return v
 
     @field_validator("pap_level")
     @classmethod
@@ -222,6 +237,7 @@ class ZoneCreate(BaseModel):
 class ZoneOut(ZoneCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    schutzbedarf: str = "normal"  # Maximum aus C/I/A
 
 
 class ZonePolicySet(BaseModel):

@@ -291,6 +291,16 @@ const EN = {
   'Passwort wiederholen': 'Repeat password',
   'Passwort speichern': 'Save password',
   'Zur Anmeldung': 'Go to login',
+  // Zonen: BSI-Dokumentation (Schutzbedarf/CIA/Verantwortlicher)
+  'Schutzbedarf & Verantwortlicher': 'Protection level & owner',
+  'kein Verantwortlicher': 'no owner assigned',
+  'BSI-Dokumentation': 'BSI documentation',
+  'Verantwortlicher (Person/Team)': 'Owner (person/team)',
+  'Beschreibung (Zweck der Zone)': 'Description (purpose of the zone)',
+  'Vertraulichkeit': 'Confidentiality',
+  'Integrität': 'Integrity',
+  'Verfügbarkeit': 'Availability',
+  'Gesamt-Schutzbedarf nach Maximumprinzip:': 'Overall protection level (maximum principle):',
   // Einstellungen (default-deny)
   'Einstellungen': 'Settings',
   'Einstellung gespeichert': 'Setting saved',

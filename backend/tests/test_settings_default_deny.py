@@ -59,3 +59,12 @@ def test_default_deny_blocks_unknown_zone(db):
     set_setting(db, "zone_matrix_default", "deny")
     result = check_zone_pair(db, "UNBEKANNT", "PROD", [])
     assert not result.allowed
+
+
+def test_zone_schutzbedarf_maximum(db):
+    zone = db.query(Zone).filter(Zone.name == "MGMT").one()
+    assert zone.schutzbedarf == "normal"
+    zone.cia_i = "hoch"
+    assert zone.schutzbedarf == "hoch"
+    zone.cia_a = "sehr hoch"
+    assert zone.schutzbedarf == "sehr hoch"

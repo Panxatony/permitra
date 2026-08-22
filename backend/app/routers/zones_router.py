@@ -157,6 +157,33 @@ def set_zone_components(
     return {"zone": zone.name, "component_ids": sorted(c.id for c in components)}
 
 
+@router.put("/{name}/meta", response_model=ZoneOut)
+def set_zone_meta(
+    name: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(Role.architect)),
+):
+    """BSI-Dokumentation der Zone pflegen: Verantwortlicher, Beschreibung und
+    Schutzbedarf je Schutzziel (CIA, jeweils normal | hoch | sehr hoch)."""
+    zone = find_zone(db, name)
+    if not zone:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Zone nicht gefunden")
+    for field in ("owner", "description"):
+        if field in payload:
+            setattr(zone, field, str(payload[field] or "").strip())
+    for field in ("cia_c", "cia_i", "cia_a"):
+        if field in payload:
+            value = str(payload[field] or "").strip().lower()
+            if value not in ("normal", "hoch", "sehr hoch"):
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                    "Schutzbedarf muss normal, hoch oder sehr hoch sein")
+            setattr(zone, field, value)
+    db.commit()
+    db.refresh(zone)
+    return zone
+
+
 @router.put("/{name}/pap-level", response_model=ZoneOut)
 def set_pap_level(
     name: str,
@@ -233,6 +260,9 @@ def overview(db: Session = Depends(get_db), _: User = Depends(get_current_user))
                 "name": zone.name,
                 "description": zone.description,
                 "pap_level": zone.pap_level,
+                "owner": zone.owner,
+                "schutzbedarf": zone.schutzbedarf,
+                "cia_c": zone.cia_c, "cia_i": zone.cia_i, "cia_a": zone.cia_a,
                 "rule_count": len(zone_rules),
                 "firewalls": [
                     {"id": c.id, "name": c.name, "type": c.type.value,
