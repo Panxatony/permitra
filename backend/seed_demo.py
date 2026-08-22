@@ -13,6 +13,7 @@ from datetime import date, timedelta
 
 from app.database import Base, SessionLocal, engine
 from app.models import (
+    Setting,
     AciGateway,
     AddressComponentMap,
     AddressEpgMap,
@@ -154,7 +155,7 @@ def seed(wipe: bool):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     if wipe:
-        for model in (Comment, RuleVersion, Rule, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
+        for model in (Setting, Comment, RuleVersion, Rule, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
                       AddressComponentMap, AddressEpgMap, Epg, AddressObject,
                       ServiceObject, ComponentLink, SecurityComponent, Vrf):
             db.query(model).delete()

@@ -18,6 +18,82 @@ const FW_COLORS = {
   checkpoint: { fill: '#ffe4e0', stroke: '#b83a1c' },
 }
 
+/* Zonenplan-Exporte (Issue #15): SVG mit einkopierten Stilen -> PNG/Druck-PDF,
+   Mermaid über den Backend-Endpunkt (für Wikis/GitLab, die Mermaid rendern). */
+const SVG_STYLE_PROPS = ['fill', 'stroke', 'stroke-width', 'stroke-dasharray', 'opacity',
+  'font-size', 'font-weight', 'font-family', 'text-anchor', 'font-style']
+
+function inlinedPlanSvg() {
+  const svg = document.getElementById('zone-plan-svg')
+  if (!svg) return null
+  const clone = svg.cloneNode(true)
+  const srcEls = [svg, ...svg.querySelectorAll('*')]
+  const dstEls = [clone, ...clone.querySelectorAll('*')]
+  srcEls.forEach((el, i) => {
+    const computed = window.getComputedStyle(el)
+    const style = SVG_STYLE_PROPS.map((p) => `${p}:${computed.getPropertyValue(p)}`).join(';')
+    dstEls[i].setAttribute('style', style)
+  })
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+  const [, , w, h] = (svg.getAttribute('viewBox') || '0 0 960 600').split(' ').map(Number)
+  clone.setAttribute('width', w)
+  clone.setAttribute('height', h)
+  return { markup: new XMLSerializer().serializeToString(clone), w, h }
+}
+
+function planTitle() {
+  return `Zonenplan (bereinigter Netzplan) · BSI NET.1.1 / NET.3.2 · Stand ${new Date().toLocaleString('de-DE')} · generiert von Permitra`
+}
+
+function exportPlanPng() {
+  const plan = inlinedPlanSvg()
+  if (!plan) return
+  const scale = 2
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.createElement('canvas')
+    canvas.width = plan.w * scale
+    canvas.height = plan.h * scale + 60
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#1d2733'
+    ctx.font = 'bold 22px sans-serif'
+    ctx.fillText(planTitle(), 20, 38)
+    ctx.drawImage(img, 0, 60, plan.w * scale, plan.h * scale)
+    canvas.toBlob((blob) => {
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `permitra-zonenplan-${new Date().toISOString().slice(0, 10)}.png`
+      a.click()
+    })
+  }
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(plan.markup)
+}
+
+function exportPlanPdf() {
+  const plan = inlinedPlanSvg()
+  if (!plan) return
+  const win = window.open('', '_blank')
+  win.document.write(`<!DOCTYPE html><html><head><title>Permitra Zonenplan</title>
+    <style>@page { size: A4 landscape; margin: 12mm; } body { font-family: sans-serif; }
+    h1 { font-size: 14px; } svg { width: 100%; height: auto; }</style></head>
+    <body><h1>${planTitle()}</h1>${plan.markup}
+    <script>window.onload = () => window.print()</scr` + `ipt></body></html>`)
+  win.document.close()
+}
+
+async function exportPlanMermaid() {
+  const res = await fetch('/api/zones/plan/mermaid', {
+    headers: { Authorization: `Bearer ${localStorage.getItem('permitra_token') || ''}` },
+  })
+  const text = await res.text()
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+  a.download = 'permitra-zonenplan.mmd'
+  a.click()
+}
+
 /* Nord-Süd-Sicht nach BSI P-A-P: externe Zonen (Nord) – P-A-P-Ebene mit den
    Firewall-Clustern und DMZ-/Transferzonen – interne Zonen (Süd). */
 function ZoneReachability({ overview }) {
@@ -35,7 +111,7 @@ function ZoneReachability({ overview }) {
     return out
   }
 
-  const W = 960, BOX_W = 108, BOX_H = 34, ROW_H = 64, LABEL_H = 26, PAD = 10
+  const W = 960, BOX_W = 128, BOX_H = 44, ROW_H = 76, LABEL_H = 26, PAD = 10
   const zonePos = {}, fwPos = {}
   const bands = []
   let y = 0
@@ -106,8 +182,20 @@ function ZoneReachability({ overview }) {
 
   return (
     <div className="topology-wrap zone-reach">
-      <svg viewBox={`0 0 ${W} ${H}`} className="topology-svg" role="img"
-        aria-label="Nord-Süd-Sicht der Sicherheitszonen nach BSI P-A-P">
+      <div className="plan-head">
+        <div>
+          <strong>Zonenplan (bereinigter Netzplan)</strong>
+          <span className="muted small"> · BSI NET.1.1 / NET.3.2 · Stand {new Date().toLocaleString('de-DE')} · generiert von Permitra</span>
+        </div>
+        <div className="plan-actions">
+          <button type="button" className="btn btn-ghost" onClick={() => exportPlanPng()}>PNG</button>
+          <button type="button" className="btn btn-ghost" onClick={() => exportPlanPdf()}>PDF</button>
+          <a className="btn btn-ghost" href="/api/zones/plan/mermaid?download=true"
+            onClick={(e) => { e.preventDefault(); exportPlanMermaid() }}>Mermaid</a>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} id="zone-plan-svg" className="topology-svg" role="img"
+        aria-label="Nord-Süd-Sicht der Sicherheitszonen nach BSI P-A-P (Zonenplan)">
         {bands.map((b) => (
           <g key={b.key}>
             <rect x={4} y={b.y + 2} width={W - 8} height={b.h - 6} rx={10} className={`pap-band band-${b.key}`} />
@@ -159,6 +247,8 @@ function ZoneReachability({ overview }) {
         {zones.map((z) => {
           const p = zonePos[z.name]
           if (!p) return null
+          const sub = `${z.schutzbedarf || 'normal'}${z.owner ? ' · ' + z.owner : ''}`
+          const subShort = sub.length > 24 ? sub.slice(0, 23) + '…' : sub
           return (
             <g key={z.name}>
               <rect x={p.x - BOX_W / 2} y={p.y - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
@@ -168,9 +258,18 @@ function ZoneReachability({ overview }) {
                   ? `${z.name}: erreichbar über ${z.firewalls.map((f) => f.name).join(', ')}`
                   : `${z.name}: kein Firewall-Cluster angebunden („Angebunden an“ pflegen)`)
                   + `\nSchutzbedarf: ${SB_LABEL(z)}`
-                  + (z.owner ? `\nVerantwortlich: ${z.owner}` : '')}</title>
+                  + (z.owner ? `\nVerantwortlich: ${z.owner}` : '')
+                  + (z.aci?.length ? `\nACI intra-zonal: ${z.aci.map((a) => a.name).join(', ')}` : '')}</title>
               </rect>
-              <text x={p.x} y={p.y + 4.5} className="zone-node-text">{z.name}</text>
+              <text x={p.x} y={p.y - 3} className="zone-node-text">{z.name}</text>
+              <text x={p.x} y={p.y + 12} className="zone-node-sub">{subShort}</text>
+              {z.aci?.length > 0 && (
+                <g>
+                  <rect x={p.x + BOX_W / 2 - 30} y={p.y - BOX_H / 2 - 7} width={30} height={14} rx={7}
+                    className="zone-aci-chip" />
+                  <text x={p.x + BOX_W / 2 - 15} y={p.y - BOX_H / 2 + 4} className="zone-aci-text">ACI</text>
+                </g>
+              )}
             </g>
           )
         })}

@@ -130,6 +130,9 @@ export default function Admin() {
           {t('Bei default-deny werden neue Regeln für Zonen-Beziehungen ohne Matrix-Eintrag abgelehnt, bis die Beziehung per Matrixantrag (zwei Freigaben) auf Allow gesetzt ist.')}
         </p>
         <h4 style={{ margin: '1rem 0 .4rem' }}>{t('Pflichtfelder für Regeln')}</h4>
+        <p className="muted small">
+          {t('Standardmäßig aktiv (BSI-Dokumentationspflichten) – hier lassen sie sich bei Bedarf deaktivieren.')}
+        </p>
         {[['require_justification', t('Begründung (Anlass) ist Pflicht')],
           ['require_requestor', t('Requestor (Verantwortlicher) ist Pflicht')],
           ['require_valid_until', t('Ablaufdatum (Gültig-bis) erzwingen')]].map(([key, label]) => (

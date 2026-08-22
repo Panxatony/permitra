@@ -12,10 +12,11 @@ from .models import Setting
 #              per Matrix-Antrag explizit auf Allow gesetzt ist (BSI-Empfehlung)
 KNOWN_SETTINGS = {
     "zone_matrix_default": ("permit", "deny"),
-    # Pflichtfelder für Regeln (BSI-Dokumentationspflichten): "no" = optional
-    "require_justification": ("no", "yes"),   # Begründung
-    "require_requestor": ("no", "yes"),       # Verantwortlicher/Requestor
-    "require_valid_until": ("no", "yes"),     # Ablaufdatum erzwingen
+    # Pflichtfelder für Regeln (BSI-Dokumentationspflichten):
+    # standardmäßig AKTIV (erster Wert = Default), Admin kann sie abschalten
+    "require_justification": ("yes", "no"),   # Begründung
+    "require_requestor": ("yes", "no"),       # Verantwortlicher/Requestor
+    "require_valid_until": ("yes", "no"),     # Ablaufdatum erzwingen
 }
 
 

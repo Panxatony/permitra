@@ -284,6 +284,25 @@ def overview(db: Session = Depends(get_db), _: User = Depends(get_current_user))
     return {"zones": result, "firewalls_total": firewalls_total}
 
 
+@router.get("/plan/mermaid")
+def zone_plan_mermaid(
+    download: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """BSI-konformer Zonenplan als Mermaid-Flowchart (NET.1.1/NET.3.2) –
+    für Audits, Wikis und Betriebsdoku; vollständig aus den Bestandsdaten."""
+    from fastapi.responses import PlainTextResponse
+
+    from ..zoneplan import build_mermaid
+
+    content = build_mermaid(db, generated_at=utcnow().strftime("%Y-%m-%d %H:%M UTC"))
+    headers = {}
+    if download:
+        headers["Content-Disposition"] = 'attachment; filename="permitra-zonenplan.mmd"'
+    return PlainTextResponse(content, media_type="text/plain", headers=headers)
+
+
 @router.get("/matrix", response_model=ZoneMatrixOut)
 def matrix(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     zones = db.query(Zone).order_by(Zone.sort_order, Zone.name).all()

@@ -456,3 +456,10 @@ table.matrix .row-head { background: #f7f9fc; position: sticky; left: 0; z-index
 .zone-net-add input { width: 120px; padding: .2rem .4rem; font-size: .78rem; }
 .account-link { color: #fff; text-decoration: underline dotted; text-underline-offset: 3px; }
 .account-link:hover { color: #cfe0ff; }
+/* Zonenplan (Issue #15): Audit-Kopf, Export-Leiste, Knoten-Details */
+.plan-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .4rem; }
+.plan-actions { display: flex; gap: .4rem; }
+.plan-actions .btn { padding: .2rem .6rem; font-size: .8rem; }
+.zone-node-sub { font-size: 8.5px; text-anchor: middle; fill: #5a6572; }
+.zone-aci-chip { fill: #e3f5ec; stroke: #157a52; stroke-width: 1; }
+.zone-aci-text { font-size: 8px; font-weight: 700; text-anchor: middle; fill: #157a52; }

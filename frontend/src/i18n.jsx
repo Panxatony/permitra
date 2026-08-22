@@ -316,6 +316,8 @@ const EN = {
   'Einstellungen': 'Settings',
   'Einstellung gespeichert': 'Setting saved',
   'Pflichtfelder für Regeln': 'Mandatory fields for rules',
+  'Standardmäßig aktiv (BSI-Dokumentationspflichten) – hier lassen sie sich bei Bedarf deaktivieren.':
+    'Active by default (BSI documentation duties) – they can be deactivated here if needed.',
   'Begründung (Anlass) ist Pflicht': 'Justification (reason) is mandatory',
   'Requestor (Verantwortlicher) ist Pflicht': 'Requestor (owner) is mandatory',
   'Ablaufdatum (Gültig-bis) erzwingen': 'Enforce expiry date (valid until)',

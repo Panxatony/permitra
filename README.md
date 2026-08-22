@@ -77,8 +77,9 @@ The analysis page shows, for a source/destination pair, **whether communication 
 
 ## Security zones
 
-The security zones page combines: a **zone overview** (per zone: BSI documentation, networks, P-A-P classification, rule count, attached firewall clusters, intra-zonal ACI), a **north-south diagram** following the BSI P-A-P model (packet filter – application level gateway – packet filter: external band on top, P-A-P layer with the firewall clusters and DMZ/transfer zones in the middle, internal zones below), and the **communication matrix**.
+The security zones page combines: the **zone plan** (see below), a **zone overview** (per zone: BSI documentation, networks, P-A-P classification, rule count, attached firewall clusters, intra-zonal ACI), a **north-south diagram** following the BSI P-A-P model (packet filter – application level gateway – packet filter: external band on top, P-A-P layer with the firewall clusters and DMZ/transfer zones in the middle, internal zones below), and the **communication matrix**.
 
+- **Zone plan (bereinigter Netzplan)**: an audit-ready diagram generated entirely from the stored data — zones colored by protection level with owner shown at the node, ACI chip for intra-zone segmentation, firewall clusters as zone transitions, audit header (title, BSI reference NET.1.1/NET.3.2, timestamp) and a legend. **Exports**: PNG (client-side from the SVG), PDF (print-optimized A4 landscape) and **Mermaid.js** (`GET /api/zones/plan/mermaid`) for wikis and documentation systems that render Mermaid natively (e.g. GitLab).
 - **BSI documentation per zone**: owner (person/team) and protection level per protection goal (**confidentiality, integrity, availability** — each normal/high/very high); the overall protection level follows the maximum principle. Maintained via an edit dialog in the overview, shown as a badge column and in the diagram tooltips.
 - **BSI principle (hard-enforced)**: a zone transition is always a firewall — Cisco ACI alone is not sufficient (not a firewall by BSI definition). A cross-zone rule whose components are all of type ACI is rejected with HTTP 422; ACI contracts remain the tool *within* a zone.
 - **Zone attachment**: which firewall clusters a zone is attached to is maintained explicitly (checkbox multi-select; ACI cannot be selected).
@@ -105,6 +106,7 @@ Change approvers land on a focused approvals page after login: open rule reviews
 ## Settings (admin area)
 
 - **Least privilege / default-deny** (`zone_matrix_default`): behaviour for zone relationships without a matrix entry. `permit` = allowed with a hint (legacy behaviour, default), `deny` = rules are rejected (422) until the relationship is explicitly set to Allow via a matrix request with two approvals — BSI recommendation, active in the demo dataset. API: `GET/PUT /api/settings`.
+- **Mandatory fields for rules** (`require_justification`, `require_requestor`, `require_valid_until`): justification, requestor and expiry date are **mandatory by default** (BSI documentation duties) — the admin area offers a deactivation option per field. Enforced server-side (422 with field list), marked with `*` in the rule form.
 
 ## User management, email & sign-in security
 

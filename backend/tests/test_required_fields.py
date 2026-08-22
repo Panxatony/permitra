@@ -25,13 +25,19 @@ class Payload:
         self.valid_until = valid_until
 
 
-def test_defaults_do_not_enforce(db):
-    enforce_required_fields(db, Payload())  # alles optional (Bestandsverhalten)
+def test_defaults_enforce(db):
+    # Pflichtfelder sind standardmäßig aktiv
+    with pytest.raises(HTTPException) as exc:
+        enforce_required_fields(db, Payload())
+    assert "Begründung" in exc.value.detail
+    # Admin kann sie abschalten
+    for key in ("require_justification", "require_requestor", "require_valid_until"):
+        set_setting(db, key, "no")
+    enforce_required_fields(db, Payload())
 
 
 def test_enforced_fields_rejected_when_missing(db):
-    set_setting(db, "require_justification", "yes")
-    set_setting(db, "require_valid_until", "yes")
+    set_setting(db, "require_requestor", "no")
     with pytest.raises(HTTPException) as exc:
         enforce_required_fields(db, Payload(requestor="egal"))
     assert exc.value.status_code == 422
@@ -41,7 +47,8 @@ def test_enforced_fields_rejected_when_missing(db):
 
 
 def test_requestor_enforcement(db):
-    set_setting(db, "require_requestor", "yes")
+    set_setting(db, "require_justification", "no")
+    set_setting(db, "require_valid_until", "no")
     with pytest.raises(HTTPException):
         enforce_required_fields(db, Payload(justification="x"))
     enforce_required_fields(db, Payload(requestor="Max Bauer"))
