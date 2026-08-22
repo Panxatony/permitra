@@ -73,53 +73,98 @@ app.include_router(vrfs_router.router)
 logger = logging.getLogger("permitra")
 
 
+# Die Hintergrund-Jobs arbeiten mit synchronem I/O: SQLAlchemy-Sessions, SMTP
+# und die SIEM-Zustellung (urllib/socket, je 5 s Zeitlimit). In einer
+# async-Funktion direkt aufgerufen, würde das den Event-Loop blockieren – ein
+# nicht erreichbares SIEM legte damit den gesamten Webserver zeitweise still.
+# Deshalb läuft die eigentliche Arbeit über asyncio.to_thread in einem
+# Arbeits-Thread; die Session wird dort erzeugt und geschlossen, sie wandert
+# also nie zwischen Threads.
+
+def _expiry_once() -> int:
+    """Ein Durchlauf der Gültigkeitsprüfung (blockierend, läuft im Thread)."""
+    from . import notifications
+    from .expiry import expiring_rules
+
+    db = SessionLocal()
+    try:
+        # Vor dem Deaktivieren den Stand für die Rezertifizierungs-Mail erfassen
+        soon_expired, soon_expiring = expiring_rules(db, days=30)
+        count = expire_rules(db)
+        notifications.recertification_due(db, soon_expired, soon_expiring)
+        return count
+    finally:
+        db.close()
+
+
 async def expiry_job():
     """Täglicher Job: abgelaufene freigegebene Regeln automatisch deaktivieren."""
     while True:
         try:
-            db = SessionLocal()
-            try:
-                from .expiry import expiring_rules
-                from . import notifications
-
-                # Vor dem Deaktivieren den Stand für die Rezertifizierungs-Mail erfassen
-                soon_expired, soon_expiring = expiring_rules(db, days=30)
-                count = expire_rules(db)
-                if count:
-                    logger.info("Gültigkeits-Job: %d Regel(n) automatisch deaktiviert", count)
-                notifications.recertification_due(db, soon_expired, soon_expiring)
-            finally:
-                db.close()
+            count = await asyncio.to_thread(_expiry_once)
+            if count:
+                logger.info("Gültigkeits-Job: %d Regel(n) automatisch deaktiviert", count)
         except Exception:  # Job darf die App nie mitreißen
             logger.exception("Gültigkeits-Job fehlgeschlagen")
         await asyncio.sleep(24 * 3600)
 
 
+def _siem_delivery_once() -> tuple[dict, dict]:
+    """Ein Zustelldurchlauf (blockierend, läuft im Thread): erst die Ereignisse,
+    dann die Prüfpunkte zur Verankerung des Ketten-Endes."""
+    from . import audit
+
+    db = SessionLocal()
+    try:
+        return audit.deliver_pending(db), audit.deliver_pending_checkpoints(db)
+    finally:
+        db.close()
+
+
+SIEM_INTERVAL = 10          # Sekunden zwischen zwei Durchläufen
+SIEM_MAX_BACKOFF = 300      # Obergrenze, wenn das Ziel nicht erreichbar ist
+
+
 async def siem_delivery_job():
     """Stellt ausstehende Audit-Ereignisse zuverlässig an ein SIEM zu (#26).
     Der Zustand liegt in der Datenbank, deshalb übersteht die Zustellung
-    Neustarts (at-least-once). Läuft nur, wenn ein SIEM-Ziel konfiguriert ist."""
+    Neustarts (at-least-once). Läuft nur, wenn ein SIEM-Ziel konfiguriert ist.
+
+    Ist das Ziel nicht erreichbar, wächst der Abstand schrittweise bis
+    SIEM_MAX_BACKOFF – sonst liefe jeder Durchlauf in dieselben Zeitlimits."""
     from . import audit
 
+    delay = SIEM_INTERVAL
     while True:
         try:
             if audit.push_enabled():
-                db = SessionLocal()
-                try:
-                    result = audit.deliver_pending(db)
-                    if result.get("sent"):
-                        logger.info("SIEM-Zustellung: %d Ereignis(se) gesendet, "
-                                    "%d ausstehend", result["sent"], result["pending"])
-                    # Prüfpunkte (Verankerung des Ketten-Endes) nachziehen
-                    anchors = audit.deliver_pending_checkpoints(db)
-                    if anchors.get("sent"):
-                        logger.info("SIEM-Zustellung: %d Prüfpunkt(e) verankert",
-                                    anchors["sent"])
-                finally:
-                    db.close()
+                result, anchors = await asyncio.to_thread(_siem_delivery_once)
+                if result.get("sent"):
+                    logger.info("SIEM-Zustellung: %d Ereignis(se) gesendet, "
+                                "%d ausstehend", result["sent"], result["pending"])
+                if anchors.get("sent"):
+                    logger.info("SIEM-Zustellung: %d Prüfpunkt(e) verankert",
+                                anchors["sent"])
+                stuck = (result.get("pending") or 0) and not result.get("sent")
+                delay = min(delay * 2, SIEM_MAX_BACKOFF) if stuck else SIEM_INTERVAL
+            else:
+                delay = SIEM_INTERVAL
         except Exception:  # Zustell-Job darf die App nie mitreißen
             logger.exception("SIEM-Zustellung fehlgeschlagen")
-        await asyncio.sleep(10)
+            delay = min(delay * 2, SIEM_MAX_BACKOFF)
+        await asyncio.sleep(delay)
+
+
+def _checkpoint_once() -> tuple[int, str] | None:
+    """Setzt einen Prüfpunkt (blockierend, läuft im Thread)."""
+    from . import audit
+
+    db = SessionLocal()
+    try:
+        cp = audit.create_checkpoint(db)
+        return (cp.event_count, (cp.head_hash or "")[:12]) if cp else None
+    finally:
+        db.close()
 
 
 async def audit_checkpoint_job():
@@ -129,18 +174,11 @@ async def audit_checkpoint_job():
     der jüngsten Einträge. Ein Prüfpunkt hält den erreichten Stand fest; über
     die SIEM-Zustellung verlässt er die Anwendung und ist damit dem Zugriff
     auf die Datenbank entzogen."""
-    from . import audit
-
     while True:
         try:
-            db = SessionLocal()
-            try:
-                cp = audit.create_checkpoint(db)
-                if cp:
-                    logger.debug("Audit-Prüfpunkt: %d Ereignisse, Head %s",
-                                 cp.event_count, (cp.head_hash or "")[:12])
-            finally:
-                db.close()
+            summary = await asyncio.to_thread(_checkpoint_once)
+            if summary:
+                logger.debug("Audit-Prüfpunkt: %d Ereignisse, Head %s", *summary)
         except Exception:  # darf die App nie mitreißen
             logger.exception("Audit-Prüfpunkt fehlgeschlagen")
         await asyncio.sleep(int(os.environ.get("AUDIT_CHECKPOINT_INTERVAL", "3600")))
