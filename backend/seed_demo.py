@@ -285,7 +285,9 @@ def seed(wipe: bool):
     zones = {}
     for order, (name, descr, _net) in enumerate(ZONES):
         owner, cia_c, cia_i, cia_a = ZONE_META.get(name, ("", "normal", "normal", "normal"))
+        # Anzeige-Kennung in 10er-Schritten (Z010, Z020, … – lässt Lücken zum Einfügen)
         zone = Zone(name=name, description=descr, sort_order=order,
+                    code=f"Z{(order + 1) * 10:03d}",
                     pap_level=PAP_LEVELS.get(name, "intern"),
                     owner=owner, cia_c=cia_c, cia_i=cia_i, cia_a=cia_a)
         db.add(zone)

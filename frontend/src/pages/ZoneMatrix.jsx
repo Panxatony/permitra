@@ -5,6 +5,7 @@ import { Modal } from '../components/shared'
 import { useLang } from '../i18n'
 
 const SB_BADGE = { normal: 'status-draft', 'hoch': 'status-in_review', 'sehr hoch': 'status-rejected' }
+const zoneLabel = (z) => (z.code ? `${z.code}-${z.name}` : z.name)
 const SB_LABEL = (z) => `${z.schutzbedarf || 'normal'} (C:${z.cia_c || 'normal'} I:${z.cia_i || 'normal'} V:${z.cia_a || 'normal'})`
 
 function cellLabel(p) {
@@ -313,7 +314,7 @@ function ZoneReachability({ overview }) {
                   + (z.owner ? `\nVerantwortlich: ${z.owner}` : '')
                   + (z.aci?.length ? `\nACI intra-zonal: ${z.aci.map((a) => a.name).join(', ')}` : '')}</title>
               </rect>
-              <text x={p.x} y={p.y - 3} className="zone-node-text">{z.name}</text>
+              <text x={p.x} y={p.y - 3} className="zone-node-text">{zoneLabel(z)}</text>
               <text x={p.x} y={p.y + 12} className="zone-node-sub">{subShort}</text>
               {z.aci?.length > 0 && (
                 <g>
@@ -558,7 +559,7 @@ export default function ZoneMatrix() {
               <tbody>
                 {overview.zones.map((z) => (
                   <tr key={z.name}>
-                    <td><strong>{z.name}</strong><div className="muted small">{z.description}</div></td>
+                    <td><strong>{zoneLabel(z)}</strong><div className="muted small">{z.description}</div></td>
                     <td>
                       <span className={`badge ${SB_BADGE[z.schutzbedarf] || 'status-draft'}`}
                         title={`C: ${z.cia_c} · I: ${z.cia_i} · V: ${z.cia_a} (Maximumprinzip)`}>
@@ -608,7 +609,7 @@ export default function ZoneMatrix() {
             e.preventDefault()
             try {
               await api.setZoneMeta(metaZone.name, {
-                owner: metaZone.owner, description: metaZone.description,
+                owner: metaZone.owner, description: metaZone.description, code: metaZone.code,
                 cia_c: metaZone.cia_c, cia_i: metaZone.cia_i, cia_a: metaZone.cia_a,
               })
               await api.setZonePapLevel(metaZone.name, metaZone.pap_level || 'intern')
@@ -617,10 +618,16 @@ export default function ZoneMatrix() {
               load()
             } catch (err) { setError(err.message) }
           }}>
-            <label>{t('Verantwortlicher (Person/Team)')}
-              <input value={metaZone.owner || ''} autoFocus
-                onChange={(e) => setMetaZone({ ...metaZone, owner: e.target.value })} />
-            </label>
+            <div className="grid-2">
+              <label>{t('Kennung (z.B. Z020)')}
+                <input value={metaZone.code || ''} autoFocus placeholder="Z020"
+                  onChange={(e) => setMetaZone({ ...metaZone, code: e.target.value })} />
+              </label>
+              <label>{t('Verantwortlicher (Person/Team)')}
+                <input value={metaZone.owner || ''}
+                  onChange={(e) => setMetaZone({ ...metaZone, owner: e.target.value })} />
+              </label>
+            </div>
             <label>{t('Beschreibung (Zweck der Zone)')}
               <input value={metaZone.description || ''}
                 onChange={(e) => setMetaZone({ ...metaZone, description: e.target.value })} />
@@ -712,13 +719,13 @@ export default function ZoneMatrix() {
           <thead>
             <tr>
               <th className="corner">Von \ Nach</th>
-              {zones.map((z) => <th key={z.id} className="col-head"><span>{z.name}</span></th>)}
+              {zones.map((z) => <th key={z.id} className="col-head"><span>{zoneLabel(z)}</span></th>)}
             </tr>
           </thead>
           <tbody>
             {zones.map((from) => (
               <tr key={from.id}>
-                <th className="row-head">{from.name}</th>
+                <th className="row-head">{zoneLabel(from)}</th>
                 {zones.map((to) => {
                   if (from.id === to.id) return <td key={to.id} className="cell-self">–</td>
                   const key = `${from.name}|${to.name}`

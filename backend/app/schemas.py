@@ -212,6 +212,7 @@ class ZoneCreate(BaseModel):
     description: str = ""
     pap_level: str = Field("intern", description="BSI P-A-P-Einstufung: extern | pap | intern")
     sort_order: int = 0
+    code: str = Field("", max_length=8, description='Anzeige-Kennung, z.B. "Z020"')
     owner: str = Field("", max_length=128, description="Verantwortlicher (Person/Team)")
     cia_c: str = Field("normal", description="Schutzbedarf Vertraulichkeit")
     cia_i: str = Field("normal", description="Schutzbedarf Integrität")

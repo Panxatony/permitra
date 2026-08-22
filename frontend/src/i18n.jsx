@@ -355,6 +355,7 @@ const EN = {
   'BSI-Dokumentation': 'BSI documentation',
   'Zone bearbeiten': 'Edit zone',
   'Verantwortlicher (Person/Team)': 'Owner (person/team)',
+  'Kennung (z.B. Z020)': 'Code (e.g. Z020)',
   'Beschreibung (Zweck der Zone)': 'Description (purpose of the zone)',
   'Vertraulichkeit': 'Confidentiality',
   'Integrität': 'Integrity',

@@ -69,7 +69,8 @@ def build_mermaid(db: Session, generated_at: str = "") -> str:
                 label = f"{fw.name}<br/><i>{'Juniper SRX' if fw.type.value == 'juniper' else 'Check Point'}</i>"
                 lines.append(f'    {_fw_id(fw.name)}{{{{"{label}"}}}}')
         for zone in band_zones:
-            parts = [f"<b>{zone.name}</b>", f"Schutzbedarf: {zone.schutzbedarf}"]
+            label = f"{zone.code}-{zone.name}" if zone.code else zone.name
+            parts = [f"<b>{label}</b>", f"Schutzbedarf: {zone.schutzbedarf}"]
             if zone.owner:
                 parts.append(f"Verantwortlich: {zone.owner}")
             aci = sorted(aci_by_zone.get(zone.name.upper(), ()))

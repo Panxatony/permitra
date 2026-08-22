@@ -170,7 +170,7 @@ def set_zone_meta(
     zone = find_zone(db, name)
     if not zone:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Zone nicht gefunden")
-    for field in ("owner", "description"):
+    for field in ("owner", "description", "code"):
         if field in payload:
             setattr(zone, field, str(payload[field] or "").strip())
     for field in ("cia_c", "cia_i", "cia_a"):

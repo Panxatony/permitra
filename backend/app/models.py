@@ -83,6 +83,9 @@ class Zone(Base):
     # P-A-P-Ebene, z.B. DMZ), "intern" (unterhalb der P-A-P-Struktur)
     pap_level: Mapped[str] = mapped_column(String(16), default="intern")
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    # Anzeige-Kennung, z.B. "Z020" -> Anzeige "Z020-AUDIT". Der interne Name
+    # bleibt maßgeblich (Regeln, Matrix, Auflösung referenzieren den Namen).
+    code: Mapped[str] = mapped_column(String(8), default="")
     # BSI-Dokumentation: Verantwortlicher und Schutzbedarf je Schutzziel (CIA),
     # jeweils "normal" | "hoch" | "sehr hoch"; Gesamt-Schutzbedarf = Maximumprinzip
     owner: Mapped[str] = mapped_column(String(128), default="")
