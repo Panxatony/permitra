@@ -603,6 +603,13 @@ class Rule(Base):
     # Soft-Delete: Regeln werden nicht physisch gelöscht, damit die
     # Versionshistorie (Audit-Trail) revisionssicher erhalten bleibt
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Begründung, warum diese Regel zur Löschung vorgeschlagen ist (leer = nicht
+    # vorgeschlagen). Entsteht, wenn eine Regel durch eine genehmigte Änderung
+    # unzulässig wird – etwa wenn ein Netz in eine andere Zone umgehängt wurde
+    # und die neue Zonen-Beziehung laut Matrix auf Block steht. Die Regel geht
+    # dann in den Review; freigeben lässt sie sich erst wieder, wenn die
+    # Unzulässigkeit behoben ist.
+    removal_reason: Mapped[str] = mapped_column(String(255), default="")
 
     @property
     def platforms(self) -> list[str]:

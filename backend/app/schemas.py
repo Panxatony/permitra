@@ -195,6 +195,9 @@ class RuleOut(RuleFields):
     created_by: str
     created_at: datetime
     updated_at: datetime
+    # Nicht leer, wenn die Regel zur Löschung vorgeschlagen ist (z.B. nachdem
+    # ein Netz umgehängt wurde und die Beziehung unzulässig geworden ist)
+    removal_reason: str = ""
 
 
 class RuleDetail(RuleOut):

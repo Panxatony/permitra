@@ -21,6 +21,8 @@ docker compose exec backend python seed_demo.py --wipe   # optional demo data
 - **Update:** `git pull && docker compose up --build -d` — schema changes run automatically via Alembic migrations at startup.
 - **Optional environment variables** (see README for details): `SMTP_*` + `PERMITRA_BASE_URL` (email delivery and links), `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (passkeys/WebAuthn), `CHANGE_WEBHOOK_URL`/`CHANGE_WEBHOOK_TOKEN` (change management webhook), `AUDIT_WEBHOOK_URL` and/or `AUDIT_SYSLOG_HOST`/`AUDIT_SYSLOG_PORT`/`AUDIT_SYSLOG_PROTO` (SIEM delivery of the audit log).
 
+> **Single instance by design.** The backend runs background jobs in-process — SIEM delivery, audit-chain anchoring and the daily expiry/recertification run. They carry no cross-instance locking, so a second backend instance would deliver audit events to the SIEM twice, send recertification mails twice, and race on the Alembic migrations at startup. Scale the frontend freely (it is stateless); keep the backend at one replica unless those jobs are reworked.
+
 ## Option B: Kubernetes
 
 Manifests under `deploy/k8s/permitra.yaml` (namespace, secret, Postgres StatefulSet with PVC, backend deployment with readiness probe on `/api/health`, frontend deployment, ingress).

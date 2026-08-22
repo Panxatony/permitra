@@ -168,7 +168,32 @@ export default function Approvals() {
                   {b.items.map((c) => (
                     <li key={c.id}>
                       {itemLabel(c)}
-                      {c.affected_count > 0 && (
+                      {c.affected_count > 0 && c.change_type === 'net_update' && (
+                        <div className="warnbox" style={{ margin: '.35rem 0 .2rem', padding: '.4rem .6rem' }}>
+                          ⚠ {t('Die Umhängung wirkt sich auf')} <strong>{c.affected_count}</strong>{' '}
+                          {t('Regel(n) aus')}
+                          {c.removal_count > 0 && (
+                            <>{' – '}<strong>{c.removal_count}</strong>{' '}
+                              {t('davon werden unzulässig und gehen zur Löschung in den Review')}</>
+                          )}
+                          {':'}
+                          <ul style={{ margin: '.3rem 0 0 1.1rem', padding: 0 }}>
+                            {c.affected_rules.map((r) => (
+                              <li key={r.rule_id} className="small">
+                                <Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link>
+                                {' '}<code>{r.from}</code> → <code>{r.to}</code>
+                                {r.admissible
+                                  ? <span className="muted"> ({t('bleibt zulässig, Zonen werden nachgezogen')})</span>
+                                  : <strong style={{ color: 'var(--danger, #b3261e)' }}>
+                                      {' '}({t('zur Löschung')}{r.reason ? `: ${r.reason}` : ''})
+                                    </strong>}
+                              </li>
+                            ))}
+                          </ul>
+                          {c.affected_count > c.affected_rules.length && ' …'}
+                        </div>
+                      )}
+                      {c.affected_count > 0 && c.change_type !== 'net_update' && (
                         <div className="warnbox" style={{ margin: '.35rem 0 .2rem', padding: '.4rem .6rem' }}>
                           ⚠ {t('Betrifft')} <strong>{c.affected_count}</strong> {t('aktive Regel(n) dieser Beziehung')}{' – '}
                           {t('freigegebene werden bei Freigabe in den Review zurückgesetzt:')}{' '}

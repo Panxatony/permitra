@@ -709,6 +709,9 @@ def update_rule(
     rule.vrf_id = vrf.id
     rule.components = components
     rule.version += 1
+    # Die Prüfungen oben (Zonen, Matrix, BSI-Firewall) sind durchlaufen – ein
+    # zuvor ausgesprochener Löschvorschlag ist damit gegenstandslos.
+    rule.removal_reason = ""
     # Inhaltliche Änderung einer freigegebenen Regel setzt den Review zurück
     if rule.status in (RuleStatus.approved, RuleStatus.rejected):
         rule.status = RuleStatus.draft
@@ -793,6 +796,7 @@ def restore_version(
     rule.destination_zone = payload.destination_zone
     rule.components = components
     rule.status = RuleStatus.draft  # Rollback durchläuft den normalen Review
+    rule.removal_reason = ""        # Prüfungen oben bestanden – Vorschlag hinfällig
     rule.version += 1
     add_version(db, rule, user, f"Rollback auf Version {version}")
     db.commit()
@@ -846,7 +850,11 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     if new_status == RuleStatus.approved:
         verdict = check_zone_pair(db, rule.source_zone, rule.destination_zone,
                                   rule.platforms or [])
-        if not verdict.allowed:
+        # Auch ein ausdrücklicher Löschvorschlag zählt hier: Er entsteht z.B.,
+        # wenn ein Netz umgehängt wurde und die Regel dadurch unzulässig ist –
+        # etwa weil eine Seite nun mehrere Zonen umfasst oder dem Zonenübergang
+        # die Firewall fehlt. Beides schlägt in check_zone_pair nicht durch.
+        if not verdict.allowed or rule.removal_reason:
             rule.status = RuleStatus.deactivated
             rule.impl_status = {
                 **(rule.impl_status or {}),
@@ -854,9 +862,11 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
                    if (rule.impl_status or {}).get(c.name) != "deaktiviert"},
             }
             rule.version += 1
-            removal_note = (f"Löschung freigegeben: Zonen-Beziehung "
-                            f"{rule.source_zone} → {rule.destination_zone} ist Block – "
+            grund = rule.removal_reason or (
+                f"Zonen-Beziehung {rule.source_zone} → {rule.destination_zone} ist Block")
+            removal_note = (f"Löschung freigegeben: {grund} – "
                             f"Regel auf den Komponenten entfernen ('zu löschen')")
+            rule.removal_reason = ""   # Vorschlag ist entschieden
             add_version(db, rule, user, removal_note)
             db.add(Comment(rule_pk=rule.id, author=user.username,
                            text=(decision.comment + "\n" if decision.comment else "") + removal_note))

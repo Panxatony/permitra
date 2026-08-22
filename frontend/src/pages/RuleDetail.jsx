@@ -66,6 +66,16 @@ export default function RuleDetail() {
         <StatusBadge status={rule.status} />
       </div>
 
+      {rule.removal_reason && (
+        <div className="error">
+          <strong>🗑️ {t('Zur Löschung vorgeschlagen')}</strong>
+          <p style={{ margin: '.3rem 0 0' }}>{rule.removal_reason}</p>
+          <p className="small" style={{ margin: '.4rem 0 0' }}>
+            {t('Die Regel ist durch eine genehmigte Änderung unzulässig geworden. Eine Freigabe bedeutet hier: Löschung freigeben – die Regel wird deaktiviert und auf den Komponenten zurückgebaut. Alternativ die Regel überarbeiten, bis sie wieder zulässig ist.')}
+          </p>
+        </div>
+      )}
+
       {risk && risk.level !== 'none' && (
         <div className={risk.level === 'hoch' ? 'error' : 'warnbox'}>
           <strong>⚠️ {t('Risiko')}: {risk.level.toUpperCase()}</strong>

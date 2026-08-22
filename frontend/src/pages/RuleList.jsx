@@ -152,7 +152,13 @@ export default function RuleList() {
             <tbody>
               {rules.map((r) => (
                 <tr key={r.rule_id}>
-                  <td><Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link></td>
+                  <td>
+                    <Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link>
+                    {r.removal_reason && (
+                      <span className="badge risk-hoch" style={{ marginLeft: '.35rem' }}
+                        title={r.removal_reason}>🗑️ {t('zur Löschung')}</span>
+                    )}
+                  </td>
                   <td><ComponentBadges components={r.components} /></td>
                   <td>{zoneLabel(r.source_zone)}</td>
                   <td className="addr"><AddressList entries={r.source} max={2} /></td>

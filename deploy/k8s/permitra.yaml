@@ -70,7 +70,13 @@ metadata:
   name: backend
   namespace: permitra
 spec:
-  replicas: 2
+  # Bewusst EINE Instanz: Das Backend führt Hintergrund-Jobs aus, die pro
+  # Prozess laufen und nicht für Mehrfachbetrieb ausgelegt sind – mehrere
+  # Instanzen würden Audit-Ereignisse doppelt an das SIEM zustellen,
+  # Rezertifizierungs-Mails doppelt verschicken und die Alembic-Migrationen
+  # beim Start gegeneinander laufen lassen. Vor einer Erhöhung müssten diese
+  # Jobs mit einer übergreifenden Sperre versehen werden.
+  replicas: 1
   selector:
     matchLabels: { app: backend }
   template:
@@ -107,6 +113,7 @@ metadata:
   name: frontend
   namespace: permitra
 spec:
+  # Zustandslos (nginx mit statischen Dateien) – hier ist Skalierung unkritisch
   replicas: 2
   selector:
     matchLabels: { app: frontend }

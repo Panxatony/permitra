@@ -577,6 +577,184 @@ def _affected_rules(db: Session, from_zone: str, to_zone: str, statuses=None):
     )
 
 
+def _rules_touching_network(db: Session, *cidrs: str, vrf_id: int | None = None):
+    """Aktive Regeln, deren Quelle oder Ziel in einem der Netze liegt.
+
+    Maßgeblich ist, ob die Adresse der Regel im Netz enthalten ist (oder ihm
+    entspricht) – nur dann leitet sich ihre Zone aus genau diesem Eintrag ab.
+    Ein weiter gefasstes Regel-Netz bezieht seine Zone anderswoher und ist
+    folglich nicht betroffen. Bei einer Umhängung zählt sowohl das alte als
+    auch das neue Netz, weil sich beim Antrag auch der CIDR ändern kann."""
+    from ..validation import parse_network
+
+    netze = [n for n in (parse_network(c) for c in cidrs if c) if n is not None]
+    if not netze:
+        return []
+
+    def enthalten(ip: str) -> bool:
+        addr = parse_network((ip or "").strip())
+        if addr is None:
+            return False
+        return any(addr.version == n.version and (addr == n or addr.subnet_of(n))
+                   for n in netze)
+
+    query = active_rules(db).filter(
+        Rule.status.in_((RuleStatus.approved, RuleStatus.in_review, RuleStatus.draft)))
+    if vrf_id is not None:
+        query = query.filter(Rule.vrf_id == vrf_id)
+    treffer = []
+    for rule in query.order_by(Rule.rule_id).all():
+        for entries in (rule.source, rule.destination):
+            if any(enthalten(e.get("ip")) for e in entries or []):
+                treffer.append(rule)
+                break
+    return treffer
+
+
+class _NetzSicht:
+    """Leichtgewichtige Sicht auf eine Netz-Zuordnung – erlaubt es, eine
+    Umhängung durchzurechnen, ohne sie in der Datenbank vorwegzunehmen."""
+
+    __slots__ = ("cidr", "zone")
+
+    def __init__(self, cidr: str, zone: Zone):
+        self.cidr, self.zone = cidr, zone
+
+
+def _zonen_aufloeser(netze):
+    """Liefert eine Funktion, die zu einer Adressliste (Zone, alle Treffer) sagt."""
+    from ..zone_check import zone_for_ip
+
+    def aufloesen(entries):
+        hits = set()
+        for entry in entries or []:
+            zone = zone_for_ip((entry.get("ip") or "").strip(), netze)
+            if zone is not None:
+                hits.add(zone_ref(zone))
+        return (hits.copy().pop() if len(hits) == 1 else None), hits
+
+    return aufloesen
+
+
+def _bewerte_regeln(db: Session, regeln, aufloesen) -> list[dict]:
+    """Bewertet Regeln gegen einen (ggf. gedachten) Zonen-Stand (Befund H6).
+
+    Wird ein Netz in eine andere Zone umgehängt, ändert sich die Zonen-Beziehung
+    bestehender Regeln, ohne dass die Regel selbst angefasst wurde: Aus einer
+    intra-zonalen Regel kann unbemerkt ein Zonenübergang werden. Die
+    gespeicherten Zonen sind abgeleitete Daten und werden deshalb neu ermittelt.
+
+    Unzulässig ist eine Regel, wenn die neue Beziehung laut Matrix auf Block
+    steht, wenn für den nun zonenübergreifenden Verkehr die Firewall fehlt
+    (BSI) oder wenn eine Regelseite plötzlich mehrere Zonen umfasst."""
+    ergebnisse = []
+    for rule in regeln:
+        neu_src, hits_src = aufloesen(rule.source)
+        neu_dst, hits_dst = aufloesen(rule.destination)
+        alt_src, alt_dst = rule.source_zone or "", rule.destination_zone or ""
+        mehrdeutig = len(hits_src) > 1 or len(hits_dst) > 1
+        src, dst = neu_src or alt_src, neu_dst or alt_dst
+
+        pruefung = check_zone_pair(db, src, dst, rule.platforms)
+        meldungen = list(pruefung.messages)
+        zulaessig = pruefung.allowed and not mehrdeutig
+        grund = ""
+        if mehrdeutig:
+            grund = "Regelseite umfasst mehrere Zonen – die Regel muss aufgeteilt werden"
+            meldungen.insert(0, grund)
+        elif not pruefung.allowed:
+            grund = next((m for m in pruefung.messages), "laut Matrix nicht zulässig")
+        if zulaessig and (src or "").upper() != (dst or "").upper():
+            if rule.components and not any(c.type.value != "aci" for c in rule.components):
+                zulaessig = False
+                grund = "Zonenübergang erfordert eine Firewall – Cisco ACI allein genügt nicht (BSI)"
+                meldungen.append(grund)
+
+        ergebnisse.append({
+            "rule": rule,
+            "rule_id": rule.rule_id,
+            "name": rule.name,
+            "status": rule.status.value,
+            "from_zones": [alt_src, alt_dst],
+            "to_zones": [src, dst],
+            "zones_changed": (src or "") != alt_src or (dst or "") != alt_dst,
+            "admissible": zulaessig,
+            "reason": grund,          # entscheidender Einzelgrund (kurz, für die Anzeige)
+            "messages": meldungen,    # vollständige Begründung (Historie/Kommentar)
+        })
+    return ergebnisse
+
+
+def _preview_network_move(db: Session, network: ZoneNetwork, ziel_zone: Zone,
+                          neuer_cidr: str) -> list[dict]:
+    """Rechnet eine Netz-Umhängung durch, OHNE sie anzuwenden – für die
+    Auswirkungsanalyse, die den Approvern vor der Entscheidung angezeigt wird."""
+    bestand = db.query(ZoneNetwork).filter(ZoneNetwork.vrf_id == network.vrf_id).all()
+    gedacht = [_NetzSicht(n.cidr, n.zone) for n in bestand if n.id != network.id]
+    gedacht.append(_NetzSicht(neuer_cidr or network.cidr, ziel_zone))
+    regeln = _rules_touching_network(db, network.cidr, neuer_cidr,
+                                     vrf_id=network.vrf_id)
+    return _bewerte_regeln(db, regeln, _zonen_aufloeser(gedacht))
+
+
+def reassess_after_network_move(db: Session, network: ZoneNetwork) -> list[dict]:
+    """Bewertet nach einer bereits angewandten Umhängung neu (Ist-Stand)."""
+    bestand = db.query(ZoneNetwork).filter(ZoneNetwork.vrf_id == network.vrf_id).all()
+    regeln = _rules_touching_network(db, network.cidr, vrf_id=network.vrf_id)
+    return _bewerte_regeln(db, regeln, _zonen_aufloeser(bestand))
+
+
+def _apply_reassessment(db: Session, network: ZoneNetwork, user, batch_id: str) -> list[dict]:
+    """Wendet die Neubewertung nach einer Netz-Umhängung an (Befund H6).
+
+    Die abgeleiteten Zonen werden nachgezogen. Ist die Regel dadurch unzulässig
+    geworden, geht sie in den Review und wird zur Löschung vorgeschlagen –
+    freigeben lässt sie sich erst wieder, wenn die Ursache behoben ist."""
+    from .rules_router import add_version
+
+    protokoll = []
+    for eintrag in reassess_after_network_move(db, network):
+        rule = eintrag["rule"]
+        alt_src, alt_dst = eintrag["from_zones"]
+        neu_src, neu_dst = eintrag["to_zones"]
+        kurz = batch_id[:8]
+
+        if eintrag["zones_changed"]:
+            rule.source_zone, rule.destination_zone = neu_src, neu_dst
+
+        if not eintrag["admissible"]:
+            # Kurz und sprechend für die Anzeige …
+            rule.removal_reason = (
+                f"{neu_src} → {neu_dst}: {eintrag['reason']}")[:255]
+            # … die vollständige Begründung gehört in Historie und Kommentar.
+            note = (f"Netz {network.cidr} nach {zone_ref(network.zone)} umgehängt "
+                    f"(Antrag {kurz}): {alt_src} → {alt_dst} ist jetzt "
+                    f"{neu_src} → {neu_dst} und nicht mehr zulässig – "
+                    + "; ".join(eintrag["messages"][:3]))
+            if rule.status != RuleStatus.in_review:
+                rule.status = RuleStatus.in_review
+            rule.version += 1
+            add_version(db, rule, user, note)
+            db.add(Comment(rule_pk=rule.id, author=user.username, text=note))
+        elif eintrag["zones_changed"]:
+            note = (f"Netz {network.cidr} nach {zone_ref(network.zone)} umgehängt "
+                    f"(Antrag {kurz}): Zonen neu abgeleitet, {alt_src} → {alt_dst} "
+                    f"wird {neu_src} → {neu_dst}; weiterhin zulässig")
+            rule.version += 1
+            add_version(db, rule, user, note)
+            rule.removal_reason = ""   # früherer Löschvorschlag ist gegenstandslos
+
+        if eintrag["zones_changed"] or not eintrag["admissible"]:
+            protokoll.append({
+                "rule_id": rule.rule_id,
+                "from": f"{alt_src} → {alt_dst}",
+                "to": f"{neu_src} → {neu_dst}",
+                "admissible": eintrag["admissible"],
+            })
+    return protokoll
+
+
+
 @router.get("/matrix/changes")
 def list_changes(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Änderungsanträge und Historie der Kommunikationsmatrix (neueste zuerst).
@@ -591,17 +769,41 @@ def list_changes(db: Session = Depends(get_db), _: User = Depends(get_current_us
         .all()
     )
     def impact(c):
-        """Auswirkungsanalyse nur für offene Block-Anträge (Allow -> Deny)."""
-        if c.status != "pending" or c.change_type != "policy" or c.new_policy != "block_all":
+        """Auswirkungsanalyse offener Anträge – die Approver sollen die Folgen
+        kennen, bevor sie entscheiden."""
+        if c.status != "pending":
             return {}
-        rules = _affected_rules(db, c.from_zone, c.to_zone)
-        return {
-            "affected_count": len(rules),
-            "affected_rules": [
-                {"rule_id": r.rule_id, "name": r.name, "status": r.status.value}
-                for r in rules[:50]
-            ],
-        }
+        # Matrix-Änderung auf Block: betroffene Regeln der Beziehung
+        if c.change_type == "policy" and c.new_policy == "block_all":
+            rules = _affected_rules(db, c.from_zone, c.to_zone)
+            return {
+                "affected_count": len(rules),
+                "affected_rules": [
+                    {"rule_id": r.rule_id, "name": r.name, "status": r.status.value}
+                    for r in rules[:50]
+                ],
+            }
+        # Netz-Umhängung: Vorschau der Neubewertung (Befund H6). Sie erfolgt
+        # gegen den KÜNFTIGEN Stand, ohne etwas zu verändern.
+        if c.change_type == "net_update":
+            network = db.get(ZoneNetwork, (c.extra or {}).get("network_id") or 0)
+            zone = find_zone(db, c.from_zone)
+            if not network or not zone:
+                return {}
+            vorschau = _preview_network_move(db, network, zone, c.to_zone)
+            unzulaessig = [e for e in vorschau if not e["admissible"]]
+            return {
+                "affected_count": len(vorschau),
+                "removal_count": len(unzulaessig),
+                "affected_rules": [
+                    {"rule_id": e["rule_id"], "name": e["name"], "status": e["status"],
+                     "from": " → ".join(e["from_zones"]), "to": " → ".join(e["to_zones"]),
+                     "admissible": e["admissible"],
+                     "reason": "; ".join(e["messages"][:2])}
+                    for e in vorschau[:50]
+                ],
+            }
+        return {}
 
     return [
         {
@@ -677,6 +879,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
             "Die zweite Freigabe muss durch einen anderen Change Approver erfolgen",
         )
     reviews_reset = []
+    reassessed: list[dict] = []
     if approve:
         # Erst Zonen anlegen, dann Matrix-Zellen anwenden
         for item in batch:
@@ -734,6 +937,9 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                                             f"Zone '{item.from_zone}' existiert nicht mehr")
                     network.cidr = item.to_zone
                     network.zone_id = zone.id
+                    db.flush()   # damit die Neubewertung die neue Zuordnung sieht
+                    reassessed.extend(
+                        _apply_reassessment(db, network, user, change.batch_id))
         db.flush()
         for item in batch:
             if item.change_type != "policy":
@@ -792,6 +998,21 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
         result["detail"] = (f"{len(reviews_reset)} freigegebene Regel(n) der Beziehung wurden "
                             f"in den Review zurückgesetzt: {', '.join(reviews_reset[:10])}"
                             + (" …" if len(reviews_reset) > 10 else ""))
+    if reassessed:
+        result["reassessed"] = reassessed
+        zur_loeschung = [r["rule_id"] for r in reassessed if not r["admissible"]]
+        nachgezogen = len(reassessed) - len(zur_loeschung)
+        teile = []
+        if zur_loeschung:
+            teile.append(f"{len(zur_loeschung)} Regel(n) sind durch die Umhängung unzulässig "
+                         f"geworden und stehen zur Löschung im Review: "
+                         f"{', '.join(zur_loeschung[:10])}"
+                         + (" …" if len(zur_loeschung) > 10 else ""))
+        if nachgezogen:
+            teile.append(f"{nachgezogen} weitere Regel(n) wurden auf die neuen Zonen nachgezogen")
+        if teile:
+            result["detail"] = (result.get("detail", "") + " " if result.get("detail") else "") \
+                + ". ".join(teile) + "."
     return result
 
 
