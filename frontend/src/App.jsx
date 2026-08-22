@@ -69,7 +69,10 @@ function Layout({ children }) {
           </div>
         </div>
         <nav>
-          {user.role === 'change_approver' ? (
+          {user.role === 'admin' ? (
+            /* Fokussierte Ansicht: Admins verwalten Permitra, keine Regel-Sichten */
+            <Link to="/admin">{t('Administration')}</Link>
+          ) : user.role === 'change_approver' ? (
             <>
               {/* Verschlankte Ansicht: Approver sehen nur, was sie für Entscheidungen brauchen */}
               <Link to="/approvals">{t('Freigaben')}</Link>
@@ -80,9 +83,8 @@ function Layout({ children }) {
           ) : (
             <>
               <Link to="/">{t('Dashboard')}</Link>
-              {user.role === 'admin' && <Link to="/approvals">{t('Freigaben')}</Link>}
               <Link to="/rules">{t('Regeln')}</Link>
-              {(user.role === 'architect' || user.role === 'admin') && <Link to="/rules/new">{t('Neue Regel')}</Link>}
+              {user.role === 'architect' && <Link to="/rules/new">{t('Neue Regel')}</Link>}
               <Link to="/search">{t('Analyse')}</Link>
               <Link to="/recertification">{t('Rezertifizierung')}</Link>
               <Link to="/zones">{t('Sicherheitszonen')}</Link>
@@ -91,7 +93,6 @@ function Layout({ children }) {
               <Link to="/gateways">{t('ACI Gateways')}</Link>
               <Link to="/objects">{t('Objekte')}</Link>
               <Link to="/export">{t('Export')}</Link>
-              {user.role === 'admin' && <Link to="/admin">{t('Administration')}</Link>}
             </>
           )}
         </nav>
@@ -104,6 +105,7 @@ function Layout({ children }) {
 function Home() {
   // Change Approver starten fokussiert auf der Freigaben-Seite
   const user = getUser()
+  if (user?.role === 'admin') return <Navigate to="/admin" replace />
   if (user?.role === 'change_approver') return <Navigate to="/approvals" replace />
   return <Dashboard />
 }
