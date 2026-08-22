@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 @router.get("")
 def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     status_counts = dict(
-        db.query(Rule.status, func.count(Rule.id)).group_by(Rule.status).all()
+        db.query(Rule.status, func.count(Rule.id)).filter(Rule.deleted_at.is_(None)).group_by(Rule.status).all()
     )
     expired, expiring = expiring_rules(db, days=30)
 
@@ -38,7 +38,7 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
             "id": c.id,
             "name": c.name,
             "type": c.type.value,
-            "rules": db.query(Rule).filter(Rule.components.any(SecurityComponent.id == c.id)).count(),
+            "rules": db.query(Rule).filter(Rule.components.any(SecurityComponent.id == c.id), Rule.deleted_at.is_(None)).count(),
         }
         for c in db.query(SecurityComponent).order_by(SecurityComponent.name).all()
     ]
@@ -48,12 +48,13 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
 
     # Freigegebene mit offener Umsetzung + deaktivierte mit Rückbau ("zu löschen")
     candidate_rules = db.query(Rule).filter(
-        Rule.status.in_((RuleStatus.approved, RuleStatus.deactivated))
+        Rule.status.in_((RuleStatus.approved, RuleStatus.deactivated)),
+        Rule.deleted_at.is_(None)
     ).all()
     to_implement = sum(1 for r in candidate_rules if impl_pending(r))
 
     return {
-        "rules_total": db.query(Rule).count(),
+        "rules_total": db.query(Rule).filter(Rule.deleted_at.is_(None)).count(),
         "by_status": {s.value: status_counts.get(s, 0) for s in RuleStatus},
         "open_reviews": status_counts.get(RuleStatus.in_review, 0),
         "to_implement": to_implement,

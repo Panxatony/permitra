@@ -27,7 +27,7 @@ def expiring_rules(db: Session, days: int = 30) -> tuple[list[Rule], list[Rule]]
     horizon = today + timedelta(days=days)
     candidates = (
         db.query(Rule)
-        .filter(Rule.status == RuleStatus.approved, Rule.valid_until.isnot(None))
+        .filter(Rule.status == RuleStatus.approved, Rule.valid_until.isnot(None), Rule.deleted_at.is_(None))
         .filter(Rule.valid_until <= horizon.isoformat())
         .order_by(Rule.valid_until)
         .all()

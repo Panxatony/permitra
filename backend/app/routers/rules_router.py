@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -225,7 +225,7 @@ def list_rules(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    query = db.query(Rule)
+    query = db.query(Rule).filter(Rule.deleted_at.is_(None))
     if vrf:
         query = query.filter(Rule.vrf_id == get_vrf(db, vrf).id)
     if q:
@@ -714,13 +714,25 @@ def update_rule(
 
 @router.delete("/{rule_id}", status_code=204)
 def delete_rule(
+    request: Request,
     rule_id: str,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.admin)),
+    user: User = Depends(require_roles(Role.admin)),
 ):
+    """Soft-Delete: die Regel wird als gelöscht markiert (verschwindet aus
+    Listen/Exporten), die Versionshistorie bleibt für den Audit-Trail erhalten.
+    Der Löschvorgang wird revisionssicher protokolliert."""
+    from .. import audit
+    from ..models import utcnow as _now
+
     rule = get_rule_or_404(db, rule_id)
-    db.delete(rule)
+    if rule.deleted_at is not None:
+        return
+    rule.deleted_at = _now()
     db.commit()
+    audit.record(db, "rule", "rule.deleted", actor=user.username, object=rule.rule_id,
+                 detail=f"Regel gelöscht (Soft-Delete): {rule.name}",
+                 source_ip=(request.client.host if request and request.client else ""))
 
 
 # --- Review-Workflow ---------------------------------------------------------

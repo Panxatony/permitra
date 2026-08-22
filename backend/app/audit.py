@@ -20,9 +20,25 @@ import urllib.request
 
 from sqlalchemy.orm import Session
 
-from .models import Rule, RuleVersion, User, ZonePolicyChange
+from .models import AuditEvent, Rule, RuleVersion, User, ZonePolicyChange, utcnow
 
 log = logging.getLogger("permitra.audit")
+
+
+def record(db: Session, category: str, event: str, actor: str = "", object: str = "",
+           detail: str = "", source_ip: str = "", extra: dict | None = None) -> None:
+    """Schreibt EINEN Audit-Eintrag in den persistenten Append-only-Store und
+    pusht ihn optional an ein SIEM. Fehler dürfen den Vorgang nie blockieren."""
+    ev = {"category": category, "event": event, "actor": actor, "object": object,
+          "detail": detail, "source_ip": source_ip, "extra": extra}
+    try:
+        db.add(AuditEvent(ts=utcnow(), **{k: v for k, v in ev.items() if k != "extra"},
+                          extra=extra))
+        db.commit()
+    except Exception:  # Audit darf den fachlichen Vorgang nicht mitreißen
+        log.exception("Audit-Eintrag konnte nicht gespeichert werden")
+        db.rollback()
+    emit({"type": category, **ev, "timestamp": utcnow().isoformat()})
 
 
 def _iso(dt):
@@ -33,8 +49,23 @@ def collect(db: Session, since: str | None = None, limit: int = 500,
             event_type: str | None = None) -> list[dict]:
     """Chronologisches Audit-Log (neueste zuerst).
 
-    event_type: 'rule' | 'zone_change' | None (alle)."""
+    event_type: 'rule' | 'zone_change' | Kategorie des Stores | None (alle)."""
     events: list[dict] = []
+
+    # Persistenter Append-only-Store (rule.deleted, auth, admin, …)
+    aq = db.query(AuditEvent).order_by(AuditEvent.ts.desc())
+    if event_type:
+        aq = aq.filter(AuditEvent.category == event_type)
+    for a in aq.limit(2000).all():
+        events.append({
+            "type": a.category,
+            "event": a.event,
+            "object": a.object,
+            "actor": a.actor,
+            "detail": a.detail,
+            "source_ip": a.source_ip,
+            "timestamp": _iso(a.ts),
+        })
 
     if event_type in (None, "rule"):
         q = (

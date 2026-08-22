@@ -54,7 +54,7 @@ def aerleon(
             status.HTTP_404_NOT_FOUND,
             f"Unbekanntes Ziel '{target}'. Erlaubt: policy, {', '.join(aerleon_export.TARGETS)}",
         )
-    query = db.query(Rule)
+    query = db.query(Rule).filter(Rule.deleted_at.is_(None))
     if only_approved:
         query = query.filter(Rule.status == RuleStatus.approved)
     rules = query.order_by(Rule.rule_id).all()
@@ -99,7 +99,7 @@ def host_export(
     from ..vrf import get_vrf
 
     vrf_obj = get_vrf(db, vrf)
-    rules = db.query(Rule).filter(Rule.vrf_id == vrf_obj.id).order_by(Rule.rule_id).all()
+    rules = db.query(Rule).filter(Rule.vrf_id == vrf_obj.id, Rule.deleted_at.is_(None)).order_by(Rule.rule_id).all()
     content, used = hostfw.export(os_name, ip.strip(), rules)
     if not used:
         raise HTTPException(
@@ -129,7 +129,7 @@ def export(
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unbekanntes Format '{fmt}'")
     media_type, export_fn, filename = FORMATS[fmt]
 
-    query = db.query(Rule)
+    query = db.query(Rule).filter(Rule.deleted_at.is_(None))
     if ids:
         wanted = [i.strip() for i in ids.split(",") if i.strip()]
         query = query.filter(Rule.rule_id.in_(wanted))

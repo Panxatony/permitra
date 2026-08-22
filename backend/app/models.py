@@ -406,6 +406,26 @@ class NetboxConfig(Base):
     last_import_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AuditEvent(Base):
+    """Append-only Audit-Log für revisionssichere Compliance-Nachweise.
+
+    Einträge werden ausschließlich per INSERT geschrieben (kein UPDATE/DELETE
+    über die Anwendung). Ergänzt die Versions-/Antragshistorie um Ereignisse,
+    die sonst keinen dauerhaften Ort haben (Löschungen, später Auth/Admin)."""
+
+    __tablename__ = "audit_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    category: Mapped[str] = mapped_column(String(24), index=True)  # rule | zone | auth | admin | export
+    event: Mapped[str] = mapped_column(String(48))                 # z.B. rule.deleted
+    actor: Mapped[str] = mapped_column(String(64), default="")
+    object: Mapped[str] = mapped_column(String(128), default="")   # betroffenes Objekt (z.B. SR00042)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    source_ip: Mapped[str] = mapped_column(String(64), default="")
+    extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
 class NetboxPrefix(Base):
     """Aus NetBox importiertes Prefix (Staging). Wird in die Zonen-Registry
     übernommen, sobald ihm eine Zone zugeordnet wird (adopted=True)."""
@@ -525,6 +545,9 @@ class Rule(Base):
     created_by: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    # Soft-Delete: Regeln werden nicht physisch gelöscht, damit die
+    # Versionshistorie (Audit-Trail) revisionssicher erhalten bleibt
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def platforms(self) -> list[str]:
