@@ -82,3 +82,39 @@ def test_allow_change_has_no_rule_impact(db):
     result = _decide_change(db, change.id, user("kim", Role.change_approver), True, "")
     assert "reviews_reset" not in result
     assert db.query(Rule).filter(Rule.status == RuleStatus.approved).count() == 2
+
+
+def test_approve_of_blocked_rule_becomes_removal(db):
+    """Nach Matrix-Block: 'Freigeben' im Review = Löschungsfreigabe."""
+    from app.models import ComponentType, SecurityComponent, ZonePolicyChange
+    from app.routers.rules_router import _decide, impl_pending
+    from app.schemas import ReviewDecision
+
+    fw = SecurityComponent(name="FW-Test", type=ComponentType.juniper)
+    db.add(fw)
+    db.flush()
+    rule = db.query(Rule).filter(Rule.rule_id == "SR00001").one()
+    rule.components = [fw]
+    rule.impl_status = {"FW-Test": "umgesetzt"}
+    db.commit()
+
+    # Matrix auf Block stellen (setzt SR00001/SR00002 in den Review)
+    _create_batch(db, user("alex"), [
+        {"type": "policy", "from_zone": "MGMT", "to_zone": "PROD", "policy": "block_all"},
+    ], "")
+    change = db.query(ZonePolicyChange).filter(ZonePolicyChange.status == "pending").first()
+    _decide_change(db, change.id, user("chris", Role.change_approver), True, "")
+    _decide_change(db, change.id, user("kim", Role.change_approver), True, "")
+    db.refresh(rule)
+    assert rule.status == RuleStatus.in_review
+
+    result = _decide(db, "SR00001", user("chris", Role.change_approver),
+                     ReviewDecision(comment="Rückbau ok"), RuleStatus.approved, "Regel freigegeben")
+    assert result.status == RuleStatus.deactivated
+    assert result.impl_status["FW-Test"] == "zu löschen"
+    assert impl_pending(result)  # erscheint beim Betrieb als offene Umsetzung
+    assert any("Löschung freigegeben" in v.change_note for v in result.versions)
+
+    # Betrieb baut zurück und setzt "deaktiviert" -> nicht mehr offen
+    result.impl_status = {"FW-Test": "deaktiviert"}
+    assert not impl_pending(result)

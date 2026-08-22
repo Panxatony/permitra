@@ -29,7 +29,7 @@ def test_setting_default_and_update(db):
     assert get_setting(db, "zone_matrix_default") == "permit"  # Bestandsverhalten
     set_setting(db, "zone_matrix_default", "deny")
     assert get_setting(db, "zone_matrix_default") == "deny"
-    assert all_settings(db) == {"zone_matrix_default": "deny"}
+    assert all_settings(db)["zone_matrix_default"] == "deny"
     with pytest.raises(ValueError):
         set_setting(db, "zone_matrix_default", "quatsch")
     with pytest.raises(ValueError):

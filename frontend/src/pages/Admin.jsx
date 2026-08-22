@@ -129,6 +129,17 @@ export default function Admin() {
         <p className="muted small">
           {t('Bei default-deny werden neue Regeln für Zonen-Beziehungen ohne Matrix-Eintrag abgelehnt, bis die Beziehung per Matrixantrag (zwei Freigaben) auf Allow gesetzt ist.')}
         </p>
+        <h4 style={{ margin: '1rem 0 .4rem' }}>{t('Pflichtfelder für Regeln')}</h4>
+        {[['require_justification', t('Begründung (Anlass) ist Pflicht')],
+          ['require_requestor', t('Requestor (Verantwortlicher) ist Pflicht')],
+          ['require_valid_until', t('Ablaufdatum (Gültig-bis) erzwingen')]].map(([key, label]) => (
+          <label key={key} className="checkbox">
+            <input type="checkbox" checked={settings[key] === 'yes'}
+              onChange={(e) => act(() => api.updateSettings({ [key]: e.target.checked ? 'yes' : 'no' })
+                .then((s) => { setSettings(s); return { detail: t('Einstellung gespeichert') } }))} />
+            {label}
+          </label>
+        ))}
       </section>
 
       <form onSubmit={create} className="object-form card">

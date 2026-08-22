@@ -4,7 +4,7 @@ import { api, getUser } from '../api'
 import { AddressList, ComponentBadges, Highlighted, ServiceList, StatusBadge } from '../components/shared'
 import { useLang } from '../i18n'
 
-const IMPL_OPTIONS = ['offen', 'neu', 'zu ändern', 'umgesetzt', 'deaktiviert']
+const IMPL_OPTIONS = ['offen', 'neu', 'zu ändern', 'zu löschen', 'umgesetzt', 'deaktiviert']
 
 export default function RuleDetail() {
   const { id } = useParams()
@@ -126,16 +126,26 @@ export default function RuleDetail() {
                 {t('Bearbeiten (setzt Review zurück)')}
               </button>
             )}
-            {isApprover && rule.status === 'in_review' && (
-              <div className="review-box">
-                <textarea rows={2} placeholder={t('Review-Kommentar (optional)')} value={reviewComment}
-                  onChange={(e) => setReviewComment(e.target.value)} />
-                <div>
-                  <button className="btn btn-approve" onClick={act(() => api.approve(id, reviewComment))}>{t('✓ Freigeben')}</button>
-                  <button className="btn btn-reject" onClick={act(() => api.reject(id, reviewComment))}>{t('✕ Ablehnen')}</button>
+            {isApprover && rule.status === 'in_review' && (() => {
+              const zoneBlocked = conflicts.some((c) => c.kind === 'zone-blocked')
+              return (
+                <div className="review-box">
+                  {zoneBlocked && (
+                    <div className="warnbox">
+                      ⚠ {t('Die Zonen-Beziehung ist auf Block – „Freigeben" bestätigt die Löschung: Die Regel wird deaktiviert, je Komponente auf „zu löschen" gesetzt und erscheint beim Betrieb als offene Umsetzung (Rückbau).')}
+                    </div>
+                  )}
+                  <textarea rows={2} placeholder={t('Review-Kommentar (optional)')} value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)} />
+                  <div>
+                    <button className="btn btn-approve" onClick={act(() => api.approve(id, reviewComment))}>
+                      {zoneBlocked ? `✓ ${t('Löschung freigeben')}` : t('✓ Freigeben')}
+                    </button>
+                    <button className="btn btn-reject" onClick={act(() => api.reject(id, reviewComment))}>{t('✕ Ablehnen')}</button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
             {rule.status === 'approved' && (isOps || isArchitect) && (
               <button className="btn btn-ghost" onClick={act(() => api.deactivate(id, reviewComment))}>{t('Regel deaktivieren')}</button>
             )}

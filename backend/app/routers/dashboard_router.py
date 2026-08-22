@@ -46,8 +46,11 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
     # Umzusetzende Regeln: freigegeben, aber auf mind. einer Komponente noch offen
     from .rules_router import impl_pending
 
-    approved_rules = db.query(Rule).filter(Rule.status == RuleStatus.approved).all()
-    to_implement = sum(1 for r in approved_rules if impl_pending(r))
+    # Freigegebene mit offener Umsetzung + deaktivierte mit Rückbau ("zu löschen")
+    candidate_rules = db.query(Rule).filter(
+        Rule.status.in_((RuleStatus.approved, RuleStatus.deactivated))
+    ).all()
+    to_implement = sum(1 for r in candidate_rules if impl_pending(r))
 
     return {
         "rules_total": db.query(Rule).count(),

@@ -315,6 +315,16 @@ const EN = {
   // Einstellungen (default-deny)
   'Einstellungen': 'Settings',
   'Einstellung gespeichert': 'Setting saved',
+  'Pflichtfelder für Regeln': 'Mandatory fields for rules',
+  'Begründung (Anlass) ist Pflicht': 'Justification (reason) is mandatory',
+  'Requestor (Verantwortlicher) ist Pflicht': 'Requestor (owner) is mandatory',
+  'Ablaufdatum (Gültig-bis) erzwingen': 'Enforce expiry date (valid until)',
+  'Löschung freigeben': 'Approve removal',
+  'Beziehung: Block → Löschung': 'Relationship: block → removal',
+  'Die Zonen-Beziehung ist auf Block – Freigeben bestätigt die Löschung der Regel.':
+    'The zone relationship is set to block – approving confirms removal of the rule.',
+  'Die Zonen-Beziehung ist auf Block – „Freigeben" bestätigt die Löschung: Die Regel wird deaktiviert, je Komponente auf „zu löschen" gesetzt und erscheint beim Betrieb als offene Umsetzung (Rückbau).':
+    'The zone relationship is set to block – "approve" confirms removal: the rule is deactivated, each component is set to "zu löschen" and it appears for operations as open implementation work (decommissioning).',
   'Zonen-Matrix: Verhalten für ungepflegte Zonen-Beziehungen':
     'Zone matrix: behaviour for unmaintained zone relationships',
   'default-permit – erlaubt mit Hinweis (Bestandsverhalten)':

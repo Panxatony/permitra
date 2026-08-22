@@ -168,6 +168,24 @@ def enforce_zone_matrix(db: Session, source_zone: str, destination_zone: str, pl
         )
 
 
+def enforce_required_fields(db: Session, payload):
+    """Konfigurierbare Pflichtfelder (Admin-Einstellungen, BSI-Dokumentationspflichten)."""
+    from ..settings import get_setting
+
+    missing = []
+    if get_setting(db, "require_justification") == "yes" and not (payload.justification or "").strip():
+        missing.append("Begründung (Anlass)")
+    if get_setting(db, "require_requestor") == "yes" and not (payload.requestor or "").strip():
+        missing.append("Requestor (Verantwortlicher)")
+    if get_setting(db, "require_valid_until") == "yes" and not (payload.valid_until or "").strip():
+        missing.append("Gültig-bis (Ablaufdatum)")
+    if missing:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Pflichtfelder fehlen: " + ", ".join(missing),
+        )
+
+
 def add_version(db: Session, rule: Rule, user: User, note: str):
     db.add(
         RuleVersion(
@@ -258,11 +276,14 @@ def list_rules(
 
 
 def impl_pending(rule: Rule) -> bool:
-    """Freigegebene Regel, die auf mindestens einer Komponente noch umzusetzen ist
-    (Umsetzungsstatus fehlt, "offen", "neu" oder "zu ändern")."""
+    """Regel mit offener Umsetzung: freigegeben und auf mindestens einer
+    Komponente noch nicht umgesetzt (fehlt, "offen", "neu", "zu ändern") –
+    oder für den Rückbau markiert ("zu löschen", z.B. nach Matrix-Block)."""
+    impl = rule.impl_status or {}
+    if any(impl.get(c.name) == "zu löschen" for c in rule.components):
+        return True
     if rule.status != RuleStatus.approved or not rule.components:
         return False
-    impl = rule.impl_status or {}
     return any(impl.get(c.name) not in ("umgesetzt", "deaktiviert") for c in rule.components)
 
 
@@ -582,6 +603,7 @@ def create_rule(
     # Rule-ID wird immer vom System vergeben (fortlaufend, eindeutig, nicht änderbar).
     # Bei parallelen Anlagen schützt der Unique-Constraint; dann neue Nummer versuchen.
     vrf = get_vrf(db, payload.vrf or None)
+    enforce_required_fields(db, payload)
     for _ in range(5):
         derive_zones(db, payload, vrf.id)
         components = determine_components(db, payload, vrf.id)
@@ -620,6 +642,7 @@ def update_rule(
 ):
     rule = get_rule_or_404(db, rule_id)
     vrf = get_vrf(db, payload.vrf or None) if payload.vrf else rule.vrf
+    enforce_required_fields(db, payload)
     derive_zones(db, payload, vrf.id)
     components = determine_components(db, payload, vrf.id)
     enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
@@ -741,6 +764,37 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     rule = get_rule_or_404(db, rule_id)
     if new_status in (RuleStatus.approved, RuleStatus.rejected) and rule.status != RuleStatus.in_review:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Regel ist nicht im Review")
+    # Steht die Zonen-Beziehung der Regel auf Block (z.B. nach einer
+    # Matrix-Änderung), ist "Freigeben" die Löschungsfreigabe: Die Regel wird
+    # deaktiviert und je Komponente auf "zu löschen" gesetzt – sie erscheint
+    # damit beim Betrieb als offene Umsetzung (Rückbau auf den Geräten).
+    if new_status == RuleStatus.approved:
+        verdict = check_zone_pair(db, rule.source_zone, rule.destination_zone,
+                                  rule.platforms or [])
+        if not verdict.allowed:
+            rule.status = RuleStatus.deactivated
+            rule.impl_status = {
+                **(rule.impl_status or {}),
+                **{c.name: "zu löschen" for c in rule.components
+                   if (rule.impl_status or {}).get(c.name) != "deaktiviert"},
+            }
+            rule.version += 1
+            removal_note = (f"Löschung freigegeben: Zonen-Beziehung "
+                            f"{rule.source_zone} → {rule.destination_zone} ist Block – "
+                            f"Regel auf den Komponenten entfernen ('zu löschen')")
+            add_version(db, rule, user, removal_note)
+            db.add(Comment(rule_pk=rule.id, author=user.username,
+                           text=(decision.comment + "\n" if decision.comment else "") + removal_note))
+            db.commit()
+            db.refresh(rule)
+            from .. import change_management
+
+            change_management.notify(
+                "rule.delete_approved",
+                {**change_management.rule_payload(rule),
+                 "decided_by": user.username, "comment": decision.comment},
+            )
+            return rule
     rule.status = new_status
     if new_status == RuleStatus.approved:
         # Bereits umgesetzte Komponenten müssen nach einer erneuten Freigabe vom

@@ -15,11 +15,21 @@ export default function Approvals() {
 
   const load = useCallback(async () => {
     try {
-      const [rules, changes] = await Promise.all([
+      const [rules, changes, matrix, settings] = await Promise.all([
         api.rules({ status: 'in_review', limit: 200 }),
         api.matrixChanges(),
+        api.zoneMatrix().catch(() => ({ policies: [] })),
+        api.settings().catch(() => ({})),
       ])
-      setReviews(rules.items)
+      const policyMap = {}
+      matrix.policies.forEach((p) => { policyMap[`${p.from_zone}|${p.to_zone}`] = p.policy })
+      const denyDefault = settings.zone_matrix_default === 'deny'
+      setReviews(rules.items.map((r) => {
+        const key = `${r.source_zone}|${r.destination_zone}`
+        const policy = policyMap[key]
+        const intra = (r.source_zone || '').toUpperCase() === (r.destination_zone || '').toUpperCase()
+        return { ...r, zone_blocked: !intra && (policy === 'block_all' || (denyDefault && !policy)) }
+      }))
       const pending = changes.filter((c) => c.status === 'pending')
       const byBatch = {}
       const grouped = []
@@ -116,12 +126,22 @@ export default function Approvals() {
                   <tr key={r.rule_id}>
                     <td><Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link></td>
                     <td>{r.name}</td>
-                    <td>{r.source_zone} → {r.destination_zone}</td>
+                    <td>
+                      {r.source_zone} → {r.destination_zone}
+                      {r.zone_blocked && (
+                        <div><span className="badge status-rejected"
+                          title={t('Die Zonen-Beziehung ist auf Block – Freigeben bestätigt die Löschung der Regel.')}>
+                          ⚠ {t('Beziehung: Block → Löschung')}
+                        </span></div>
+                      )}
+                    </td>
                     <td className="small">{fmtAddr(r.source)}</td>
                     <td className="small">{fmtAddr(r.destination)}</td>
                     <td>{r.created_by}</td>
                     <td className="row-actions">
-                      <button className="btn btn-primary" onClick={() => decideRule(r, true)}>{t('Freigeben')}</button>
+                      <button className="btn btn-primary" onClick={() => decideRule(r, true)}>
+                        {r.zone_blocked ? t('Löschung freigeben') : t('Freigeben')}
+                      </button>
                       <button className="btn btn-ghost" onClick={() => decideRule(r, false)}>{t('Ablehnen')}</button>
                     </td>
                   </tr>

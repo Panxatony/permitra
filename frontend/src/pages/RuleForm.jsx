@@ -50,6 +50,8 @@ export default function RuleForm() {
   const [components, setComponents] = useState([])
   const [zoneCheck, setZoneCheck] = useState(null)
   const [resolved, setResolved] = useState({ components: [], unknown: [] })
+  const [reqSettings, setReqSettings] = useState({})
+  useEffect(() => { api.settings().then(setReqSettings).catch(() => {}) }, [])
   const [assignments, setAssignments] = useState({}) // ip -> [componentIds] für neue Adressen
   const [changeNote, setChangeNote] = useState('')
   const [error, setError] = useState('')
@@ -379,15 +381,21 @@ export default function RuleForm() {
 
       <fieldset>
         <legend>{t('Metadaten')}</legend>
-        <label>{t('Anlass / Begründung')}<textarea rows={2} value={form.justification} onChange={set('justification')} /></label>
+        <label>{t('Anlass / Begründung')}{reqSettings.require_justification === 'yes' && ' *'}
+          <textarea rows={2} value={form.justification} onChange={set('justification')}
+            required={reqSettings.require_justification === 'yes'} /></label>
         <label>{t('Beschreibung')}<textarea rows={2} value={form.description} onChange={set('description')} /></label>
         <div className="grid-3">
-          <label>Requestor<input value={form.requestor} onChange={set('requestor')} /></label>
+          <label>Requestor{reqSettings.require_requestor === 'yes' && ' *'}
+            <input value={form.requestor} onChange={set('requestor')}
+              required={reqSettings.require_requestor === 'yes'} /></label>
           <label>Bearbeiter / Verantwortlich<input value={form.owner} onChange={set('owner')} /></label>
           <label>Change-ID<input value={form.change_id} onChange={set('change_id')} placeholder="z.B. CHN0000273" /></label>
           <label>Fachlicher Bezug<input value={form.business_context} onChange={set('business_context')} /></label>
           <label>{t('Gültig ab')}<input type="date" value={form.valid_from} onChange={set('valid_from')} /></label>
-          <label>{t('Gültig bis')}<input type="date" value={form.valid_until} onChange={set('valid_until')} /></label>
+          <label>{t('Gültig bis')}{reqSettings.require_valid_until === 'yes' && ' *'}
+            <input type="date" value={form.valid_until} onChange={set('valid_until')}
+              required={reqSettings.require_valid_until === 'yes'} /></label>
         </div>
         <label>Info<textarea rows={2} value={form.info} onChange={set('info')} /></label>
         {isEdit && (
