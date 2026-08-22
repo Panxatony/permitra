@@ -34,6 +34,12 @@ services:
       # Change-Management-Webhook (z.B. ServiceNow)
       CHANGE_WEBHOOK_URL: ${CHANGE_WEBHOOK_URL:-}
       CHANGE_WEBHOOK_TOKEN: ${CHANGE_WEBHOOK_TOKEN:-}
+      # SIEM-Anbindung des Audit-Logs (leer = aus). Ist ein Ziel gesetzt, werden
+      # Ereignisse persistent vorgemerkt und zuverlässig zugestellt (at-least-once).
+      AUDIT_WEBHOOK_URL: ${AUDIT_WEBHOOK_URL:-}
+      AUDIT_SYSLOG_HOST: ${AUDIT_SYSLOG_HOST:-}
+      AUDIT_SYSLOG_PORT: ${AUDIT_SYSLOG_PORT:-514}
+      AUDIT_SYSLOG_PROTO: ${AUDIT_SYSLOG_PROTO:-udp}
     depends_on:
       db:
         condition: service_healthy

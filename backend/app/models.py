@@ -425,6 +425,19 @@ class AuditEvent(Base):
     source_ip: Mapped[str] = mapped_column(String(64), default="")
     extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
+    # Integritätssicherung (Hash-Kette, #26): hash = SHA-256 über den Inhalt
+    # dieses Ereignisses UND den hash des Vorgängers. Jede nachträgliche
+    # Änderung an einem Ereignis oder der Reihenfolge bricht die Kette.
+    prev_hash: Mapped[str] = mapped_column(String(64), default="")
+    hash: Mapped[str] = mapped_column(String(64), default="", index=True)
+
+    # Zuverlässige SIEM-Zustellung (durables Outbox-Muster, #26). Diese Spalten
+    # sind bewusst NICHT Teil des gehashten Inhalts – sie sind veränderliche
+    # Betriebsmetadaten und dürfen aktualisiert werden, ohne die Kette zu brechen.
+    siem_status: Mapped[str] = mapped_column(String(12), default="skipped", index=True)  # pending | sent | skipped
+    siem_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    siem_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 
 class NetboxPrefix(Base):
     """Aus NetBox importiertes Prefix (Staging). Wird in die Zonen-Registry

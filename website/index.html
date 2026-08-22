@@ -284,10 +284,13 @@
         <h3><span class="lang-de">Revisionssichere Protokollierung &amp; SIEM</span><span class="lang-en">Tamper-evident logging &amp; SIEM</span></h3>
         <p>
           <span class="lang-de">Anmelde-, Admin- und Zugriffsereignisse werden append-only mit Quell-IP protokolliert
-          (Regeln werden soft-gelöscht, nie zerstört) und lassen sich per Syslog oder Webhook
-          an ein SIEM streamen.</span>
-          <span class="lang-en">Sign-in, admin and access events are logged append-only with source IP (rules are
-          soft-deleted, never destroyed) and can be streamed to a SIEM via syslog or webhook.</span>
+          und per SHA-256-Hash-Kette gegen Manipulation gesichert – jede nachträgliche Änderung
+          fällt auf, auch direkt in der Datenbank. Die Zustellung an ein SIEM erfolgt zuverlässig
+          (at-least-once) und übersteht Neustarts wie Ausfälle.</span>
+          <span class="lang-en">Sign-in, admin and access events are logged append-only with source IP and secured
+          against tampering by a SHA-256 hash chain – any later change stands out, even one made
+          directly in the database. Delivery to a SIEM is reliable (at-least-once) and survives
+          restarts as well as outages.</span>
         </p>
       </div>
       <div class="card">
@@ -376,7 +379,9 @@
           <li><span class="lang-de">Soll-Ist-Abgleich (Drift) gegen Gerätekonfigurationen</span><span class="lang-en">Drift comparison against device configurations</span></li>
           <li><span class="lang-de">Erzwingbare Pflichtfelder je Regel: Begründung, Verantwortlicher und Gültigkeit (administrativ schaltbar)</span><span class="lang-en">Enforceable mandatory fields per rule: justification, owner and validity (toggled by admins)</span></li>
           <li><span class="lang-de">Risikoanalyse: Warnungen bei any-to-any und riskanten Diensten, CIA-gewichtete Bewertung</span><span class="lang-en">Risk analysis: warnings for any-to-any and risky services, CIA-weighted scoring</span></li>
-          <li><span class="lang-de">Revisionssicheres Audit-Log: Anmelde-, Admin- und Zugriffsereignisse mit Quell-IP, append-only mit Soft-Delete, SIEM-Anbindung (Syslog/Webhook)</span><span class="lang-en">Tamper-evident audit log: sign-in, admin and access events with source IP, append-only with soft-delete, SIEM streaming (syslog/webhook)</span></li>
+          <li><span class="lang-de">Revisionssicheres Audit-Log: Anmelde-, Admin- und Zugriffsereignisse mit Quell-IP, append-only mit Soft-Delete</span><span class="lang-en">Tamper-evident audit log: sign-in, admin and access events with source IP, append-only with soft-delete</span></li>
+          <li><span class="lang-de">Manipulationserkennung per Hash-Kette (SHA-256): jede Änderung, Umsortierung oder Entfernung eines Eintrags wird erkannt – auch direkt in der Datenbank</span><span class="lang-en">Tamper detection via SHA-256 hash chain: any change, reordering or removal of an entry is detected – even directly in the database</span></li>
+          <li><span class="lang-de">Zuverlässige SIEM-Zustellung (at-least-once): Ereignisse überstehen Neustarts und Ausfälle des SIEM und werden in Reihenfolge nachgeliefert (Syslog/Webhook)</span><span class="lang-en">Reliable SIEM delivery (at-least-once): events survive restarts and sink outages and are delivered in order once it returns (syslog/webhook)</span></li>
           <li><span class="lang-de">E-Mail-Benachrichtigungen für Review, Freigabe und Rezertifizierung; Aktivierung/Reset</span><span class="lang-en">Email notifications for review, approval and recertification; activation/reset</span></li>
           <li><span class="lang-de">Authentisierung: 2FA (TOTP) und Passkeys, Login-Sperre nach Fehlversuchen, rollenbasierte Rechte</span><span class="lang-en">Authentication: 2FA (TOTP) and passkeys, login lockout after failed attempts, role-based access</span></li>
           <li><span class="lang-de">Automatisierung: read-only API-Tokens (Ansible/Terraform) und NetBox-Import der Netz-Prefixe</span><span class="lang-en">Automation: read-only API tokens (Ansible/Terraform) and NetBox import of network prefixes</span></li>
@@ -385,8 +390,8 @@
       <div class="bsi-col bsi-part">
         <h3>🟡 <span class="lang-de">Teilweise</span><span class="lang-en">Partially</span></h3>
         <ul>
-          <li><span class="lang-de">Integritätssicherung des Audit-Logs: append-only und SIEM-Push vorhanden; kryptographische Hash-Kette und garantierte At-least-once-Zustellung geplant</span><span class="lang-en">Audit-log integrity: append-only and SIEM push in place; cryptographic hash chain and guaranteed at-least-once delivery planned</span></li>
           <li><span class="lang-de">Change-Management: generischer Webhook vorhanden, konkreter ServiceNow-Adapter offen</span><span class="lang-en">Change management: generic webhook available, concrete ServiceNow adapter open</span></li>
+          <li><span class="lang-de">Aufbewahrungsfristen und Archivierung des Audit-Logs: Nachweise bleiben dauerhaft erhalten, eine automatische Rotation/Archivierung nach Frist fehlt noch</span><span class="lang-en">Retention and archiving of the audit log: evidence is kept indefinitely, automatic rotation/archiving after a retention period is still missing</span></li>
         </ul>
       </div>
       <div class="bsi-col bsi-open">

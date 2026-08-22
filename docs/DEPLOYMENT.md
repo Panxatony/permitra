@@ -19,7 +19,7 @@ docker compose exec backend python seed_demo.py --wipe   # optional demo data
 - Data is stored in the `pgdata` volume.
 - **Backup:** `scripts/backup.sh` (pg_dump, 14 generations) via cron, or `docker compose exec db pg_dump -U permitra permitra > backup.sql`.
 - **Update:** `git pull && docker compose up --build -d` — schema changes run automatically via Alembic migrations at startup.
-- **Optional environment variables** (see README for details): `SMTP_*` + `PERMITRA_BASE_URL` (email delivery and links), `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (passkeys/WebAuthn), `CHANGE_WEBHOOK_URL`/`CHANGE_WEBHOOK_TOKEN` (change management webhook).
+- **Optional environment variables** (see README for details): `SMTP_*` + `PERMITRA_BASE_URL` (email delivery and links), `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (passkeys/WebAuthn), `CHANGE_WEBHOOK_URL`/`CHANGE_WEBHOOK_TOKEN` (change management webhook), `AUDIT_WEBHOOK_URL` and/or `AUDIT_SYSLOG_HOST`/`AUDIT_SYSLOG_PORT`/`AUDIT_SYSLOG_PROTO` (SIEM delivery of the audit log).
 
 ## Option B: Kubernetes
 
@@ -46,4 +46,4 @@ Recommended for production: a managed PostgreSQL service or operator (e.g. Cloud
 4. Enable **2FA/passkeys** for accounts, or connect **LDAP/AD** instead of local accounts (extension point: `auth.py`).
 5. Database access only from the backend network; regular dumps.
 6. **Rate limiting**: the app locks an account for `LOGIN_LOCK_MINUTES` (default 15) after `LOGIN_MAX_FAILS` (default 5) failed logins; additionally rate-limit at the reverse proxy (see the public demo: strict limit on `/api/auth/login`, moderate limit on `/api/`).
-7. Audit: the version history covers the application level; additionally collect central API logs.
+7. **Audit**: the version history plus the append-only event store (sign-in, administration, data access — with source IP) cover the application level. Verify the hash chain regularly via `GET /api/audit-log/verify` (or the admin area) — it detects any change, reordering or removal of an event, including edits made directly in the database. Configure a SIEM sink (`AUDIT_WEBHOOK_URL` or `AUDIT_SYSLOG_HOST`) so evidence is also held outside the application: events are queued durably and delivered at-least-once, surviving restarts and sink outages; watch `GET /api/audit-log/siem-status` for a growing `pending` count. Set `AUDIT_SYSLOG_PROTO=tcp` for acknowledged syslog delivery (UDP is best-effort). Behind a reverse proxy, pass `X-Forwarded-For` so the recorded source IP is the real client. Additionally collect central API logs.

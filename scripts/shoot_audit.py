@@ -68,10 +68,16 @@ with sync_playwright() as p:
     )
     page.goto(f"{BASE}/admin", wait_until="networkidle")
     time.sleep(2.5)
-    # Audit-Log-Karte gezielt aufnehmen
+    # Audit-Log-Karte gezielt aufnehmen – vorher die Integritätsprüfung auslösen (#26)
     card = page.locator("section.card", has=page.get_by_text("Audit-Log")).last
     card.scroll_into_view_if_needed()
     time.sleep(0.5)
+    try:
+        card.get_by_role("button", name="Integrität prüfen").click()
+        page.wait_for_load_state("networkidle")
+        time.sleep(1.0)
+    except Exception as exc:
+        print(f"Hinweis: Integritätsprüfung nicht ausgelöst ({exc})")
     card.screenshot(path=f"{OUT}/admin-audit.png")
     print("shot admin-audit.png (audit card)")
     browser.close()

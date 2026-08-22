@@ -124,6 +124,8 @@ export const api = {
   updateSettings: (p) => request('/api/settings', { method: 'PUT', body: p }),
   users: () => request('/api/users'),
   auditLog: (params = {}) => request(`/api/audit-log?${new URLSearchParams(params)}`),
+  auditVerify: () => request('/api/audit-log/verify'),
+  auditSiemStatus: () => request('/api/audit-log/siem-status'),
   netboxConfig: () => request('/api/netbox/config'),
   setNetboxConfig: (p) => request('/api/netbox/config', { method: 'PUT', body: p }),
   netboxTest: () => request('/api/netbox/test', { method: 'POST' }),

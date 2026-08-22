@@ -95,11 +95,34 @@ async def expiry_job():
         await asyncio.sleep(24 * 3600)
 
 
+async def siem_delivery_job():
+    """Stellt ausstehende Audit-Ereignisse zuverlässig an ein SIEM zu (#26).
+    Der Zustand liegt in der Datenbank, deshalb übersteht die Zustellung
+    Neustarts (at-least-once). Läuft nur, wenn ein SIEM-Ziel konfiguriert ist."""
+    from . import audit
+
+    while True:
+        try:
+            if audit.push_enabled():
+                db = SessionLocal()
+                try:
+                    result = audit.deliver_pending(db)
+                    if result.get("sent"):
+                        logger.info("SIEM-Zustellung: %d Ereignis(se) gesendet, "
+                                    "%d ausstehend", result["sent"], result["pending"])
+                finally:
+                    db.close()
+        except Exception:  # Zustell-Job darf die App nie mitreißen
+            logger.exception("SIEM-Zustellung fehlgeschlagen")
+        await asyncio.sleep(10)
+
+
 @app.on_event("startup")
 def startup():
     run_migrations()
     seed_users()
     asyncio.get_event_loop().create_task(expiry_job())
+    asyncio.get_event_loop().create_task(siem_delivery_job())
 
 
 @app.get("/api/health")

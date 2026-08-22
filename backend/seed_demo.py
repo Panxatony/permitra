@@ -15,6 +15,7 @@ from app.database import Base, SessionLocal, engine
 from app.models import (
     Setting,
     AciGateway,
+    AuditEvent,
     AddressComponentMap,
     AddressEpgMap,
     AddressObject,
@@ -167,7 +168,10 @@ def seed(wipe: bool):
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     if wipe:
-        for model in (Setting, Comment, RuleVersion, Rule, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
+        # AuditEvent gehört zum Demo-Reset: der Wipe verwirft die komplette
+        # Regel-Historie, sonst verwiesen alte Ereignisse auf gelöschte Regeln
+        # und die Hash-Kette trüge Reste des vorherigen Demo-Zyklus (#26).
+        for model in (AuditEvent, Setting, Comment, RuleVersion, Rule, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
                       AddressComponentMap, AddressEpgMap, Epg, AddressObject,
                       ServiceObject, ComponentLink, SecurityComponent, Vrf):
             db.query(model).delete()

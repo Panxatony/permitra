@@ -890,9 +890,8 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
         {**change_management.rule_payload(rule),
          "decided_by": user.username, "comment": decision.comment},
     )
-    audit.emit({"type": "rule", "event": f"rule.{new_status.value}", "object": rule.rule_id,
-                "actor": user.username, "detail": decision.comment,
-                "timestamp": rule.updated_at.isoformat() if rule.updated_at else None})
+    audit.record(db, "rule", f"rule.{new_status.value}", actor=user.username,
+                 object=rule.rule_id, detail=(decision.comment or note))
     if new_status in (RuleStatus.approved, RuleStatus.rejected):
         notifications.rule_decided(db, rule, new_status == RuleStatus.approved,
                                    user.username, decision.comment)

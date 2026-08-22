@@ -17,6 +17,8 @@ export default function Admin() {
   const [link, setLink] = useState('')
   const [settings, setSettings] = useState({})
   const [audit, setAudit] = useState([])
+  const [integrity, setIntegrity] = useState(null)
+  const [siem, setSiem] = useState(null)
   const [tokens, setTokens] = useState([])
   const [tokenName, setTokenName] = useState('')
   const [newToken, setNewToken] = useState('')
@@ -27,6 +29,7 @@ export default function Admin() {
     api.users().then(setUsers).catch((e) => setError(e.message))
     api.settings().then(setSettings).catch(() => setSettings({}))
     api.auditLog({ limit: 50 }).then(setAudit).catch(() => setAudit([]))
+    api.auditSiemStatus().then(setSiem).catch(() => setSiem(null))
     api.apiTokens().then(setTokens).catch(() => setTokens([]))
     api.netboxConfig().then((c) => { setNetbox(c); setNbForm((f) => ({ ...f, url: c.url, verify_tls: c.verify_tls, statuses: c.statuses || 'active,reserved' })) })
       .catch(() => setNetbox(null))
@@ -284,6 +287,25 @@ export default function Admin() {
 
       <section className="card" style={{ marginTop: '1rem' }}>
         <h3>{t('Audit-Log')} <span className="muted small">{t('(letzte 50 Ereignisse; vollständig über die API /api/audit-log für SIEM)')}</span></h3>
+        <div className="row" style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '.8rem' }}>
+          <button className="btn btn-ghost" onClick={() => act(async () => {
+            const r = await api.auditVerify(); setIntegrity(r); return {}
+          })}>{t('Integrität prüfen')}</button>
+          {integrity && (integrity.ok
+            ? <span className="pill" style={{ background: '#e6f4ea', color: '#1e7e34', borderColor: '#bfe3ca' }}>
+                ✓ {t('Kette unversehrt')} ({integrity.checked} {t('Einträge')})
+              </span>
+            : <span className="pill" style={{ background: '#fdecea', color: '#b3261e', borderColor: '#f3c1bc' }}>
+                ✗ {t('Kette verletzt')} – ID {integrity.broken_at_id}: {integrity.reason}
+              </span>)}
+          {siem && (
+            <span className="muted small">
+              {t('SIEM-Zustellung')}: {siem.enabled ? t('aktiv') : t('nicht konfiguriert')}
+              {' · '}{t('ausstehend')}: {siem.pending} · {t('gesendet')}: {siem.sent}
+              {siem.skipped ? ` · ${t('ohne Ziel')}: ${siem.skipped}` : ''}
+            </span>
+          )}
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
