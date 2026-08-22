@@ -144,6 +144,8 @@ export const api = {
   createRule: (payload) => request('/api/rules', { method: 'POST', body: { vrf: getVrfName(), ...payload } }),
   updateRule: (id, payload) => request(`/api/rules/${id}`, { method: 'PUT', body: { vrf: getVrfName(), ...payload } }),
   deleteRule: (id) => request(`/api/rules/${id}`, { method: 'DELETE' }),
+  restoreRule: (id, version) =>
+    request(`/api/rules/${id}/restore/${version}`, { method: 'POST' }),
   submit: (id) => request(`/api/rules/${id}/submit`, { method: 'POST' }),
   approve: (id, comment) => request(`/api/rules/${id}/approve`, { method: 'POST', body: { comment } }),
   reject: (id, comment) => request(`/api/rules/${id}/reject`, { method: 'POST', body: { comment } }),

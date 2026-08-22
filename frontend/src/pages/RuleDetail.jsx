@@ -208,7 +208,7 @@ export default function RuleDetail() {
           <div className="table-wrap">
             <table>
               <thead>
-                <tr><th>{t('Version')}</th><th>{t('Änderung')}</th><th>{t('Von')}</th><th>{t('Zeitpunkt')}</th></tr>
+                <tr><th>{t('Version')}</th><th>{t('Änderung')}</th><th>{t('Von')}</th><th>{t('Zeitpunkt')}</th><th></th></tr>
               </thead>
               <tbody>
                 {rule.versions.map((v) => (
@@ -217,6 +217,18 @@ export default function RuleDetail() {
                     <td>{v.change_note}</td>
                     <td>{v.changed_by}</td>
                     <td>{new Date(v.changed_at).toLocaleString('de-DE')}</td>
+                    <td className="row-actions">
+                      {isArchitect && v.version < rule.version && (
+                        <button className="btn btn-ghost"
+                          title={t('Stellt diesen Stand als neuen Entwurf wieder her (normaler Review-Workflow)')}
+                          onClick={() => {
+                            if (!window.confirm(`${t('Regel auf Version')} v${v.version} ${t('zurücksetzen? Der Stand wird als neuer Entwurf wiederhergestellt.')}`)) return
+                            act(() => api.restoreRule(id, v.version))()
+                          }}>
+                          ↩ {t('Wiederherstellen')}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

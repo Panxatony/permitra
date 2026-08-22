@@ -95,6 +95,12 @@ const EN = {
   'Kommentieren': 'Comment',
   'Kommentar für das Review…': 'Comment for the review…',
   'Versionshistorie': 'Version history',
+  'Wiederherstellen': 'Restore',
+  'Regel auf Version': 'Reset rule to version',
+  'zurücksetzen? Der Stand wird als neuer Entwurf wiederhergestellt.':
+    '? The state will be restored as a new draft.',
+  'Stellt diesen Stand als neuen Entwurf wieder her (normaler Review-Workflow)':
+    'Restores this state as a new draft (normal review workflow)',
   'Umsetzung auf den Komponenten': 'Implementation on the components',
   // Formular
   'Regel anlegen': 'Create rule',

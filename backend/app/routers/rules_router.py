@@ -657,6 +657,63 @@ def delete_rule(
 
 # --- Review-Workflow ---------------------------------------------------------
 
+@router.post("/{rule_id}/restore/{version}", response_model=RuleOut)
+def restore_version(
+    rule_id: str,
+    version: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect)),
+):
+    """Rollback: stellt den Snapshot einer früheren Version als neuen Entwurf
+    wieder her. Die wiederhergestellten Inhalte durchlaufen dieselben Prüfungen
+    wie eine Änderung (Zonen-Ableitung, Matrix, BSI, Komponenten) und den
+    normalen Review-Workflow; der Umsetzungsstatus bleibt unangetastet."""
+    rule = get_rule_or_404(db, rule_id)
+    entry = (
+        db.query(RuleVersion)
+        .filter(RuleVersion.rule_pk == rule.id, RuleVersion.version == version)
+        .first()
+    )
+    if not entry or not isinstance(entry.snapshot, dict) or "source" not in entry.snapshot:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            f"Version {version} hat keinen wiederherstellbaren Snapshot")
+    snap = entry.snapshot
+
+    # Wiederhergestellte Inhalte wie eine normale Änderung validieren
+    class _Payload:
+        pass
+
+    payload = _Payload()
+    payload.source = snap.get("source") or []
+    payload.destination = snap.get("destination") or []
+    payload.source_zone = snap.get("source_zone") or ""
+    payload.destination_zone = snap.get("destination_zone") or ""
+    payload.component_ids = []
+    derive_zones(db, payload, rule.vrf_id)
+    components = determine_components(db, payload, rule.vrf_id)
+    enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
+    enforce_zone_matrix(
+        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
+    )
+
+    for field in ("name", "application", "source", "destination", "services",
+                  "description", "justification", "business_context", "info",
+                  "requestor", "owner", "change_id", "valid_from", "valid_until"):
+        if field in snap:
+            setattr(rule, field, snap[field])
+    if snap.get("action") in (a.value for a in RuleAction):
+        rule.action = RuleAction(snap["action"])
+    rule.source_zone = payload.source_zone
+    rule.destination_zone = payload.destination_zone
+    rule.components = components
+    rule.status = RuleStatus.draft  # Rollback durchläuft den normalen Review
+    rule.version += 1
+    add_version(db, rule, user, f"Rollback auf Version {version}")
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
 @router.post("/{rule_id}/submit", response_model=RuleOut)
 def submit_for_review(
     rule_id: str,
