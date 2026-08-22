@@ -172,11 +172,49 @@ function ZoneReachability({ overview }) {
   placeFwRow(southFws, y + LABEL_H + northRowH + papZonesH)
   y += papH
 
-  // Band 3: Intern (Süd)
-  const intern = sortByBarycenter(byLevel('intern'))
-  const internH = LABEL_H + layoutZoneRowsHeight(intern) + PAD
+  // Band 3: Intern (Süd) – Spalten-Layout für klare Anbindungs-Zuordnung:
+  // Zonen mit genau EINER Firewall stehen direkt untereinander unter ihrem
+  // Cluster; Zonen mit mehreren (oder ohne) Anbindungen mittig untereinander.
+  const intern = byLevel('intern')
+  const southIds = new Set(southFws.map((f) => f.id))
+  const columns = {}  // fwId | 'multi' -> Zonen
+  intern.forEach((z) => {
+    const attached = z.firewalls.filter((f) => southIds.has(f.id))
+    const key = attached.length === 1 ? attached[0].id : 'multi'
+    ;(columns[key] = columns[key] || []).push(z)
+  })
+  Object.values(columns).forEach((list) => list.sort((a, b) => a.name.localeCompare(b.name)))
+
+  // x der Mittel-Spalte: größte Lücke zwischen den belegten Firewall-Spalten
+  const usedXs = southFws.filter((f) => columns[f.id]).map((f) => fwX[f.id]).sort((a, b) => a - b)
+  let multiX = W / 2
+  if (usedXs.length) {
+    const edges = [70, ...usedXs, W - 70]
+    let best = 0
+    for (let i = 0; i < edges.length - 1; i += 1) {
+      if (edges[i + 1] - edges[i] > best) {
+        best = edges[i + 1] - edges[i]
+        multiX = (edges[i] + edges[i + 1]) / 2
+      }
+    }
+  }
+
+  const S_ROW = BOX_H + 18  // enger gestapelt (Spine-Optik unter dem Cluster)
+  let maxColumn = 0
+  southFws.forEach((f) => {
+    const list = columns[f.id] || []
+    list.forEach((z, i) => {
+      zonePos[z.name] = { x: fwX[f.id], y: y + LABEL_H + i * S_ROW + S_ROW / 2 }
+    })
+    maxColumn = Math.max(maxColumn, list.length)
+  })
+  ;(columns.multi || []).forEach((z, i) => {
+    zonePos[z.name] = { x: multiX, y: y + LABEL_H + i * S_ROW + S_ROW / 2 }
+  })
+  maxColumn = Math.max(maxColumn, (columns.multi || []).length)
+
+  const internH = LABEL_H + Math.max(maxColumn, 1) * S_ROW + PAD
   bands.push({ key: 'intern', label: 'Intern (Süd) — unterhalb der P-A-P-Struktur', y, h: internH })
-  layoutZoneRows(intern, y + LABEL_H)
   y += internH
   const H = y
 
@@ -220,7 +258,9 @@ function ZoneReachability({ overview }) {
             const up = fp.y < zp.y
             const zy = zp.y + (up ? -BOX_H / 2 : BOX_H / 2)
             const fy = fp.y + (up ? BOX_H / 2 : -BOX_H / 2)
-            const ax = anchors[`${f.id}|${z.name}`] ?? fp.x
+            // Zonen direkt unter ihrem Cluster: gerade Verbindung (Spine-Optik)
+            const sameColumn = Math.abs(zp.x - fp.x) < 20
+            const ax = sameColumn ? fp.x : (anchors[`${f.id}|${z.name}`] ?? fp.x)
             const my = (zy + fy) / 2
             return (
               <path key={`${z.name}-${f.id}`}

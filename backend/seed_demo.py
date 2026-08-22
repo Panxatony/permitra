@@ -80,6 +80,10 @@ COMPONENTS = [
     ("FW-Cluster-BER", ComponentType.juniper, "Zone BER",
      "srx.ber.demo.local - 10.10.80.21", 10,
      "Juniper SRX Firewall-Cluster am Standort Berlin (Zone BER)"),
+    ("FW-Cluster-FFM-DC", ComponentType.checkpoint, "Zone FFM",
+     "cpmgmt-dc.ffm.demo.local - 10.10.80.22", 12,
+     "Internes DC-Firewall-Cluster Frankfurt: Segmentierung Richtung Datenbanken/Monitoring "
+     "(südlich des Perimeter-Clusters FFM)"),
     ("ACI-Fabric-FFM", ComponentType.aci, "Zone FFM",
      "apic.ffm.demo.local - 10.10.80.30", 30,
      "Cisco ACI Fabric für Intra-Zonen-Contracts (Zone FFM), südlich des FW-Clusters FFM"),
@@ -206,6 +210,12 @@ def seed(wipe: bool):
             description="Standort-Transit FFM–BER (Site-to-Site)",
         ),
         ComponentLink(
+            component_a_id=min(fw_ffm_c.id, components["FW-Cluster-FFM-DC"].id),
+            component_b_id=max(fw_ffm_c.id, components["FW-Cluster-FFM-DC"].id),
+            link_type="OSPF Routing",
+            description="Interner Standort-Transit FFM: Perimeter-Cluster ↔ DC-Cluster",
+        ),
+        ComponentLink(
             component_a_id=min(fw_ber_c.id, components["FW-Cluster-Provider"].id),
             component_b_id=max(fw_ber_c.id, components["FW-Cluster-Provider"].id),
             link_type="BGP Peering",
@@ -227,10 +237,10 @@ def seed(wipe: bool):
         AciGateway(
             name="GW-PROD-DB", tenant="DEMO", vrf="VRF-PROD", bridge_domain="BD-PROD-DB",
             gateway_ip="10.10.31.1/24", zone_name="PROD-DB",
-            pbr_enabled=True, pbr_component_id=checkpoint_ffm.id,
-            pbr_node_ip="10.10.35.10", pbr_node_mac="00:50:56:AB:CD:01",
-            pbr_service_graph="SG-CHKP-FFM", pbr_health_group="HG-CHKP-FFM",
-            description="Anycast Gateway Produktion DB; Umleitung zur Inspektion über Check Point FFM",
+            pbr_enabled=True, pbr_component_id=components["FW-Cluster-FFM-DC"].id,
+            pbr_node_ip="10.10.35.11", pbr_node_mac="00:50:56:AB:CD:02",
+            pbr_service_graph="SG-CHKP-FFM-DC", pbr_health_group="HG-CHKP-FFM-DC",
+            description="Anycast Gateway Produktion DB; Umleitung zur Inspektion über das DC-Cluster FFM",
         ),
         AciGateway(
             name="GW-SHARED", tenant="DEMO", vrf="VRF-SHARED", bridge_domain="BD-SHARED",
@@ -298,6 +308,7 @@ def seed(wipe: bool):
 
     start = date(2026, 1, 5)
     fw_ffm = components["FW-Cluster-FFM"]
+    fw_ffm_dc = components["FW-Cluster-FFM-DC"]
     fw_ber = components["FW-Cluster-BER"]
     aci_ffm = components["ACI-Fabric-FFM"]
 
@@ -306,7 +317,8 @@ def seed(wipe: bool):
     # DMZ hängt am BER-Cluster: Internet-Pfad ist durchgängig Provider -> BER,
     # der FFM-Cluster bedient nur interne Zonen (kein direkter Internet-Pfad)
     ZONE_FW = {
-        "PROD-APP": fw_ffm, "PROD-DB": fw_ffm, "SHARED": fw_ffm, "MON": fw_ffm,
+        "PROD-APP": fw_ffm, "SHARED": fw_ffm,
+        "PROD-DB": fw_ffm_dc, "MON": fw_ffm_dc,
         "DMZ-WEB": fw_ber, "VPN": fw_ber, "MGMT": fw_ber, "TEST": fw_ber, "DEV": fw_ber, "CICD": fw_ber,
     }
     for zone_name, fw in ZONE_FW.items():
@@ -319,6 +331,8 @@ def seed(wipe: bool):
         zones[zone_name].components = [fw]  # "Angebunden an": explizite Firewall-Anbindung
     zones["INET"].components = [components["FW-Cluster-Provider"]]
     zones["DMZ-WEB"].components = [fw_ber, components["FW-Cluster-Provider"]]  # Beispiel: Mehrfach-Anbindung
+    # Shared Services (DNS/NTP/Repo) sind von beiden Standorten erreichbar
+    zones["SHARED"].components = [fw_ffm, fw_ber]
     # Internet ("any") erreicht die Umgebung über den Provider-Cluster
     db.add(AddressComponentMap(
         ip="any", alias="Internet", vrf_id=vrf_it.id,
