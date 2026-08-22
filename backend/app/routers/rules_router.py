@@ -217,6 +217,7 @@ def list_rules(
     impl: str | None = Query(None, description="'pending' = freigegebene Regeln mit offener Umsetzung"),
     risk: str | None = Query(None, description="'flagged' = nur Regeln mit Risiko-Hinweis"),
     application: str | None = None,
+    app_id: str | None = Query(None, description="Anwendungs-ID (Report je App)"),
     platform: str | None = None,
     component: str | None = Query(None, description="Name (Teilstring) einer Komponente"),
     vrf: str | None = Query(None, description="Umgebung/VRF (Name); leer = alle"),
@@ -232,7 +233,7 @@ def list_rules(
         query = query.filter(
             or_(
                 Rule.rule_id.ilike(like), Rule.name.ilike(like),
-                Rule.justification.ilike(like), Rule.change_id.ilike(like),
+                Rule.justification.ilike(like), Rule.change_id.ilike(like), Rule.app_id.ilike(like),
                 Rule.requestor.ilike(like), Rule.business_context.ilike(like),
                 # Adressfelder sind JSON – Volltext dazu unten in Python
                 Rule.source_zone.ilike(like), Rule.destination_zone.ilike(like),
@@ -249,6 +250,8 @@ def list_rules(
                                 "updated_since muss ein ISO-Zeitstempel sein")
     if application:
         query = query.filter(Rule.application.ilike(f"%{application}%"))
+    if app_id:
+        query = query.filter(Rule.app_id.ilike(f"%{app_id}%"))
     rules = query.order_by(Rule.rule_id.desc()).all()
 
     def entry_match(entries, needle):

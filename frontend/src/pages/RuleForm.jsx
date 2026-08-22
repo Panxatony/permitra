@@ -7,6 +7,7 @@ const EMPTY = {
   rule_id: '',
   name: '',
   application: '',
+  app_id: '',
   component_ids: [],
   source_zone: '',
   destination_zone: '',
@@ -259,6 +260,7 @@ export default function RuleForm() {
           </label>
           <label>Name<input value={form.name} onChange={set('name')} placeholder="z.B. HTTPS-Webserver" /></label>
           <label>Application<input value={form.application} onChange={set('application')} placeholder="z.B. Control, ePA" /></label>
+          <label>APP-ID<input value={form.app_id} onChange={set('app_id')} placeholder="z.B. APP-4711" /></label>
         </div>
         <div className="platform-select">
           <span>{t('Umsetzung auf Komponenten (automatisch aus Quelle/Ziel ermittelt):')}</span>

@@ -195,9 +195,19 @@ export default function Search() {
         <span className="muted">
           {t('Nur Quelle ODER Ziel: alle ein-/ausgehenden Regeln der Adresse. Beides: Pfad-Prüfung über die Komponenten plus alle passenden Regeln.')}
         </span>
+        {(result || pathRules) && (
+          <button className="btn btn-ghost no-print" style={{ marginLeft: 'auto' }}
+            onClick={() => window.print()}>🖨 {t('Drucken / PDF')}</button>
+        )}
       </div>
+      {(result || pathRules) && (
+        <div className="print-only print-head">
+          <strong>Permitra – Analyse</strong>{' '}
+          {src}{dst ? ` → ${dst}` : ''} · {new Date().toLocaleString('de-DE')}
+        </div>
+      )}
 
-      <form className="filterbar pair-form" onSubmit={submit}>
+      <form className="filterbar pair-form no-print" onSubmit={submit}>
         <input value={src} onChange={(e) => setSrc(e.target.value)}
           placeholder={t('Quelle: IP, Netz (10.10.105.0/24) oder Hostname')} />
         <span className="muted">→</span>

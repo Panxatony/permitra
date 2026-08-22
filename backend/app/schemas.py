@@ -54,6 +54,7 @@ class RuleFields(BaseModel):
 
     name: str = ""
     application: str = ""
+    app_id: str = ""
     vrf: str = ""              # Umgebung/VRF der Regel
     components: list[ComponentBrief] = []      # Komponenten, auf denen die Regel umzusetzen ist
     platforms: list[str] = []                  # abgeleitet aus den Komponenten-Typen
@@ -89,6 +90,7 @@ class RuleBase(BaseModel):
 
     name: str = ""
     application: str = ""
+    app_id: str = ""
     vrf: str = ""              # Umgebung/VRF; leer = Default (erster VRF)
     component_ids: list[int] = []
     source_zone: str = ""

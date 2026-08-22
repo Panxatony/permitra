@@ -103,6 +103,7 @@ PEOPLE = [
     ("Sofia Ricci", "sricci"), ("Jonas Weber", "jweber"), ("Emma Fischer", "efischer"),
 ]
 APPLICATIONS = ["Webshop", "Portal", "ERP", "Monitoring", "CI/CD", "Infrastruktur", "Backup"]
+APP_IDS = {a: f"APP-{1000 + i}" for i, a in enumerate(["Webshop", "Portal", "ERP", "Monitoring", "CI/CD", "Infrastruktur", "Backup"])}
 BUSINESS = ["Onlineshop", "Kundenportal", "Interne IT", "Monitoring", "Deployment", "Basisdienste"]
 
 HOST_ROLES = {
@@ -422,6 +423,7 @@ def seed(wipe: bool):
             vrf_id=vrf_it.id,
             name=f"{app}-{dst_zone}-{i:03d}",
             application=app,
+            app_id=APP_IDS.get(app, ""),
             components=rule_components_list,
             source_zone=zc(src_zone),
             destination_zone=zc(dst_zone),

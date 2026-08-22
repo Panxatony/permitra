@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api } from '../api'
+import { api, getToken } from '../api'
 import { AddressList, ComponentBadges, ServiceList, STATUS_LABELS, StatusBadge, useZoneLabels } from '../components/shared'
 import { useLang } from '../i18n'
 
-const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: '', status: '', component: '', impl: '', risk: '' }
+const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: '', status: '', component: '', impl: '', risk: '', app_id: '' }
 
 export default function RuleList() {
   const PAGE_SIZE = 50
@@ -59,6 +59,18 @@ export default function RuleList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
+  const downloadReport = (appId) => {
+    fetch(`/api/export/csv?app_id=${encodeURIComponent(appId)}&only_approved=false&download=true`,
+      { headers: { Authorization: `Bearer ${getToken()}` } })
+      .then((res) => res.blob())
+      .then((blob) => {
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `permitra-report-${appId}.csv`
+        a.click()
+      })
+  }
+
   const set = (key) => (e) => setFilters({ ...filters, [key]: e.target.value })
   const submit = (e) => {
     e.preventDefault()
@@ -105,8 +117,17 @@ export default function RuleList() {
           <option value="">{t('Komponente')}</option>
           {components.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
         </select>
+        <input className="narrow" value={filters.app_id} onChange={set('app_id')} placeholder="APP-ID" />
         <button className="btn btn-primary" type="submit">{t('Filtern')}</button>
         <button className="btn btn-ghost" type="button" onClick={reset}>{t('Zurücksetzen')}</button>
+        {filters.app_id.trim() && (
+          <a className="btn btn-ghost"
+            href={`/api/export/csv?app_id=${encodeURIComponent(filters.app_id.trim())}&only_approved=false&download=true`}
+            title={t('CSV-Report aller Regeln dieser APP-ID')}
+            onClick={(e) => { e.preventDefault(); downloadReport(filters.app_id.trim()) }}>
+            ⬇ {t('APP-ID-Report (CSV)')}
+          </a>
+        )}
       </form>
 
       {error && <div className="error">{error}</div>}

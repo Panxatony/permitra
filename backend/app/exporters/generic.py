@@ -7,7 +7,7 @@ from ..models import Rule
 from ..validation import format_entry
 
 CSV_COLUMNS = [
-    "Rule-ID", "Application", "Sicherheitselement", "Komponenten", "Source SZ",
+    "Rule-ID", "Application", "APP-ID", "Sicherheitselement", "Komponenten", "Source SZ",
     "Quelle/Quellsystem", "Destination-SZ", "Ziel/Zielsystem", "Protokoll", "Port",
     "Anlass", "Requestor", "Bearbeiter", "Umsetzungsstatus", "Status",
     "Change-ID", "Letzte Änderung", "Info", "Fachlicher Bezug",
@@ -21,6 +21,7 @@ def rule_to_dict(rule: Rule, with_meta: bool = True) -> dict:
         "rule_id": rule.rule_id,
         "name": rule.name,
         "application": rule.application,
+        "app_id": rule.app_id,
         "vrf": rule.vrf.name if rule.vrf else None,
         "components": [c.name for c in rule.components],
         "platforms": rule.platforms,
@@ -65,6 +66,7 @@ def export_csv(rules: list[Rule]) -> str:
             [
                 r.rule_id,
                 r.application,
+                r.app_id,
                 "/".join(PLATFORM_LABELS.get(p, p) for p in r.platforms),
                 " | ".join(c.name for c in r.components),
                 r.source_zone,

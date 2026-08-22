@@ -135,6 +135,7 @@ const EN = {
   // Suche & Pfad
   'Suchen': 'Search',
   'Analysieren': 'Analyze',
+  'Drucken / PDF': 'Print / PDF',
   'Keine Treffer.': 'No matches.',
   '⬆ Ausgehend – als Quelle': '⬆ Outbound – as source',
   '⬇ Eingehend – als Ziel': '⬇ Inbound – as destination',
@@ -212,6 +213,8 @@ const EN = {
   'Umsetzung': 'Implementation',
   'Risiko': 'Risk',
   'Mit Risiko-Hinweis': 'With risk warning',
+  'APP-ID-Report (CSV)': 'APP-ID report (CSV)',
+  'CSV-Report aller Regeln dieser APP-ID': 'CSV report of all rules for this APP-ID',
   'Schutzbedarf Ziel': 'Target protection level',
   'Umzusetzen (offen / zu ändern)': 'To implement (open / to change)',
   'Weitere Plattformen via Capirca/Aerleon:': 'More platforms via Capirca/Aerleon:',

@@ -472,3 +472,15 @@ table.matrix .row-head { background: #f7f9fc; position: sticky; left: 0; z-index
 .risk-niedrig { background: #e4e8ee; color: #46505c; }
 .risk-mittel { background: #fff0d2; color: var(--amber); }
 .risk-hoch { background: #fadddd; color: var(--red); }
+/* Druck/PDF-Ansicht (Analyse u.a.): nur der Inhalt, nicht die Chrome */
+.print-only { display: none; }
+@media print {
+  .topbar, .no-print { display: none !important; }
+  .app main { max-width: none; padding: 0; }
+  .print-only { display: block; }
+  .print-head { margin-bottom: .6rem; font-size: 1.05rem; }
+  .card, .table-wrap { border: none; box-shadow: none; }
+  table { font-size: 10px; }
+  a { color: #000; text-decoration: none; }
+  section, .card, tr { break-inside: avoid; }
+}

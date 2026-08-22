@@ -118,6 +118,7 @@ def export(
     fmt: str,
     ids: str | None = Query(None, description="Kommagetrennte Rule-IDs; leer = alle passenden"),
     component_id: int | None = Query(None, description="Nur Regeln dieser Komponente exportieren"),
+    app_id: str | None = Query(None, description="Nur Regeln dieser Anwendungs-ID (Report je App)"),
     only_approved: bool = Query(True, description="Nur freigegebene Regeln exportieren"),
     platform_filter: bool = Query(True, description="Nur Regeln, deren Plattform zum Format passt"),
     download: bool = False,
@@ -134,6 +135,8 @@ def export(
         query = query.filter(Rule.rule_id.in_(wanted))
     elif only_approved:
         query = query.filter(Rule.status == RuleStatus.approved)
+    if app_id:
+        query = query.filter(Rule.app_id.ilike(f"%{app_id}%"))
     rules = query.order_by(Rule.rule_id).all()
 
     if component_id:

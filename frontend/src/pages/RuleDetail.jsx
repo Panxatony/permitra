@@ -113,6 +113,7 @@ export default function RuleDetail() {
           <h2>{t('Metadaten')}</h2>
           <dl>
             <dt>Application</dt><dd>{rule.application || '–'}</dd>
+            <dt>APP-ID</dt><dd>{rule.app_id || '–'}</dd>
             <dt>{t('Anlass')}</dt><dd>{rule.justification || '–'}</dd>
             <dt>{t('Beschreibung')}</dt><dd>{rule.description || '–'}</dd>
             <dt>Requestor</dt><dd>{rule.requestor || '–'}</dd>

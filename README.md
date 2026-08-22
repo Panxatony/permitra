@@ -37,11 +37,12 @@ Project website: https://permitra.de · Live demo: https://demo.permitra.de
 **Rule workflow:** `draft → in review → approved/rejected → (deactivated)`.
 Content changes to an approved rule reset it to `draft`. When a previously implemented rule is re-approved, its implementation status switches to *to change* so operations can re-apply and mark it *implemented* again. The dashboard shows a tile with the number of rules awaiting implementation.
 
-**Data model:** rule IDs in the `SR#####` format (5 digits, up to 99999 rules), assigned server-side; application, source/destination zones (derived automatically), multiple services (protocol/port) per rule, justification, requestor, owner, change ID, business context, validity period, version history with snapshots, comments.
+**Data model:** rule IDs in the `SR#####` format (5 digits, up to 99999 rules), assigned server-side; application, application ID (**APP-ID**, for per-app reports), source/destination zones (derived automatically), multiple services (protocol/port) per rule, justification, requestor, owner, change ID, business context, validity period, version history with snapshots, comments.
 
 - **Addresses are structured**: source/destination entries are **always an IP or network (CIDR, IPv4/IPv6)** plus an optional **alias** per entry (hostname for a single IP, network name for a subnet). Special value `any`. Exporters use the alias as the object name (Juniper address book, Check Point hosts/networks); the address search matches on IP overlap **and** alias. Pure FQDN rules are deliberately not supported.
 - **Rules map to concrete components** (not abstract platforms): each rule references the security components (firewall clusters or ACI fabrics) on which a firewall rule or ACI contract must be created. The platform is derived from the component type; the implementation status is maintained per component; exports can be restricted to one component.
 - **Components are resolved automatically from source/destination** via the persistent address mapping (`address_component_map`): exact match or most specific containing network; intra-zone rules resolve to ACI components, cross-zone rules to firewall clusters. When a rule contains a **new address**, the form asks **once** on which components rules for that address should be created — the mapping is stored and applied automatically from then on.
+- **Zone identity**: each zone has a leading **ID/code** (e.g. `Z040`) assigned at creation plus a name; rules reference the zone by its ID (stable across renames) and it is shown as `Z040-PROD-APP`. Zones also carry a protection level per C/I/A goal (set at creation).
 - **Network registry**: every network belongs to exactly one security zone (`zone_networks`). Source/destination zones of a rule are derived automatically from its addresses; unassigned networks are rejected with a clear hint pointing to the Networks page. Networks themselves are managed in dedicated tools (e.g. NetBox — import hook prepared via the `source` field); Permitra only maintains the network→zone mapping. **Changes to that mapping go through the approval workflow** (two change approvers).
 
 ## Dashboard, recertification, drift & object catalog
@@ -124,6 +125,11 @@ Change approvers land on a focused approvals page after login: open rule reviews
 - **Forgot password** on the login page (reset link, valid 2h; responses never reveal whether an account exists). Account page: change password.
 - **2FA (TOTP)**: self-service on the account page (secret for authenticator apps, activation by code); login then asks for the code as a second factor. Implemented per RFC 6238 without extra dependencies.
 - **Passkeys (WebAuthn)**: registration on the account page, passwordless sign-in on the login page. Requires HTTPS (or localhost); configured via `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (default derived from `PERMITRA_BASE_URL`).
+
+## Reports & printing
+
+- **Per-APP-ID report**: filter the rule list by APP-ID and export a CSV report of all its rules (`GET /api/export/csv?app_id=…`; the APP-ID column is included in CSV/JSON). The `app_id` filter also works on `GET /api/rules`.
+- **Print / PDF of the analysis**: the analysis page offers a print button that renders a clean, print-optimized view (source→destination, timestamp, matching rules) for saving as PDF.
 
 ## NetBox import (networks)
 

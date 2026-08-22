@@ -490,6 +490,7 @@ class Rule(Base):
     vrf_id: Mapped[int] = mapped_column(ForeignKey("vrfs.id", ondelete="RESTRICT"), index=True)
     name: Mapped[str] = mapped_column(String(128), default="")
     application: Mapped[str] = mapped_column(String(128), default="", index=True)   # z.B. Control, ePA
+    app_id: Mapped[str] = mapped_column(String(64), default="", index=True)   # Anwendungs-ID (für Reports je App)
     # Konkrete Komponenten (Firewall-Cluster/ACI-Fabric), auf denen die Regel
     # als Firewall-Regel bzw. ACI Contract angelegt werden muss
     components: Mapped[list["SecurityComponent"]] = relationship(secondary=rule_components)
