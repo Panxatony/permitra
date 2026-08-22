@@ -301,6 +301,11 @@ const EN = {
   'an SIEM übermittelt': 'sent to SIEM',
   'Übermittlung ausstehend': 'delivery pending',
   'noch nicht verankert': 'not anchored yet',
+  'Läuft in': 'Expiring within',
+  'Tagen ab': 'days',
+  '⚠ Unlesbares Ablaufdatum': '⚠ Unreadable expiry date',
+  'Diese Regeln werden von der Ablaufprüfung übersprungen und laufen deshalb nie automatisch aus. Bitte das Gültig-bis-Datum korrigieren.':
+    'These rules are skipped by the expiry check and therefore never expire automatically. Please correct the valid-until date.',
   'Details': 'Details',
   'Keine Einträge.': 'No entries.',
   'Benutzerverwaltung – weitere Permitra-Einstellungen folgen hier.':

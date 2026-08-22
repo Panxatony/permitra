@@ -1,9 +1,33 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .models import ComponentType, RuleAction, RuleStatus, Role, ZonePolicyType
 from .validation import validate_ip_entry, validate_service
+
+DATE_LABELS = {"valid_from": "Gültig-ab", "valid_until": "Gültig-bis"}
+
+
+def parse_iso_date(value: str | None, field: str) -> str | None:
+    """Prüft ein Datumsfeld als ISO-Datum (JJJJ-MM-TT) und gibt es normiert
+    zurück; leere Eingaben werden zu None.
+
+    Ohne diese Prüfung landet z.B. '2020-02-30' unbemerkt in der Datenbank: Der
+    SQL-Vergleich ist rein zeichenweise und lässt den Wert passieren, erst
+    date.fromisoformat() in der Ablauflogik stürzt darüber ab – und reißt
+    Dashboard, Ablaufliste und den täglichen Job für ALLE Nutzer mit."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    label = DATE_LABELS.get(field, field)
+    try:
+        return date.fromisoformat(text).isoformat()
+    except ValueError:
+        raise ValueError(
+            f"{label}: '{text}' ist kein gültiges Datum – erwartet wird JJJJ-MM-TT, z.B. 2027-03-31"
+        )
 
 
 class Service(BaseModel):
@@ -110,6 +134,11 @@ class RuleBase(BaseModel):
     valid_until: str | None = None
     impl_status: dict[str, str] = {}
 
+    @field_validator("valid_from", "valid_until")
+    @classmethod
+    def check_dates(cls, v, info):
+        return parse_iso_date(v, info.field_name)
+
     @field_validator("source", "destination")
     @classmethod
     def check_addresses(cls, v, info):
@@ -126,6 +155,7 @@ class RuleBase(BaseModel):
 
     @model_validator(mode="after")
     def check_validity_period(self):
+        # Beide Werte sind hier bereits als ISO-Datum normiert (check_dates)
         if self.valid_from and self.valid_until and self.valid_from > self.valid_until:
             raise ValueError("Gültig-bis liegt vor Gültig-ab")
         return self
@@ -181,11 +211,22 @@ class ExpiringOut(BaseModel):
     days: int
     expired: list[RuleOut]
     expiring: list[RuleOut]
+    # Regeln mit unlesbarem Gültig-bis: sie werden von der Ablaufprüfung
+    # übersprungen und blieben sonst unbemerkt liegen (Datenqualität).
+    invalid: list[RuleOut] = []
 
 
 class ExtendRequest(BaseModel):
     valid_until: str = Field(..., description="Neues Gültig-bis-Datum (ISO), z.B. 2027-08-20")
     comment: str = ""
+
+    @field_validator("valid_until")
+    @classmethod
+    def check_date(cls, v):
+        parsed = parse_iso_date(v, "valid_until")
+        if parsed is None:
+            raise ValueError("Gültig-bis: ein Datum ist erforderlich (JJJJ-MM-TT)")
+        return parsed
 
 
 class CommentCreate(BaseModel):

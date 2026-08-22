@@ -125,9 +125,18 @@ export default function Recertification() {
             <RuleRows rules={data.expired} onExtend={extend} onDeactivate={deactivate} canAct={canAct} />
           </section>
           <section>
-            <h2>Läuft in {data.days} Tagen ab ({data.expiring.length})</h2>
+            <h2>{t('Läuft in')} {data.days} {t('Tagen ab')} ({data.expiring.length})</h2>
             <RuleRows rules={data.expiring} onExtend={extend} onDeactivate={deactivate} canAct={canAct} />
           </section>
+          {data.invalid?.length > 0 && (
+            <section>
+              <h2>{t('⚠ Unlesbares Ablaufdatum')} ({data.invalid.length})</h2>
+              <p className="muted small">
+                {t('Diese Regeln werden von der Ablaufprüfung übersprungen und laufen deshalb nie automatisch aus. Bitte das Gültig-bis-Datum korrigieren.')}
+              </p>
+              <RuleRows rules={data.invalid} onExtend={extend} onDeactivate={deactivate} canAct={canAct} />
+            </section>
+          )}
         </div>
       )}
     </div>

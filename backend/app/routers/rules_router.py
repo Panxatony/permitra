@@ -26,7 +26,7 @@ from ..models import (
     SecurityComponent,
     User,
 )
-from ..expiry import expiring_rules
+from ..expiry import expiring_rules, invalid_validity_rules
 from ..schemas import (
     CommentCreate,
     CommentOut,
@@ -613,7 +613,8 @@ def get_expiring(
 ):
     """Abgelaufene und demnächst ablaufende freigegebene Regeln (Rezertifizierung)."""
     expired, expiring = expiring_rules(db, days)
-    return ExpiringOut(days=days, expired=expired, expiring=expiring)
+    return ExpiringOut(days=days, expired=expired, expiring=expiring,
+                       invalid=invalid_validity_rules(db))
 
 
 @router.post("/resolve-components")
