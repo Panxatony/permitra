@@ -567,13 +567,10 @@ export default function ZoneMatrix() {
                       <div className="muted small">{z.owner || t('kein Verantwortlicher')}</div>
                     </td>
                     <td>
-                      <Link to="/networks" className="rule-link" title="Zonen-Zuordnung auf der Seite Netzwerke pflegen">
+                      <Link to="/networks" className="rule-link"
+                        title={(z.networks || []).map((n) => n.cidr).join(', ') || t('Zonen-Zuordnung auf der Seite Netzwerke pflegen')}>
                         {(z.networks || []).length} {t('Netzwerke')}
                       </Link>
-                      <div className="muted small">
-                        {(z.networks || []).slice(0, 3).map((n) => n.cidr).join(', ')}
-                        {(z.networks || []).length > 3 ? ' …' : ''}
-                      </div>
                     </td>
                     <td>
                       {{ extern: 'extern (Nord)', pap: 'P-A-P-Ebene', intern: 'intern (Süd)' }[z.pap_level || 'intern']}
