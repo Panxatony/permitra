@@ -295,6 +295,12 @@ const EN = {
   'ausstehend': 'pending',
   'gesendet': 'sent',
   'ohne Ziel': 'no sink',
+  'Jetzt verankern': 'Anchor now',
+  'Ketten-Ende verankert bei Eintrag': 'Chain end anchored at entry',
+  'verankert bei': 'anchored at',
+  'an SIEM übermittelt': 'sent to SIEM',
+  'Übermittlung ausstehend': 'delivery pending',
+  'noch nicht verankert': 'not anchored yet',
   'Details': 'Details',
   'Keine Einträge.': 'No entries.',
   'Benutzerverwaltung – weitere Permitra-Einstellungen folgen hier.':

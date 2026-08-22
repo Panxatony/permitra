@@ -298,11 +298,26 @@ export default function Admin() {
             : <span className="pill" style={{ background: '#fdecea', color: '#b3261e', borderColor: '#f3c1bc' }}>
                 ✗ {t('Kette verletzt')} – ID {integrity.broken_at_id}: {integrity.reason}
               </span>)}
+          <button className="btn btn-ghost" onClick={() => act(async () => {
+            const r = await api.auditCheckpoint()
+            const s = await api.auditSiemStatus(); setSiem(s)
+            const v = await api.auditVerify(); setIntegrity(v)
+            return { detail: r.event_count
+              ? t('Ketten-Ende verankert bei Eintrag') + ` ${r.event_count}`
+              : r.detail }
+          })}>{t('Jetzt verankern')}</button>
           {siem && (
             <span className="muted small">
               {t('SIEM-Zustellung')}: {siem.enabled ? t('aktiv') : t('nicht konfiguriert')}
               {' · '}{t('ausstehend')}: {siem.pending} · {t('gesendet')}: {siem.sent}
               {siem.skipped ? ` · ${t('ohne Ziel')}: ${siem.skipped}` : ''}
+              {siem.anchor
+                ? ` · ${t('verankert bei')}: ${siem.anchor.event_count}` +
+                  (siem.enabled
+                    ? (siem.anchor.delivered ? ` (${t('an SIEM übermittelt')})`
+                                             : ` (${t('Übermittlung ausstehend')})`)
+                    : '')
+                : ` · ${t('noch nicht verankert')}`}
             </span>
           )}
         </div>

@@ -126,6 +126,7 @@ export const api = {
   auditLog: (params = {}) => request(`/api/audit-log?${new URLSearchParams(params)}`),
   auditVerify: () => request('/api/audit-log/verify'),
   auditSiemStatus: () => request('/api/audit-log/siem-status'),
+  auditCheckpoint: () => request('/api/audit-log/checkpoint', { method: 'POST' }),
   netboxConfig: () => request('/api/netbox/config'),
   setNetboxConfig: (p) => request('/api/netbox/config', { method: 'PUT', body: p }),
   netboxTest: () => request('/api/netbox/test', { method: 'POST' }),

@@ -3,7 +3,7 @@ prüfung und Zustellstatus (Issue #26)."""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from ..audit import collect, siem_status, verify_chain
+from ..audit import collect, create_checkpoint, siem_status, verify_chain
 from ..auth import require_roles
 from ..database import get_db
 from ..models import Role, User
@@ -31,6 +31,21 @@ def audit_verify(
     """Prüft die Integrität der Audit-Hash-Kette (#26). ok=False, sobald ein
     Eintrag verändert wurde oder die Reihenfolge/Lückenlosigkeit verletzt ist."""
     return verify_chain(db)
+
+
+@router.post("/checkpoint", status_code=201)
+def audit_checkpoint(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(Role.admin)),
+):
+    """Verankert das aktuelle Ketten-Ende sofort (#26), statt auf den
+    periodischen Job zu warten – z.B. vor einer Beweissicherung."""
+    cp = create_checkpoint(db)
+    if cp is None:
+        return {"detail": "Noch keine Audit-Ereignisse vorhanden – nichts zu verankern."}
+    return {"event_count": cp.event_count, "head_hash": cp.head_hash,
+            "ts": cp.ts.isoformat() if cp.ts else None,
+            "delivered": cp.delivered_at is not None}
 
 
 @router.get("/siem-status")

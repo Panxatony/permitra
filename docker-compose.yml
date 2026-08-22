@@ -43,6 +43,8 @@ services:
       AUDIT_SYSLOG_HOST: ${AUDIT_SYSLOG_HOST:-}
       AUDIT_SYSLOG_PORT: ${AUDIT_SYSLOG_PORT:-514}
       AUDIT_SYSLOG_PROTO: ${AUDIT_SYSLOG_PROTO:-udp}
+      # Abstand der Verankerungen des Ketten-Endes (Sekunden)
+      AUDIT_CHECKPOINT_INTERVAL: ${AUDIT_CHECKPOINT_INTERVAL:-3600}
     depends_on:
       db:
         condition: service_healthy

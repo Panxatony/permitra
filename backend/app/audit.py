@@ -9,7 +9,24 @@ Administration, Zugriffe) in einem append-only Store.
 Integrität (#26): Jeder Eintrag im Store trägt einen SHA-256-`hash` über seinen
 Inhalt UND den `hash` des Vorgängers (Hash-Kette). Nachträgliche Änderungen an
 einem Ereignis oder an der Reihenfolge brechen die Kette und werden von
-`verify_chain()` erkannt.
+`verify_chain()` erkannt. Zusätzlich verankern Prüfpunkte (`AuditCheckpoint`)
+regelmäßig das Ketten-Ende, sonst bliebe das Abschneiden der jüngsten Einträge
+unbemerkt: der Rest wäre in sich weiterhin schlüssig.
+
+WAS DIESE SICHERUNG LEISTET – UND WAS NICHT:
+Der Hash ist schlüssellos (SHA-256, kein HMAC). Wer auf der Datenbank SCHREIBEN
+kann, kann ein Ereignis ändern und die Kette ab dieser Stelle mit derselben
+öffentlichen Funktion neu berechnen; löscht er zusätzlich die Prüfpunkte, ist
+die Fälschung innerhalb der Datenbank nicht mehr nachweisbar. Die Kette allein
+schützt also gegen versehentliche Korruption und gegen Manipulation ohne
+Neuberechnung – nicht gegen einen Angreifer mit Datenbank-Schreibrechten.
+
+Der tragende Schutz ist deshalb die Auslagerung: Ereignisse UND Prüfpunkte
+werden zuverlässig an ein SIEM übermittelt. Was dort liegt, ist dem Zugriff auf
+die Datenbank entzogen; ein Abgleich deckt jede nachträgliche Fälschung auf.
+Ohne konfiguriertes SIEM-Ziel bleibt der Schutz auf das oben Genannte
+beschränkt – das ist eine bewusste Betriebsentscheidung, keine Eigenschaft der
+Anwendung.
 
 Zustellung (#26): Ereignisse werden persistent als `siem_status='pending'`
 markiert und von einem Hintergrund-Worker (siehe main.siem_delivery_job) in
@@ -35,7 +52,7 @@ from datetime import timezone
 
 from sqlalchemy.orm import Session
 
-from .models import AuditEvent, Rule, RuleVersion, ZonePolicyChange, utcnow
+from .models import AuditCheckpoint, AuditEvent, Rule, RuleVersion, ZonePolicyChange, utcnow
 
 log = logging.getLogger("permitra.audit")
 
@@ -132,9 +149,60 @@ def record(db: Session, category: str, event: str, actor: str = "", object: str 
             db.rollback()
 
 
+def latest_checkpoint(db: Session) -> AuditCheckpoint | None:
+    return db.query(AuditCheckpoint).order_by(AuditCheckpoint.id.desc()).first()
+
+
+def create_checkpoint(db: Session) -> AuditCheckpoint | None:
+    """Hält den aktuellen Stand der Kette als Prüfpunkt fest (Verankerung).
+
+    Ohne Ereignisse gibt es nichts zu verankern. Hat sich seit dem letzten
+    Prüfpunkt nichts getan, wird keiner angelegt."""
+    last = db.query(AuditEvent).order_by(AuditEvent.id.desc()).first()
+    if last is None:
+        return None
+    previous = latest_checkpoint(db)
+    if previous and previous.last_event_id == last.id:
+        return previous
+    cp = AuditCheckpoint(
+        ts=utcnow(),
+        last_event_id=last.id,
+        event_count=db.query(AuditEvent).count(),
+        head_hash=last.hash or "",
+        delivered_at=None if push_enabled() else utcnow(),
+    )
+    db.add(cp)
+    db.commit()
+    db.refresh(cp)
+    return cp
+
+
+def _check_against_checkpoint(db: Session, checked: int) -> dict | None:
+    """Vergleicht den aktuellen Bestand mit dem jüngsten Prüfpunkt. Erkennt das
+    Abschneiden der jüngsten Einträge, das die reine Verkettung nicht sieht."""
+    cp = latest_checkpoint(db)
+    if cp is None:
+        return None
+    anchor = db.get(AuditEvent, cp.last_event_id)
+    if anchor is None:
+        return {"ok": False, "checked": checked, "broken_at_id": cp.last_event_id,
+                "reason": f"Verankerter Eintrag {cp.last_event_id} fehlt – die Kette wurde "
+                          f"nach dem Prüfpunkt vom {cp.ts:%d.%m.%Y %H:%M} gekürzt"}
+    if (anchor.hash or "") != cp.head_hash:
+        return {"ok": False, "checked": checked, "broken_at_id": cp.last_event_id,
+                "reason": "Verankerter Eintrag stimmt nicht mehr mit dem Prüfpunkt überein "
+                          "(Kette wurde nachträglich neu berechnet)"}
+    if checked < cp.event_count:
+        return {"ok": False, "checked": checked, "broken_at_id": None,
+                "reason": f"Nur {checked} Einträge vorhanden, der Prüfpunkt belegt "
+                          f"{cp.event_count} – es wurden Einträge entfernt"}
+    return None
+
+
 def verify_chain(db: Session) -> dict:
     """Prüft die vollständige Hash-Kette. Liefert ok=True nur, wenn jeder
-    Eintrag inhaltlich unverändert ist und lückenlos an den Vorgänger anschließt."""
+    Eintrag inhaltlich unverändert ist, lückenlos an den Vorgänger anschließt
+    UND der jüngste Prüfpunkt noch gedeckt ist (Schutz gegen Kürzung)."""
     prev = GENESIS
     checked = 0
     for ev in db.query(AuditEvent).order_by(AuditEvent.id.asc()).yield_per(500):
@@ -147,8 +215,23 @@ def verify_chain(db: Session) -> dict:
             return {"ok": False, "checked": checked, "broken_at_id": ev.id,
                     "reason": "Hash passt nicht zum Inhalt (Eintrag verändert)"}
         prev = ev.hash
-    return {"ok": True, "checked": checked,
-            "head_hash": prev if checked else GENESIS}
+
+    broken = _check_against_checkpoint(db, checked)
+    if broken:
+        return broken
+
+    cp = latest_checkpoint(db)
+    return {
+        "ok": True,
+        "checked": checked,
+        "head_hash": prev if checked else GENESIS,
+        "anchor": {
+            "event_count": cp.event_count,
+            "ts": _iso(cp.ts),
+            "delivered": cp.delivered_at is not None,
+            "delivered_at": _iso(cp.delivered_at),
+        } if cp else None,
+    }
 
 
 def _iso(dt):
@@ -303,13 +386,53 @@ def deliver_pending(db: Session, batch: int = 200) -> dict:
     return {"sent": sent, "pending": remaining}
 
 
+def deliver_pending_checkpoints(db: Session, batch: int = 20) -> dict:
+    """Stellt noch nicht übermittelte Prüfpunkte an das SIEM zu.
+
+    Erst außerhalb der Datenbank entfaltet ein Prüfpunkt seine Wirkung: Wer die
+    Audit-Tabelle manipuliert, erreicht die dort abgelegte Kopie nicht."""
+    if not push_enabled():
+        return {"sent": 0, "pending": 0}
+    rows = (db.query(AuditCheckpoint)
+            .filter(AuditCheckpoint.delivered_at.is_(None))
+            .order_by(AuditCheckpoint.id.asc()).limit(batch).all())
+    sent = 0
+    for cp in rows:
+        payload = {
+            "type": "audit", "event": "audit.checkpoint",
+            "actor": "permitra", "object": f"#{cp.event_count}",
+            "detail": "Verankerung des Audit-Ketten-Endes",
+            "event_count": cp.event_count, "last_event_id": cp.last_event_id,
+            "head_hash": cp.head_hash, "timestamp": _iso(cp.ts),
+        }
+        cp.attempts = (cp.attempts or 0) + 1
+        if deliver(payload):
+            cp.delivered_at = utcnow()
+            db.commit()
+            sent += 1
+        else:
+            db.commit()
+            break
+    remaining = (db.query(AuditCheckpoint)
+                 .filter(AuditCheckpoint.delivered_at.is_(None)).count())
+    return {"sent": sent, "pending": remaining}
+
+
 def siem_status(db: Session) -> dict:
     """Überblick über den Zustellzustand für die Admin-Ansicht."""
     def _count(status):
         return db.query(AuditEvent).filter(AuditEvent.siem_status == status).count()
+    cp = latest_checkpoint(db)
     return {
         "enabled": push_enabled(),
         "pending": _count("pending"),
         "sent": _count("sent"),
         "skipped": _count("skipped"),
+        "anchor": {
+            "event_count": cp.event_count,
+            "ts": _iso(cp.ts),
+            "delivered": cp.delivered_at is not None,
+        } if cp else None,
+        "anchors_pending": db.query(AuditCheckpoint).filter(
+            AuditCheckpoint.delivered_at.is_(None)).count(),
     }

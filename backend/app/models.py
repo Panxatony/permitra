@@ -455,6 +455,32 @@ class AuditEvent(Base):
     siem_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AuditCheckpoint(Base):
+    """Verankerung des Ketten-Endes gegen nachträgliches Abschneiden.
+
+    Die Hash-Kette erkennt Änderungen und Lücken *innerhalb* des Bestands.
+    Werden dagegen die JÜNGSTEN Einträge entfernt, bleibt der Rest in sich
+    schlüssig – die Kürzung fiele ohne festen Bezugspunkt nicht auf.
+
+    Ein Prüfpunkt hält deshalb fest, wie weit die Kette zu einem Zeitpunkt
+    reichte (letzte ID, Anzahl, Head-Hash). Beim Verifizieren muss dieser
+    Stand noch vorhanden und unverändert sein. Seine eigentliche Wirkung
+    entfaltet der Prüfpunkt erst außerhalb der Datenbank: Er wird über
+    dieselbe zuverlässige Zustellung an das SIEM gegeben (`delivered_at`).
+    Wer die Datenbank manipuliert, erreicht die dort abgelegte Kopie nicht –
+    ein Abgleich deckt die Fälschung auf."""
+
+    __tablename__ = "audit_checkpoints"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    last_event_id: Mapped[int] = mapped_column(Integer)
+    event_count: Mapped[int] = mapped_column(Integer)
+    head_hash: Mapped[str] = mapped_column(String(64))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class NetboxPrefix(Base):
     """Aus NetBox importiertes Prefix (Staging). Wird in die Zonen-Registry
     übernommen, sobald ihm eine Zone zugeordnet wird (adopted=True)."""

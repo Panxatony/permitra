@@ -110,11 +110,40 @@ async def siem_delivery_job():
                     if result.get("sent"):
                         logger.info("SIEM-Zustellung: %d Ereignis(se) gesendet, "
                                     "%d ausstehend", result["sent"], result["pending"])
+                    # Prüfpunkte (Verankerung des Ketten-Endes) nachziehen
+                    anchors = audit.deliver_pending_checkpoints(db)
+                    if anchors.get("sent"):
+                        logger.info("SIEM-Zustellung: %d Prüfpunkt(e) verankert",
+                                    anchors["sent"])
                 finally:
                     db.close()
         except Exception:  # Zustell-Job darf die App nie mitreißen
             logger.exception("SIEM-Zustellung fehlgeschlagen")
         await asyncio.sleep(10)
+
+
+async def audit_checkpoint_job():
+    """Verankert das Ende der Audit-Kette regelmäßig (#26).
+
+    Die Verkettung erkennt Änderungen im Bestand, nicht aber das Abschneiden
+    der jüngsten Einträge. Ein Prüfpunkt hält den erreichten Stand fest; über
+    die SIEM-Zustellung verlässt er die Anwendung und ist damit dem Zugriff
+    auf die Datenbank entzogen."""
+    from . import audit
+
+    while True:
+        try:
+            db = SessionLocal()
+            try:
+                cp = audit.create_checkpoint(db)
+                if cp:
+                    logger.debug("Audit-Prüfpunkt: %d Ereignisse, Head %s",
+                                 cp.event_count, (cp.head_hash or "")[:12])
+            finally:
+                db.close()
+        except Exception:  # darf die App nie mitreißen
+            logger.exception("Audit-Prüfpunkt fehlgeschlagen")
+        await asyncio.sleep(int(os.environ.get("AUDIT_CHECKPOINT_INTERVAL", "3600")))
 
 
 @app.on_event("startup")
@@ -123,6 +152,7 @@ def startup():
     seed_users()
     asyncio.get_event_loop().create_task(expiry_job())
     asyncio.get_event_loop().create_task(siem_delivery_job())
+    asyncio.get_event_loop().create_task(audit_checkpoint_job())
 
 
 @app.get("/api/health")
