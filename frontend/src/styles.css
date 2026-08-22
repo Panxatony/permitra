@@ -270,8 +270,14 @@ table.matrix .row-head { background: #f7f9fc; position: sticky; left: 0; z-index
 .zone-reach { max-width: 1000px; }
 .zone-link { stroke-width: 1.6; fill: none; opacity: .75; }
 .zone-link:hover { opacity: 1; stroke-width: 2.4; }
+/* Füllung nach Schutzbedarf (wie die Badges der Übersicht); fehlende
+   Firewall-Anbindung wird als gestrichelter roter Rahmen markiert */
 .zone-box { fill: #eef1f6; stroke: #9aa7b8; stroke-width: 1.5; }
-.zone-box-warn { fill: #fadddd; stroke: var(--red); stroke-width: 2; }
+.zone-sb-hoch { fill: #fff0d2; stroke: #cfa64e; }
+.zone-sb-sehr_hoch { fill: #fadddd; stroke: #cf7b7b; }
+.zone-box-warn { stroke: var(--red); stroke-width: 2; stroke-dasharray: 5 3; }
+.sb-legend { display: flex; gap: .9rem; align-items: center; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin: .3rem 0 .6rem; }
+.sb-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid #9aa7b8; vertical-align: -2px; margin-right: .3rem; }
 .zone-node-text { font-size: 12px; font-weight: 600; text-anchor: middle; fill: var(--text); }
 .fw-text { font-weight: 700; }
 

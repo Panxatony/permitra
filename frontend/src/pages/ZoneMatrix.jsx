@@ -162,7 +162,8 @@ function ZoneReachability({ overview }) {
           return (
             <g key={z.name}>
               <rect x={p.x - BOX_W / 2} y={p.y - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
-                className={z.has_firewall ? 'zone-box' : 'zone-box zone-box-warn'}>
+                className={`zone-box zone-sb-${(z.schutzbedarf || 'normal').replace(' ', '_')}`
+                  + (z.has_firewall ? '' : ' zone-box-warn')}>
                 <title>{(z.has_firewall
                   ? `${z.name}: erreichbar über ${z.firewalls.map((f) => f.name).join(', ')}`
                   : `${z.name}: keine Firewall-Anbindung über aktive Regeln dokumentiert`)
@@ -174,6 +175,13 @@ function ZoneReachability({ overview }) {
           )
         })}
       </svg>
+      <div className="sb-legend">
+        <span><strong>Schutzbedarf:</strong></span>
+        <span><span className="sb-swatch" style={{ background: '#eef1f6' }} />normal</span>
+        <span><span className="sb-swatch" style={{ background: '#fff0d2', borderColor: '#cfa64e' }} />hoch</span>
+        <span><span className="sb-swatch" style={{ background: '#fadddd', borderColor: '#cf7b7b' }} />sehr hoch</span>
+        <span><span className="sb-swatch" style={{ borderColor: 'var(--red)', borderStyle: 'dashed' }} />keine Firewall-Anbindung</span>
+      </div>
     </div>
   )
 }
