@@ -335,6 +335,27 @@ cd backend && ../.venv/bin/python -m pytest tests/
   die Ereignisse; ein ServiceNow-Adapter (Scripted REST API/MID-Server) erzeugt daraus das
   Change-Ticket und schreibt die Ticket-Nummer per `PUT /api/rules/{id}` in `change_id` zurück.
 
+## Benutzerverwaltung, E-Mail & Anmeldesicherheit
+
+- **Admin-Bereich** (`/admin`, Rolle admin): Benutzer anlegen/ändern/deaktivieren, Rollen
+  vergeben, Passwort-Resets anstoßen. Neue Benutzer ohne Passwort erhalten einen
+  **Aktivierungslink** (72h gültig) – per Mail, falls SMTP konfiguriert; der Link wird dem
+  Admin zusätzlich angezeigt.
+- **E-Mail-Versand** (Basis für spätere Benachrichtigungen), aus solange SMTP_HOST leer:
+
+  ```bash
+  SMTP_HOST=… SMTP_PORT=587 SMTP_USER=… SMTP_PASSWORD=… SMTP_FROM=…
+  PERMITRA_BASE_URL=https://permitra.example.org   # Basis für Links in Mails
+  ```
+
+- **Passwort vergessen** auf der Login-Seite (Reset-Link, 2h gültig; Antwort verrät nie,
+  ob ein Konto existiert). Konto-Seite (`/account`): Passwort ändern.
+- **2FA (TOTP)**: Self-Service auf der Konto-Seite (Secret für Authenticator-Apps,
+  Aktivierung per Code); der Login fragt den Code danach als zweiten Faktor ab.
+- **Passkeys (WebAuthn)**: Registrierung auf der Konto-Seite, Anmeldung ohne Passwort auf
+  der Login-Seite. Erfordert HTTPS (bzw. localhost); Konfiguration über
+  `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (Default: aus `PERMITRA_BASE_URL` abgeleitet).
+
 ## Change-Management-Integration (optional)
 
 Permitra sendet bei Freigabe-Ereignissen einen JSON-Webhook (fire-and-forget, blockiert nie):

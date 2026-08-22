@@ -11,6 +11,9 @@ import Recertification from './pages/Recertification'
 import ExportPage from './pages/ExportPage'
 import Login from './pages/Login'
 import Approvals from './pages/Approvals'
+import Admin from './pages/Admin'
+import Account from './pages/Account'
+import SetPassword from './pages/SetPassword'
 import RuleDetail from './pages/RuleDetail'
 import RuleForm from './pages/RuleForm'
 import RuleList from './pages/RuleList'
@@ -54,7 +57,9 @@ function Layout({ children }) {
                 </select>
               </label>
             )}
-            <span>{user.full_name || user.username}</span>
+            <Link to="/account" className="account-link" title="Konto & Sicherheit">
+              {user.full_name || user.username}
+            </Link>
             <span className={`badge role-${user.role}`}>{t(ROLE_LABELS[user.role])}</span>
             <button className="btn btn-topbar btn-lang" onClick={toggle}
               title={lang === 'de' ? 'Switch to English' : 'Auf Deutsch umstellen'}>
@@ -86,6 +91,7 @@ function Layout({ children }) {
               <Link to="/gateways">{t('ACI Gateways')}</Link>
               <Link to="/objects">{t('Objekte')}</Link>
               <Link to="/export">{t('Export')}</Link>
+              {user.role === 'admin' && <Link to="/admin">{t('Administration')}</Link>}
             </>
           )}
         </nav>
@@ -106,8 +112,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/set-password" element={<SetPassword />} />
       <Route path="/" element={<Layout><Home /></Layout>} />
       <Route path="/approvals" element={<Layout><Approvals /></Layout>} />
+      <Route path="/account" element={<Layout><Account /></Layout>} />
+      <Route path="/admin" element={<Layout><Admin /></Layout>} />
       <Route path="/rules" element={<Layout><RuleList /></Layout>} />
       <Route path="/recertification" element={<Layout><Recertification /></Layout>} />
       <Route path="/rules/new" element={<Layout><RuleForm /></Layout>} />

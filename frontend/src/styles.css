@@ -448,3 +448,5 @@ table.matrix .row-head { background: #f7f9fc; position: sticky; left: 0; z-index
 .derived-zone { min-height: 2.2rem; display: flex; align-items: center; }
 .zone-nets { display: flex; flex-wrap: wrap; gap: .25rem; align-items: center; }
 .zone-net-add input { width: 120px; padding: .2rem .4rem; font-size: .78rem; }
+.account-link { color: #fff; text-decoration: underline dotted; text-underline-offset: 3px; }
+.account-link:hover { color: #cfe0ff; }

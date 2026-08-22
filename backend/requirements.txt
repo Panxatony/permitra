@@ -10,3 +10,4 @@ openpyxl>=3.1
 
 alembic>=1.13
 aerleon>=1.9
+webauthn>=2.4

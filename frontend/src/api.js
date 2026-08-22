@@ -29,13 +29,66 @@ export function clearSession() {
   localStorage.removeItem(USER_KEY)
 }
 
-export async function login(username, password) {
+export async function login(username, password, otp = '') {
   const body = new URLSearchParams({ username, password })
+  if (otp) body.set('otp', otp)
   const res = await fetch('/api/auth/login', { method: 'POST', body })
   if (!res.ok) throw new Error((await res.json()).detail || 'Login fehlgeschlagen')
   const data = await res.json()
   setSession(data.access_token, data.user)
   return data.user
+}
+
+// WebAuthn: base64url <-> ArrayBuffer für die Browser-Credential-API
+const b64uToBuf = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0))
+const bufToB64u = (b) => btoa(String.fromCharCode(...new Uint8Array(b)))
+  .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+
+export async function passkeyLogin(username) {
+  const optRes = await fetch('/api/auth/passkey/login-options', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }),
+  })
+  if (!optRes.ok) throw new Error((await optRes.json()).detail || 'Passkey nicht verfügbar')
+  const options = await optRes.json()
+  options.challenge = b64uToBuf(options.challenge)
+  options.allowCredentials = (options.allowCredentials || []).map((c) => ({ ...c, id: b64uToBuf(c.id) }))
+  const cred = await navigator.credentials.get({ publicKey: options })
+  const credential = {
+    id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
+    response: {
+      clientDataJSON: bufToB64u(cred.response.clientDataJSON),
+      authenticatorData: bufToB64u(cred.response.authenticatorData),
+      signature: bufToB64u(cred.response.signature),
+      userHandle: cred.response.userHandle ? bufToB64u(cred.response.userHandle) : null,
+    },
+    clientExtensionResults: cred.getClientExtensionResults(),
+  }
+  const res = await fetch('/api/auth/passkey/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, credential }),
+  })
+  if (!res.ok) throw new Error((await res.json()).detail || 'Passkey-Anmeldung fehlgeschlagen')
+  const data = await res.json()
+  setSession(data.access_token, data.user)
+  return data.user
+}
+
+export async function passkeyRegister(name) {
+  const options = await request('/api/auth/passkey/register-options', { method: 'POST' })
+  options.challenge = b64uToBuf(options.challenge)
+  options.user.id = b64uToBuf(options.user.id)
+  options.excludeCredentials = (options.excludeCredentials || []).map((c) => ({ ...c, id: b64uToBuf(c.id) }))
+  const cred = await navigator.credentials.create({ publicKey: options })
+  const credential = {
+    id: cred.id, rawId: bufToB64u(cred.rawId), type: cred.type,
+    response: {
+      clientDataJSON: bufToB64u(cred.response.clientDataJSON),
+      attestationObject: bufToB64u(cred.response.attestationObject),
+    },
+    clientExtensionResults: cred.getClientExtensionResults(),
+  }
+  return request('/api/auth/passkey/register', { method: 'POST', body: { credential, name } })
 }
 
 async function request(path, options = {}) {
@@ -66,6 +119,20 @@ async function request(path, options = {}) {
 
 export const api = {
   vrfs: () => request('/api/vrfs'),
+  me: () => request('/api/auth/me'),
+  users: () => request('/api/users'),
+  createUser: (p) => request('/api/users', { method: 'POST', body: p }),
+  updateUser: (username, p) => request(`/api/users/${encodeURIComponent(username)}`, { method: 'PUT', body: p }),
+  deleteUser: (username) => request(`/api/users/${encodeURIComponent(username)}`, { method: 'DELETE' }),
+  sendReset: (username) => request(`/api/users/${encodeURIComponent(username)}/send-reset`, { method: 'POST' }),
+  forgotPassword: (username) => request('/api/auth/forgot', { method: 'POST', body: { username } }),
+  setPassword: (token, password) => request('/api/auth/set-password', { method: 'POST', body: { token, password } }),
+  changePassword: (current, next) => request('/api/auth/change-password', { method: 'POST', body: { current, new: next } }),
+  totpSetup: () => request('/api/auth/totp/setup', { method: 'POST' }),
+  totpEnable: (code) => request('/api/auth/totp/enable', { method: 'POST', body: { code } }),
+  totpDisable: (password) => request('/api/auth/totp/disable', { method: 'POST', body: { password } }),
+  passkeys: () => request('/api/auth/passkeys'),
+  deletePasskey: (id) => request(`/api/auth/passkeys/${id}`, { method: 'DELETE' }),
   rules: (params = {}) => {
     const q = new URLSearchParams(Object.entries({ vrf: getVrfName(), ...params }).filter(([, v]) => v))
     return request(`/api/rules?${q}`)

@@ -356,14 +356,24 @@ class UserOut(BaseModel):
     full_name: str
     email: str
     role: Role
+    is_active: bool = True
+    totp_enabled: bool = False
 
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
-    password: str = Field(..., min_length=6)
+    # Ohne Passwort wird ein Aktivierungslink erzeugt (Mail bzw. Link für den Admin)
+    password: str | None = Field(None, min_length=6)
     full_name: str = ""
     email: str = ""
     role: Role = Role.architect
+
+
+class UserUpdate(BaseModel):
+    full_name: str | None = None
+    email: str | None = None
+    role: Role | None = None
+    is_active: bool | None = None
 
 
 class Token(BaseModel):

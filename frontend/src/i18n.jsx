@@ -228,6 +228,69 @@ const EN = {
   'Neue Zone': 'New zone',
   'Netz': 'Network',
   'neu': 'new',
+  // Administration & Konto
+  'Administration': 'Administration',
+  'Benutzerverwaltung – weitere Permitra-Einstellungen folgen hier.':
+    'User management – more Permitra settings will follow here.',
+  'Benutzer löschen?': 'Delete user?',
+  'Benutzer gelöscht': 'User deleted',
+  'Rolle': 'Role',
+  'Rolle geändert': 'Role changed',
+  'aktiv': 'active',
+  'inaktiv': 'inactive',
+  'Konto deaktiviert': 'Account deactivated',
+  'Konto aktiviert': 'Account activated',
+  'Deaktivieren': 'Deactivate',
+  'Aktivieren': 'Activate',
+  'Passwort-Reset': 'Password reset',
+  'Neuen Benutzer anlegen': 'Create new user',
+  'Ohne Passwort: Der Benutzer erhält einen Aktivierungslink und setzt sein Passwort selbst (empfohlen).':
+    'Without a password the user receives an activation link and sets their own password (recommended).',
+  'Benutzer anlegen': 'Create user',
+  'Link (falls keine Mail ankommt, manuell übermitteln):':
+    'Link (share manually if no mail arrives):',
+  'Konto & Sicherheit': 'Account & security',
+  'Passwort ändern': 'Change password',
+  'Aktuelles Passwort': 'Current password',
+  'Neues Passwort (min. 8 Zeichen)': 'New password (min. 8 characters)',
+  'Ändern': 'Change',
+  'Zwei-Faktor (TOTP)': 'Two-factor (TOTP)',
+  '2FA ist aktiviert – beim Login wird zusätzlich ein Code abgefragt.':
+    '2FA is enabled – a code is required at login.',
+  'Secret erzeugt – bitte in der Authenticator-App hinterlegen und mit Code bestätigen.':
+    'Secret generated – add it to your authenticator app and confirm with a code.',
+  'Secret in der Authenticator-App hinterlegen (QR-Alternative: manuelle Eingabe):':
+    'Add the secret to your authenticator app (manual entry instead of QR):',
+  'Code aus der App': 'Code from the app',
+  'Zusätzlicher Einmal-Code aus einer Authenticator-App (z.B. Google Authenticator, 1Password).':
+    'Additional one-time code from an authenticator app (e.g. Google Authenticator, 1Password).',
+  '2FA einrichten': 'Set up 2FA',
+  'Zum Deaktivieren bitte das Passwort eingeben:': 'Enter your password to disable:',
+  'Anmeldung ohne Passwort (Touch ID, Windows Hello, Sicherheitsschlüssel). Erfordert HTTPS.':
+    'Sign in without a password (Touch ID, Windows Hello, security key). Requires HTTPS.',
+  'Passkey hinzufügen': 'Add passkey',
+  'Passkey entfernt': 'Passkey removed',
+  'Passkey registriert': 'Passkey registered',
+  'Passkey-Registrierung fehlgeschlagen': 'Passkey registration failed',
+  'Name für den Passkey (z.B. "MacBook Touch ID"):': 'Name for the passkey (e.g. "MacBook Touch ID"):',
+  'Dieser Browser unterstützt keine Passkeys.': 'This browser does not support passkeys.',
+  // Login-Erweiterungen
+  'Bitte den Code aus der Authenticator-App eingeben.': 'Please enter the code from your authenticator app.',
+  'Der Code ist ungültig – bitte erneut versuchen.': 'The code is invalid – please try again.',
+  '2FA-Code': '2FA code',
+  'Mit Passkey anmelden': 'Sign in with passkey',
+  'Passwort vergessen?': 'Forgot password?',
+  'Bitte zuerst den Benutzernamen eingeben.': 'Please enter your username first.',
+  'Bitte zuerst den Benutzernamen (oder die E-Mail-Adresse) eingeben.':
+    'Please enter your username (or email address) first.',
+  // Passwort setzen
+  'Passwort setzen': 'Set password',
+  'Kein Token im Link – bitte den Link aus der E-Mail vollständig öffnen.':
+    'No token in the link – please open the complete link from the email.',
+  'Die Passwörter stimmen nicht überein.': 'The passwords do not match.',
+  'Passwort wiederholen': 'Repeat password',
+  'Passwort speichern': 'Save password',
+  'Zur Anmeldung': 'Go to login',
   'Unbekanntes Netz:': 'Unknown network:',
   'ist keinem bekannten Netzwerk zugeordnet. Bitte das Netzwerk zuerst auf der Seite':
     'does not belong to any known network. Please first add the network on the',

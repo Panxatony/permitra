@@ -350,6 +350,45 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(128), default="")
     email: Mapped[str] = mapped_column(String(128), default="")
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.architect)
+    is_active: Mapped[bool] = mapped_column(default=True)
+    # Zwei-Faktor (TOTP): Secret wird beim Setup gesetzt, zählt erst mit enabled
+    totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(default=False)
+
+    passkeys: Mapped[list["Passkey"]] = relationship(back_populates="user",
+                                                    cascade="all, delete-orphan")
+
+
+class AuthToken(Base):
+    """Einmal-Token für Aktivierungs- und Passwort-Reset-Links (nur Hash gespeichert)."""
+
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    purpose: Mapped[str] = mapped_column(String(16))  # "activate" | "reset"
+    token_hash: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    user: Mapped["User"] = relationship()
+
+
+class Passkey(Base):
+    """WebAuthn-Passkey eines Benutzers (Anmeldung ohne Passwort)."""
+
+    __tablename__ = "passkeys"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    credential_id: Mapped[str] = mapped_column(Text)  # base64url
+    public_key: Mapped[str] = mapped_column(Text)     # base64
+    sign_count: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String(64), default="Passkey")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="passkeys")
 
 
 # Zuordnung Regel -> Sicherheitskomponenten, auf denen sie umzusetzen ist
