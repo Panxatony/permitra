@@ -390,6 +390,34 @@ class Setting(Base):
     value: Mapped[str] = mapped_column(String(256), default="")
 
 
+class NetboxConfig(Base):
+    """NetBox-Verbindung (eine Zeile). Der API-Token wird verschlüsselt gespeichert."""
+
+    __tablename__ = "netbox_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    url: Mapped[str] = mapped_column(String(256), default="")
+    token_enc: Mapped[str] = mapped_column(Text, default="")  # Fernet-verschlüsselt
+    verify_tls: Mapped[bool] = mapped_column(default=True)
+    last_import_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class NetboxPrefix(Base):
+    """Aus NetBox importiertes Prefix (Staging). Wird in die Zonen-Registry
+    übernommen, sobald ihm eine Zone zugeordnet wird (adopted=True)."""
+
+    __tablename__ = "netbox_prefixes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    netbox_id: Mapped[int] = mapped_column(Integer, index=True)
+    cidr: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="")     # active | planned
+    description: Mapped[str] = mapped_column(Text, default="")
+    vrf: Mapped[str] = mapped_column(String(64), default="")
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    adopted: Mapped[bool] = mapped_column(default=False)  # in die Registry übernommen
+
+
 class ApiToken(Base):
     """Read-only Service-Token für Automatisierung (Ansible/Terraform).
 

@@ -406,7 +406,8 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                 batch_id=batch_id, change_type="net_add",
                 from_zone=zone_name, to_zone=norm, old_policy=None, new_policy="add",
                 requested_by=user.username, comment=comment,
-                extra={"vrf": vrf.name, "description": item.get("description", "")},
+                extra={"vrf": vrf.name, "description": item.get("description", ""),
+                       "source": item.get("source", "manual")},
             ))
             continue
         if item.get("type") in ("net_update", "net_delete"):
@@ -672,7 +673,8 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                 if not db.query(ZoneNetwork).filter(ZoneNetwork.cidr == item.to_zone,
                                                     ZoneNetwork.vrf_id == vrf.id).first():
                     db.add(ZoneNetwork(cidr=item.to_zone, zone_id=zone.id, vrf_id=vrf.id,
-                                       description=extra.get("description", ""), source="manual"))
+                                       description=extra.get("description", ""),
+                                       source=extra.get("source", "manual")))
             elif item.change_type in ("net_update", "net_delete"):
                 network = db.get(ZoneNetwork, extra.get("network_id") or 0)
                 if not network:

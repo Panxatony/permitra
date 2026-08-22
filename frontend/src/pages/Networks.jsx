@@ -19,12 +19,30 @@ export default function Networks() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
+  const [nbPrefixes, setNbPrefixes] = useState([])
+  const [nbZone, setNbZone] = useState({})  // prefixId -> Zonenname
+
   const load = () => {
     api.zoneNetworks().then(setNetworks).catch((e) => setError(e.message))
     api.zones().then(setZones).catch(() => setZones([]))
     api.matrixChanges().then(setChanges).catch(() => setChanges([]))
+    if (canEdit) api.netboxPrefixes().then(setNbPrefixes).catch(() => setNbPrefixes([]))
   }
   useEffect(() => { load() }, [])
+
+  const adoptNetbox = async () => {
+    const items = nbPrefixes
+      .filter((p) => nbZone[p.id])
+      .map((p) => ({ prefix_id: p.id, zone: nbZone[p.id] }))
+    if (!items.length) { setError(t('Bitte mindestens einem Prefix eine Zone zuweisen.')); return }
+    setError(''); setNotice('')
+    try {
+      const r = await api.netboxAdopt(items)
+      setNotice(r?.detail || t('Übernahme beantragt.'))
+      setNbZone({})
+      load()
+    } catch (err) { setError(err.message) }
+  }
 
   // Offene Anträge für Netzwerk-Zuordnungen: Markierung je Eintrag/CIDR
   const pendingNet = changes.filter(
@@ -94,6 +112,42 @@ export default function Networks() {
 
       {error && <div className="error">{error}</div>}
       {notice && <div className="infobox">{notice}</div>}
+
+      {canEdit && nbPrefixes.length > 0 && (
+        <div className="card">
+          <h3>{t('Aus NetBox importiert')} ({nbPrefixes.filter((p) => !p.in_registry).length})</h3>
+          <p className="muted small">
+            {t('Jedem Prefix eine Zone zuweisen und übernehmen – die Zuordnung durchläuft den Freigabe-Workflow.')}
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>{t('Netzwerk (CIDR)')}</th><th>Status</th><th>{t('Beschreibung')}</th><th>{t('Zone')}</th></tr>
+              </thead>
+              <tbody>
+                {nbPrefixes.map((p) => (
+                  <tr key={p.id}>
+                    <td><code>{p.cidr}</code></td>
+                    <td><span className={`badge ${p.status === 'active' ? 'status-approved' : 'status-in_review'}`}>{p.status}</span></td>
+                    <td className="small">{p.description}</td>
+                    <td>
+                      {p.in_registry ? <span className="muted small">{t('bereits vorhanden')}</span> : (
+                        <select value={nbZone[p.id] || ''} onChange={(e) => setNbZone({ ...nbZone, [p.id]: e.target.value })}>
+                          <option value="">{t('– später –')}</option>
+                          {zones.map((z) => <option key={z.id} value={z.name}>{z.name}</option>)}
+                        </select>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="actions" style={{ marginTop: '.5rem' }}>
+            <button className="btn btn-primary" onClick={adoptNetbox}>{t('Ausgewählte übernehmen')}</button>
+          </div>
+        </div>
+      )}
 
       {pendingNet.length > 0 && (
         <div className="card">

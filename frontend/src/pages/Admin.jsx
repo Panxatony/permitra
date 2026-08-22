@@ -20,12 +20,16 @@ export default function Admin() {
   const [tokens, setTokens] = useState([])
   const [tokenName, setTokenName] = useState('')
   const [newToken, setNewToken] = useState('')
+  const [netbox, setNetbox] = useState(null)
+  const [nbForm, setNbForm] = useState({ url: '', token: '', verify_tls: true })
 
   const load = () => {
     api.users().then(setUsers).catch((e) => setError(e.message))
     api.settings().then(setSettings).catch(() => setSettings({}))
     api.auditLog({ limit: 50 }).then(setAudit).catch(() => setAudit([]))
     api.apiTokens().then(setTokens).catch(() => setTokens([]))
+    api.netboxConfig().then((c) => { setNetbox(c); setNbForm((f) => ({ ...f, url: c.url, verify_tls: c.verify_tls })) })
+      .catch(() => setNetbox(null))
   }
   useEffect(() => { load() }, [])
 
@@ -179,6 +183,48 @@ export default function Admin() {
           <button className="btn btn-primary" type="submit">{t('Benutzer anlegen')}</button>
         </div>
       </form>
+
+      <section className="card" style={{ marginTop: '1rem' }}>
+        <h3>NetBox-Import <span className="muted small">{t('(Netzwerk-Prefixe, Status active/planned)')}</span></h3>
+        <div className="grid-3">
+          <label>NetBox-URL
+            <input value={nbForm.url} placeholder="https://netbox.example.org"
+              onChange={(e) => setNbForm({ ...nbForm, url: e.target.value })} />
+          </label>
+          <label>API-Token
+            <input type="password" value={nbForm.token}
+              placeholder={netbox?.configured ? t('(gespeichert – leer lassen)') : ''}
+              onChange={(e) => setNbForm({ ...nbForm, token: e.target.value })} />
+          </label>
+          <label className="checkbox" style={{ alignSelf: 'end' }}>
+            <input type="checkbox" checked={nbForm.verify_tls}
+              onChange={(e) => setNbForm({ ...nbForm, verify_tls: e.target.checked })} />
+            {t('TLS-Zertifikat prüfen')}
+          </label>
+        </div>
+        <div className="actions" style={{ marginTop: '.5rem' }}>
+          <button className="btn btn-primary" onClick={() => act(() => api.setNetboxConfig(nbForm)
+            .then((c) => { setNetbox(c); setNbForm((f) => ({ ...f, token: '' })); return { detail: t('NetBox-Konfiguration gespeichert') } }))}>
+            {t('Speichern')}
+          </button>
+          <button className="btn btn-ghost" onClick={() => act(() => api.netboxTest()
+            .then((r) => ({ detail: `${t('Verbindung ok')} – ${r.prefix_total} Prefixe in NetBox` })))}>
+            {t('Verbindung testen')}
+          </button>
+          <button className="btn btn-ghost" onClick={() => act(() => api.netboxImport()
+            .then((r) => ({ detail: `${t('Import fertig')}: ${r.fetched} geladen, ${r.pending} zur Übernahme bereit` })))}>
+            {t('Jetzt importieren')}
+          </button>
+          {netbox?.last_import_at && (
+            <span className="muted small" style={{ alignSelf: 'center' }}>
+              {t('Letzter Import')}: {new Date(netbox.last_import_at).toLocaleString('de-DE')}
+            </span>
+          )}
+        </div>
+        <p className="muted small" style={{ marginTop: '.4rem' }}>
+          {t('Importierte Prefixe werden auf der Seite Netzwerke einer Zone zugeordnet (Freigabe durch zwei Change Approver).')}
+        </p>
+      </section>
 
       <section className="card" style={{ marginTop: '1rem' }}>
         <h3>{t('API-Tokens (read-only)')} <span className="muted small">{t('für Ansible/Terraform u.a.')}</span></h3>

@@ -125,6 +125,14 @@ Change approvers land on a focused approvals page after login: open rule reviews
 - **2FA (TOTP)**: self-service on the account page (secret for authenticator apps, activation by code); login then asks for the code as a second factor. Implemented per RFC 6238 without extra dependencies.
 - **Passkeys (WebAuthn)**: registration on the account page, passwordless sign-in on the login page. Requires HTTPS (or localhost); configured via `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (default derived from `PERMITRA_BASE_URL`).
 
+## NetBox import (networks)
+
+Permitra manages only the **network→zone mapping**; the networks themselves live in a
+dedicated IPAM. Prefixes can be imported from **NetBox** (status *active* and *planned*):
+configure the NetBox URL and API token in the admin area (token stored encrypted), run the
+import (`POST /api/netbox/import`), then adopt prefixes into the zone registry on the Networks
+page — assigning each a zone, which goes through the normal approval workflow (source `netbox`).
+
 ## Automation: read-only API tokens (Ansible/Terraform)
 
 Permitra is API-first, so external tools can use it as the source of truth. Create a

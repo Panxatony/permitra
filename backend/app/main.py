@@ -9,6 +9,7 @@ from .database import SessionLocal
 from .expiry import expire_rules
 from .migrations import run_migrations
 from .routers import (
+    netbox_router,
     api_tokens_router,
     audit_router,
     settings_router,
@@ -63,6 +64,7 @@ app.include_router(dashboard_router.router)
 app.include_router(settings_router.router)
 app.include_router(audit_router.router)
 app.include_router(api_tokens_router.router)
+app.include_router(netbox_router.router)
 app.include_router(objects_router.router)
 app.include_router(epgs_router.router)
 app.include_router(vrfs_router.router)
