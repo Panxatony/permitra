@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
-import { AddressList, ComponentBadges, ServiceList, STATUS_LABELS, StatusBadge } from '../components/shared'
+import { AddressList, ComponentBadges, ServiceList, STATUS_LABELS, StatusBadge, useZoneLabels } from '../components/shared'
 import { useLang } from '../i18n'
 
 const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: '', status: '', component: '', impl: '', risk: '' }
@@ -9,6 +9,7 @@ const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: 
 export default function RuleList() {
   const PAGE_SIZE = 50
   const { t } = useLang()
+  const zoneLabel = useZoneLabels()
   const [searchParams] = useSearchParams()
   const [rules, setRules] = useState([])
   const [total, setTotal] = useState(0)
@@ -132,9 +133,9 @@ export default function RuleList() {
                 <tr key={r.rule_id}>
                   <td><Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link></td>
                   <td><ComponentBadges components={r.components} /></td>
-                  <td>{r.source_zone}</td>
+                  <td>{zoneLabel(r.source_zone)}</td>
                   <td className="addr"><AddressList entries={r.source} max={2} /></td>
-                  <td>{r.destination_zone}</td>
+                  <td>{zoneLabel(r.destination_zone)}</td>
                   <td className="addr"><AddressList entries={r.destination} max={2} /></td>
                   <td><ServiceList services={r.services} /></td>
                   <td className="justif">{r.justification}</td>

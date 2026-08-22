@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useLang } from '../i18n'
+import { api } from '../api'
 
 /* Einfaches Overlay: schließt per Backdrop-Klick oder Escape */
 export function Modal({ title, onClose, children }) {
@@ -134,4 +135,23 @@ export function Highlighted({ text, fmt }) {
       ))}
     </pre>
   )
+}
+
+
+/* Löst eine Zonen-Referenz (ID oder Name) auf die Anzeige "ID-Name" auf.
+   Zieht die Zonenliste einmal und liefert eine Label-Funktion. */
+export function useZoneLabels() {
+  const [map, setMap] = useState({})
+  useEffect(() => {
+    api.zones().then((zones) => {
+      const m = {}
+      zones.forEach((z) => {
+        const label = z.code ? `${z.code}-${z.name}` : z.name
+        m[(z.code || '').toUpperCase()] = label
+        m[z.name.toUpperCase()] = label
+      })
+      setMap(m)
+    }).catch(() => {})
+  }, [])
+  return (ref) => map[(ref || '').toUpperCase()] || ref || '–'
 }

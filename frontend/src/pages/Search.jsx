@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
-import { ServiceList, StatusBadge, formatEntry } from '../components/shared'
+import { ServiceList, StatusBadge, formatEntry, useZoneLabels } from '../components/shared'
 import { useLang } from '../i18n'
 
 const TYPE_LABELS = { juniper: 'Juniper SRX', checkpoint: 'Check Point', aci: 'Cisco ACI' }
@@ -20,7 +20,7 @@ function ServiceChips({ services }) {
   ))
 }
 
-function ResultTable({ rows, showMatch, t }) {
+function ResultTable({ rows, showMatch, t, zoneLabel }) {
   if (!rows.length) return <p className="muted">{t('Keine Treffer.')}</p>
   return (
     <div className="table-wrap">
@@ -39,9 +39,9 @@ function ResultTable({ rows, showMatch, t }) {
                 {showMatch && r.match === 'any' && <div className="badge match-any">{t('nur über „any“')}</div>}
               </td>
               <td>{(r.components || []).map((name) => <span key={name} className="badge platform-unknown comp-badge">{name}</span>)}</td>
-              <td>{r.source_zone}</td>
+              <td>{zoneLabel(r.source_zone)}</td>
               <td className="addr">{highlight(r.source, r.matched_source || r.matched_entries || [])}</td>
-              <td>{r.destination_zone}</td>
+              <td>{zoneLabel(r.destination_zone)}</td>
               <td className="addr">{highlight(r.destination, r.matched_destination || r.matched_entries || [])}</td>
               <td><ServiceList services={r.services} /></td>
               <td><code>{r.action}</code></td>
@@ -143,6 +143,7 @@ function PathFlow({ result, t }) {
 
 export default function Search() {
   const { t } = useLang()
+  const zoneLabel = useZoneLabels()
   const [src, setSrc] = useState('')
   const [dst, setDst] = useState('')
   const [result, setResult] = useState(null)       // Adress-Suche (ein Feld)
@@ -214,7 +215,7 @@ export default function Search() {
           {pathRules && (
             <section>
               <h2>{t('Regeln')} {pathRules.src} → {pathRules.dst} ({pathRules.results.length})</h2>
-              <ResultTable rows={pathRules.results} showMatch t={t} />
+              <ResultTable rows={pathRules.results} showMatch t={t} zoneLabel={zoneLabel} />
             </section>
           )}
         </>
@@ -224,11 +225,11 @@ export default function Search() {
         <div className="search-results">
           <section>
             <h2>{t('⬆ Ausgehend – als Quelle')} ({result.outgoing.length})</h2>
-            <ResultTable rows={result.outgoing} showMatch={result.is_network} t={t} />
+            <ResultTable rows={result.outgoing} showMatch={result.is_network} t={t} zoneLabel={zoneLabel} />
           </section>
           <section>
             <h2>{t('⬇ Eingehend – als Ziel')} ({result.incoming.length})</h2>
-            <ResultTable rows={result.incoming} showMatch={result.is_network} t={t} />
+            <ResultTable rows={result.incoming} showMatch={result.is_network} t={t} zoneLabel={zoneLabel} />
           </section>
         </div>
       )}

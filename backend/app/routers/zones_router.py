@@ -385,11 +385,20 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             level = (item.get("pap_level") or "intern").lower()
             if level not in ("extern", "pap", "intern"):
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Ungültige P-A-P-Einstufung")
-            # to_zone trägt die Zonen-ID (bei zone_create sonst ungenutzt)
+            # to_zone trägt die Zonen-ID (bei zone_create sonst ungenutzt);
+            # Schutzbedarf (CIA) in extra
+            cia = {}
+            for f in ("cia_c", "cia_i", "cia_a"):
+                v = (item.get(f) or "normal").strip().lower()
+                if v not in ("normal", "hoch", "sehr hoch"):
+                    raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                        "Schutzbedarf muss normal, hoch oder sehr hoch sein")
+                cia[f] = v
             rows.append(ZonePolicyChange(
                 batch_id=batch_id, change_type="zone_create",
                 from_zone=name, to_zone=code, old_policy=None, new_policy=level,
                 requested_by=user.username, comment=item.get("description", ""),
+                extra=cia,
             ))
             continue
         if item.get("type") == "zone_delete":
@@ -669,8 +678,11 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
         # Erst Zonen anlegen, dann Matrix-Zellen anwenden
         for item in batch:
             if item.change_type == "zone_create" and not find_zone(db, item.from_zone):
+                cia = item.extra or {}
                 db.add(Zone(name=item.from_zone, code=item.to_zone, pap_level=item.new_policy,
-                            description=item.comment, sort_order=db.query(Zone).count()))
+                            description=item.comment, sort_order=db.query(Zone).count(),
+                            cia_c=cia.get("cia_c", "normal"), cia_i=cia.get("cia_i", "normal"),
+                            cia_a=cia.get("cia_a", "normal")))
             elif item.change_type == "zone_delete":
                 zone = find_zone(db, item.from_zone)
                 if zone:

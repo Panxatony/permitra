@@ -353,6 +353,7 @@ export default function ZoneMatrix() {
   const [newZone, setNewZone] = useState('')
   const [newZoneCode, setNewZoneCode] = useState('')
   const [newZoneLevel, setNewZoneLevel] = useState('intern')
+  const [newZoneCia, setNewZoneCia] = useState({ cia_c: 'normal', cia_i: 'normal', cia_a: 'normal' })
   const [netInputs, setNetInputs] = useState({})  // Zone -> CIDR-Eingabe
   const [saving, setSaving] = useState('')
   const [settings, setSettings] = useState({})
@@ -464,7 +465,7 @@ export default function ZoneMatrix() {
     setError('')
     try {
       const items = [
-        ...draftZones.map((z) => ({ type: 'zone_create', name: z.name, code: z.code, pap_level: z.pap_level })),
+        ...draftZones.map((z) => ({ type: 'zone_create', name: z.name, code: z.code, pap_level: z.pap_level, cia_c: z.cia_c, cia_i: z.cia_i, cia_a: z.cia_a })),
         ...Object.entries(draft).map(([key, policy]) => {
           const [from_zone, to_zone] = key.split('|')
           return { type: 'policy', from_zone, to_zone, policy, temporary: false }
@@ -507,7 +508,7 @@ export default function ZoneMatrix() {
       return
     }
     setError('')
-    setDraftZones((list) => [...list, { name, code, pap_level: newZoneLevel }])
+    setDraftZones((list) => [...list, { name, code, pap_level: newZoneLevel, ...newZoneCia }])
     setNewZone('')
     api.zoneNextCode().then((r) => setNewZoneCode(r.code)).catch(() => setNewZoneCode(''))
   }
@@ -778,6 +779,18 @@ export default function ZoneMatrix() {
                 <option value="pap">P-A-P-Ebene</option>
                 <option value="intern">intern (Süd)</option>
               </select>
+              {[['cia_c', 'C'], ['cia_i', 'I'], ['cia_a', 'V']].map(([f, lbl]) => (
+                <select key={f} title={t('Schutzbedarf')} value={newZoneCia[f]}
+                  onChange={(e) => setNewZoneCia({ ...newZoneCia, [f]: e.target.value })}
+                  style={{ maxWidth: '110px' }}>
+                  <option value="normal">{lbl}: normal</option>
+                  <option value="hoch">{lbl}: hoch</option>
+                  <option value="sehr hoch">{lbl}: sehr hoch</option>
+                </select>
+              ))}
+              <span className="muted small">
+                {t('Schutzbedarf')}: <strong>{['sehr hoch', 'hoch'].find((l) => Object.values(newZoneCia).includes(l)) || 'normal'}</strong>
+              </span>
               <button className="btn btn-primary" type="submit">{t('Zone anlegen')} (in Antrag)</button>
               {draftZones.map((z) => (
                 <span key={z.name} className="zone-chip">

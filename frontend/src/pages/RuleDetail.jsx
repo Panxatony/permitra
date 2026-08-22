@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, getUser } from '../api'
-import { AddressList, ComponentBadges, Highlighted, ServiceList, StatusBadge } from '../components/shared'
+import { AddressList, ComponentBadges, Highlighted, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
 import { useLang } from '../i18n'
 
 const IMPL_OPTIONS = ['offen', 'neu', 'zu ändern', 'zu löschen', 'umgesetzt', 'deaktiviert']
@@ -11,6 +11,7 @@ export default function RuleDetail() {
   const user = getUser()
   const navigate = useNavigate()
   const { t } = useLang()
+  const zoneLabel = useZoneLabels()
   const [rule, setRule] = useState(null)
   const [impl, setImpl] = useState(null)
   const [conflicts, setConflicts] = useState([])
@@ -99,9 +100,9 @@ export default function RuleDetail() {
           <h2>{t('Verkehrsbeziehung')}</h2>
           <dl>
             <dt>{t('Komponenten')}</dt><dd><ComponentBadges components={rule.components} /></dd>
-            <dt>{t('Quell-Zone')}</dt><dd>{rule.source_zone || '–'}</dd>
+            <dt>{t('Quell-Zone')}</dt><dd>{zoneLabel(rule.source_zone) || '–'}</dd>
             <dt>{t('Quelle')}</dt><dd className="addr"><AddressList entries={rule.source} /></dd>
-            <dt>{t('Ziel-Zone')}</dt><dd>{rule.destination_zone || '–'}</dd>
+            <dt>{t('Ziel-Zone')}</dt><dd>{zoneLabel(rule.destination_zone) || '–'}</dd>
             <dt>{t('Ziel')}</dt><dd className="addr"><AddressList entries={rule.destination} /></dd>
             <dt>{t('Dienste')}</dt><dd><ServiceList services={rule.services} /></dd>
             <dt>{t('Aktion')}</dt><dd><code>{rule.action}</code></dd>
