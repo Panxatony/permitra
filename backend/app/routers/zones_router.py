@@ -253,6 +253,10 @@ def overview(db: Session = Depends(get_db), _: User = Depends(get_current_user))
         firewalls = {c.id: c for c in zone.components if c.type.value != "aci"}
         aci = {}
         for rule in zone_rules:
+            # ACI-Contracts werden am Ziel-Segment (Provider-EPG) bereitgestellt –
+            # die Fabric zählt daher nur für die Ziel-Zone der Regel
+            if (rule.destination_zone or "").upper() != zname:
+                continue
             for component in rule.components:
                 if component.type.value == "aci":
                     aci[component.id] = component

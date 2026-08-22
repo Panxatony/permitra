@@ -37,11 +37,12 @@ def build_mermaid(db: Session, generated_at: str = "") -> str:
     # abgeleitet aus den aktiven Regeln der Zone)
     aci_by_zone: dict[str, set[str]] = {}
     for rule in rules:
+        # ACI-Contracts zählen für das Ziel-Segment (Provider-EPG) der Regel
+        if not rule.destination_zone:
+            continue
         for component in rule.components:
             if component.type.value == "aci":
-                for zone_name in (rule.source_zone, rule.destination_zone):
-                    if zone_name:
-                        aci_by_zone.setdefault(zone_name.upper(), set()).add(component.name)
+                aci_by_zone.setdefault(rule.destination_zone.upper(), set()).add(component.name)
 
     firewalls: dict[int, SecurityComponent] = {}
     for zone in zones:

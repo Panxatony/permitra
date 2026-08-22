@@ -51,6 +51,7 @@ ZONES = [
     ("SHARED",    "Shared Services (DNS, NTP, Repo)",  "10.10.70.0/24"),
     ("MGMT",      "Administration/Jump-Hosts",         "10.10.80.0/24"),
     ("MON",       "Monitoring/Logging",                "10.10.90.0/24"),
+    ("AUDIT",     "Audit/SIEM – zentrale Protokollierung", "10.10.95.0/24"),
 ]
 
 # --- Erlaubte Beziehungen (alles andere: Block) ------------------------------
@@ -68,6 +69,7 @@ ALLOWED = {
     ("MGMT", "TEST"), ("MGMT", "DEV"), ("MGMT", "CICD"), ("MGMT", "MON"),
     ("MON", "PROD-APP"), ("MON", "PROD-DB"), ("MON", "DMZ-WEB"), ("MON", "SHARED"),
     ("MON", "TEST"), ("MON", "DEV"), ("MON", "CICD"), ("MON", "MGMT"),
+    ("MGMT", "AUDIT"), ("MON", "AUDIT"), ("AUDIT", "SHARED"),
 }
 TEMPORARY = {("VPN", "TEST")}  # Beispiel für eine nur temporär erlaubte Beziehung
 
@@ -105,6 +107,7 @@ HOST_ROLES = {
     "PROD-DB": ["db", "pg", "mysql"], "TEST": ["tst", "qa"], "DEV": ["dev"],
     "CICD": ["ci", "runner", "registry"], "SHARED": ["dns", "ntp", "repo", "mail"],
     "MGMT": ["jump", "adm"], "MON": ["mon", "log", "graf"], "VPN": ["vpn"],
+    "AUDIT": ["sim", "aud", "col"],
 }
 
 # Typische Dienste je Zielzone
@@ -118,6 +121,7 @@ SERVICES_BY_DEST = {
     "TEST": [[("TCP", "443")], [("TCP", "22")]],
     "DEV": [[("TCP", "443")], [("TCP", "22")]],
     "CICD": [[("TCP", "443")], [("TCP", "5000")]],
+    "AUDIT": [[("TCP", "514"), ("UDP", "514")], [("TCP", "6514")], [("TCP", "443")]],
 }
 DEFAULT_SERVICES = [[("TCP", "443")], [("TCP", "22")], [("ICMP", "")], [("UDP", "161")]]
 
@@ -267,6 +271,7 @@ def seed(wipe: bool):
         "SHARED":   ("Team Infrastruktur",  "normal", "hoch",   "hoch"),
         "MGMT":     ("Team Infrastruktur",  "sehr hoch", "sehr hoch", "hoch"),
         "MON":      ("Team Betrieb",        "hoch",   "hoch",   "hoch"),
+        "AUDIT":    ("Team Security",       "sehr hoch", "sehr hoch", "hoch"),
     }
     zones = {}
     for order, (name, descr, _net) in enumerate(ZONES):
@@ -318,14 +323,16 @@ def seed(wipe: bool):
     # der FFM-Cluster bedient nur interne Zonen (kein direkter Internet-Pfad)
     ZONE_FW = {
         "PROD-APP": fw_ffm, "SHARED": fw_ffm,
-        "PROD-DB": fw_ffm_dc, "MON": fw_ffm_dc,
+        "PROD-DB": fw_ffm_dc, "MON": fw_ffm_dc, "AUDIT": fw_ffm_dc,
         "DMZ-WEB": fw_ber, "VPN": fw_ber, "MGMT": fw_ber, "TEST": fw_ber, "DEV": fw_ber, "CICD": fw_ber,
     }
+    NO_ACI_ZONES = {"MGMT", "AUDIT"}  # reine FW-Zonen ohne ACI-Segmentierung
     for zone_name, fw in ZONE_FW.items():
+        ids = {fw.id} if zone_name in NO_ACI_ZONES else {fw.id, aci_ffm.id}
         db.add(
             AddressComponentMap(
                 ip=zone_net(zone_name), alias=f"NET-{zone_name}", vrf_id=vrf_it.id,
-                component_ids=sorted({fw.id, aci_ffm.id}), created_by="demo-seed",
+                component_ids=sorted(ids), created_by="demo-seed",
             )
         )
         zones[zone_name].components = [fw]  # "Angebunden an": explizite Firewall-Anbindung
@@ -335,6 +342,8 @@ def seed(wipe: bool):
     zones["SHARED"].components = [fw_ffm, fw_ber]
     # Administration/Jump-Hosts erreichen alle drei Standort-Cluster
     zones["MGMT"].components = [fw_ber, fw_ffm, fw_ffm_dc]
+    # Audit/SIEM sammelt von allen Firewalls (inkl. Provider-Cluster)
+    zones["AUDIT"].components = [fw_ber, fw_ffm, fw_ffm_dc, components["FW-Cluster-Provider"]]
     # Internet ("any") erreicht die Umgebung über den Provider-Cluster
     db.add(AddressComponentMap(
         ip="any", alias="Internet", vrf_id=vrf_it.id,
