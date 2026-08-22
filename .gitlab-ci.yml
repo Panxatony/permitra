@@ -1,0 +1,186 @@
+# CI-Pipeline für Permitra.
+#
+# Ziel: Jede Änderung wird automatisch geprüft, bevor sie deployt wird –
+# Tests inklusive der Rechteprüfung, Linting, bekannte Schwachstellen in den
+# Abhängigkeiten und ein Build beider Images.
+#
+# Der Backend-Test läuft zweimal: einmal schnell gegen SQLite und einmal gegen
+# eine echte PostgreSQL-Instanz inklusive Alembic-Migrationen – dort fallen
+# Migrations- und Dialektfehler auf, die SQLite nicht zeigt.
+
+stages:
+  - lint
+  - test
+  - security
+  - build
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  npm_config_cache: "$CI_PROJECT_DIR/.cache/npm"
+  GIT_DEPTH: "20"
+
+default:
+  interruptible: true
+
+# ---------------------------------------------------------------- lint
+
+ruff:
+  stage: lint
+  image: python:3.12-slim
+  cache:
+    key: pip-$CI_COMMIT_REF_SLUG
+    paths: [.cache/pip]
+  before_script:
+    - pip install --quiet ruff
+  script:
+    # E501 (Zeilenlänge) bewusst aus: der Bestand nutzt längere Zeilen.
+    - ruff check backend/app backend/tests --ignore E501 --output-format=concise
+  allow_failure: true   # zunächst berichtend, nicht blockierend
+
+# ---------------------------------------------------------------- test
+
+backend-tests:
+  stage: test
+  image: python:3.12-slim
+  cache:
+    key: pip-$CI_COMMIT_REF_SLUG
+    paths: [.cache/pip]
+  variables:
+    PERMITRA_DEV: "1"          # zufälliges Prozess-Secret statt echtem SECRET_KEY
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc libpq-dev >/dev/null
+    - pip install --quiet -r backend/requirements-dev.txt
+  script:
+    - cd backend
+    - python -m pytest tests/ -q --cov=app --cov-report=term --cov-report=xml:coverage.xml --junitxml=report.xml
+  coverage: '/^TOTAL\s+\d+\s+\d+\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: backend/report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: backend/coverage.xml
+    expire_in: 1 week
+
+# Gegen echtes PostgreSQL inklusive Migrationen: fängt Fehler, die SQLite verdeckt
+# (Dialektunterschiede, fehlerhafte Alembic-Schritte, Advisory-Locks).
+migrations-postgres:
+  stage: test
+  image: python:3.12-slim
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_DB: permitra_ci
+    POSTGRES_USER: permitra
+    POSTGRES_PASSWORD: ci-only-not-secret
+    DATABASE_URL: "postgresql+psycopg2://permitra:ci-only-not-secret@postgres:5432/permitra_ci"
+    PERMITRA_DEV: "1"
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc libpq-dev >/dev/null
+    - pip install --quiet -r backend/requirements-dev.txt
+  script:
+    - cd backend
+    # 1) Migrationen von Grund auf anwenden
+    - 'python -c "from app.migrations import run_migrations; run_migrations(); print(chr(10) + \"Migrationen angewendet\")"'
+    # 2) Rauchtest der Audit-Kette auf echtem Postgres (Advisory-Lock-Pfad, #26)
+    - |
+      python - <<'PY'
+      from app.database import SessionLocal
+      from app import audit
+      db = SessionLocal()
+      for i in range(25):
+          audit.record(db, "admin", "ci.check", actor="ci", object=f"o{i}", detail="x")
+      result = audit.verify_chain(db)
+      assert result["ok"], f"Hash-Kette gebrochen: {result}"
+      assert result["checked"] == 25, result
+      print("Audit-Hash-Kette auf PostgreSQL: ok")
+      db.close()
+      PY
+
+frontend-build:
+  stage: test
+  image: node:22-alpine
+  cache:
+    key: npm-$CI_COMMIT_REF_SLUG
+    paths: [.cache/npm]
+  before_script:
+    - cd frontend && npm ci --prefer-offline --no-audit --no-fund
+  script:
+    - npm run build
+  artifacts:
+    paths: [frontend/dist]
+    expire_in: 1 week
+
+# ---------------------------------------------------------------- security
+
+dependency-audit:
+  stage: security
+  image: python:3.12-slim
+  before_script:
+    - pip install --quiet pip-audit
+  script:
+    - pip-audit -r backend/requirements.txt --progress-spinner off
+  allow_failure: true   # meldet Schwachstellen, blockiert das Deployment aber nicht
+
+npm-audit:
+  stage: security
+  image: node:22-alpine
+  script:
+    - cd frontend && npm audit --audit-level=high
+  allow_failure: true
+
+# Kein Geheimnis darf versehentlich ins Repository geraten.
+secret-scan:
+  stage: security
+  image: python:3.12-slim
+  script:
+    - |
+      python - <<'PY'
+      import re, subprocess, sys
+      # Nachverfolgte Dateien prüfen – .env & Co. sind ohnehin ignoriert
+      files = subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.split()
+      patterns = [
+          (re.compile(r"SECRET_KEY\s*[:=]\s*['\"][A-Za-z0-9+/=_-]{16,}"), "hartkodierter SECRET_KEY"),
+          (re.compile(r"(?i)(password|passwort)\s*[:=]\s*['\"][^'\"]{8,}"), "hartkodiertes Passwort"),
+          (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "privater Schlüssel"),
+          (re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}"), "GitLab-Token"),
+      ]
+      # Keine echten Geheimnisse: Shell-/Compose-Variablen und Kommandosubstitution
+      placeholder = re.compile(r"\$\(|\$\{|\$[A-Z_]+|change-?me|example|xxx|\.\.\.", re.I)
+      allow = ("tests/", "seed_demo.py", "seed.py", ".gitlab-ci.yml", "docs/", "README")
+      hits = []
+      for f in files:
+          if f.endswith((".png", ".jpg", ".ico", ".lock")) or any(a in f for a in allow):
+              continue
+          try:
+              text = open(f, encoding="utf-8", errors="ignore").read()
+          except OSError:
+              continue
+          for rx, label in patterns:
+              for m in rx.finditer(text):
+                  if placeholder.search(m.group(0)):
+                      continue
+                  hits.append(f"{f}: {label} -> {m.group(0)[:60]}")
+      if hits:
+          print("Mögliche Geheimnisse im Repository gefunden:")
+          print("\n".join(hits))
+          sys.exit(1)
+      print("Keine Geheimnisse in nachverfolgten Dateien gefunden.")
+      PY
+
+# ---------------------------------------------------------------- build
+
+docker-build:
+  stage: build
+  image: docker:27-cli
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker build -t permitra-backend:$CI_COMMIT_SHORT_SHA backend
+    - docker build -t permitra-frontend:$CI_COMMIT_SHORT_SHA frontend
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

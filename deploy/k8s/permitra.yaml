@@ -12,8 +12,14 @@ metadata:
   namespace: permitra
 type: Opaque
 stringData:
-  DB_PASSWORD: "change-me"
-  SECRET_KEY: "change-me-long-random-string"
+  # Vor dem Anwenden mit echten Zufallswerten befüllen, z.B.:
+  #   kubectl -n permitra create secret generic permitra-secrets \
+  #     --from-literal=DB_PASSWORD="$(openssl rand -hex 24)" \
+  #     --from-literal=SECRET_KEY="$(openssl rand -hex 32)"
+  # Absichtlich leer gelassen: ein Platzhalter-Wert würde die Fail-secure-Logik
+  # der Anwendung aushebeln und fälschbare Admin-Tokens ermöglichen.
+  DB_PASSWORD: ""
+  SECRET_KEY: ""
 ---
 apiVersion: apps/v1
 kind: StatefulSet

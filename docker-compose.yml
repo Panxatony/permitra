@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: permitra
       POSTGRES_USER: permitra
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-permitra}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD muss gesetzt sein}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,8 +16,11 @@ services:
   backend:
     build: ./backend
     environment:
-      DATABASE_URL: postgresql+psycopg2://permitra:${DB_PASSWORD:-permitra}@db:5432/permitra
-      SECRET_KEY: ${SECRET_KEY:-please-change-me-in-production}
+      # Keine Fallback-Werte: fehlt SECRET_KEY, verweigert die App den Start
+      # (fail-secure, app/auth.py). Ein bekannter Default würde fälschbare
+      # Admin-Tokens erlauben. Werte in .env setzen (siehe .env.example).
+      DATABASE_URL: postgresql+psycopg2://permitra:${DB_PASSWORD:?DB_PASSWORD muss gesetzt sein}@db:5432/permitra
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY muss gesetzt sein (openssl rand -hex 32)}
       # Demo-/Testbetrieb: legt die bekannten Demo-Benutzer an. In Produktion
       # NICHT setzen – dann entsteht ein Erst-Admin mit Zufallspasswort (Log).
       PERMITRA_DEMO: ${PERMITRA_DEMO:-}
