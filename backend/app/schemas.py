@@ -379,7 +379,7 @@ class UserOut(BaseModel):
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     # Ohne Passwort wird ein Aktivierungslink erzeugt (Mail bzw. Link für den Admin)
-    password: str | None = Field(None, min_length=6)
+    password: str | None = Field(None, min_length=8)
     full_name: str = ""
     email: str = ""
     role: Role = Role.architect

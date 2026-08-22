@@ -79,6 +79,7 @@ def set_password(payload: dict, db: Session = Depends(get_db)):
     user, purpose = consume_token(db, payload.get("token") or "")
     user.password_hash = hash_password(password)
     user.is_active = True
+    user.token_valid_from = utcnow()  # Passwortänderung entzieht bestehende Tokens
     db.commit()
     return {"detail": ("Konto aktiviert – du kannst dich jetzt anmelden"
                        if purpose == "activate" else "Passwort geändert"),
@@ -98,8 +99,10 @@ def change_password(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "Passwort muss mindestens 8 Zeichen haben")
     user.password_hash = hash_password(new)
+    user.token_valid_from = utcnow()  # entzieht andere bestehende Sitzungen
     db.commit()
-    return {"detail": "Passwort geändert"}
+    # Frisches Token für die aktuelle Sitzung, damit sie nicht selbst abläuft
+    return {"detail": "Passwort geändert", "access_token": create_token(user)}
 
 
 # ---------- Zwei-Faktor (TOTP) ----------

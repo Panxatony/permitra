@@ -236,6 +236,7 @@ const EN = {
   'Freigabe erteilt': 'Approval granted',
   'Antrag abgelehnt': 'Request rejected',
   'Neue Zone': 'New zone',
+  'Zone löschen': 'Delete zone',
   'Netz': 'Network',
   'neu': 'new',
   // Administration & Konto

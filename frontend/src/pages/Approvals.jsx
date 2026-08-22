@@ -79,6 +79,7 @@ export default function Approvals() {
 
   const itemLabel = (c) => {
     if (c.change_type === 'zone_create') return `${t('Neue Zone')}: ${c.from_zone} (${c.new_policy})`
+    if (c.change_type === 'zone_delete') return `${t('Zone löschen')}: ${c.from_zone}`
     if (c.change_type === 'net_add') return `${t('Netz')} ${c.to_zone} → ${t('Zone')} ${c.from_zone}`
     if (c.change_type === 'net_delete') return `${t('Netz')} ${c.to_zone} ${t('aus Zone')} ${c.from_zone} ${t('entfernen')}`
     if (c.change_type === 'net_update') {

@@ -380,6 +380,7 @@ export default function ZoneMatrix() {
   }
   const itemLabel = (c) => {
     if (c.change_type === 'zone_create') return `Neue Zone: ${c.from_zone} (${c.new_policy})`
+    if (c.change_type === 'zone_delete') return `Zone löschen: ${c.from_zone}`
     if (c.change_type === 'net_add') return `Netz ${c.to_zone} → Zone ${c.from_zone}`
     if (c.change_type === 'net_delete') return `Netz ${c.to_zone} aus Zone ${c.from_zone} entfernen`
     if (c.change_type === 'net_update') {
@@ -506,10 +507,14 @@ export default function ZoneMatrix() {
   }
 
   const removeZone = async (name) => {
-    if (!window.confirm(`Zone "${name}" und alle zugehörigen Matrix-Einträge löschen?`)) return
+    if (!window.confirm(`Löschung der Zone "${name}" beantragen? (Freigabe durch zwei Change Approver)`)) return
     setError('')
     try {
-      await api.deleteZone(name)
+      const r = await api.deleteZone(name)
+      if (r?.status === 'pending') {
+        setError('')
+        alert('Löschung beantragt – wird erst nach Freigabe durch zwei Change Approver wirksam.')
+      }
       load()
     } catch (err) {
       setError(err.message)
@@ -812,7 +817,7 @@ export default function ZoneMatrix() {
                   <td>
                     {b.items.map((c) => (
                       <div key={c.id}>
-                        {c.change_type === 'zone_create' && <span className="badge platform-unknown comp-badge">Zone</span>}
+                        {(c.change_type === 'zone_create' || c.change_type === 'zone_delete') && <span className="badge platform-unknown comp-badge">Zone</span>}
                         {c.change_type.startsWith('net_') && <span className="badge platform-unknown comp-badge">Netz</span>}
                         {itemLabel(c)}
                         {c.affected_count > 0 && (

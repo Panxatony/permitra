@@ -129,7 +129,13 @@ export const api = {
   sendReset: (username) => request(`/api/users/${encodeURIComponent(username)}/send-reset`, { method: 'POST' }),
   forgotPassword: (username) => request('/api/auth/forgot', { method: 'POST', body: { username } }),
   setPassword: (token, password) => request('/api/auth/set-password', { method: 'POST', body: { token, password } }),
-  changePassword: (current, next) => request('/api/auth/change-password', { method: 'POST', body: { current, new: next } }),
+  changePassword: (current, next) =>
+    request('/api/auth/change-password', { method: 'POST', body: { current, new: next } })
+      .then((r) => {
+        // Passwortwechsel entzieht alte Tokens; frisches Token übernehmen
+        if (r?.access_token) localStorage.setItem(TOKEN_KEY, r.access_token)
+        return r
+      }),
   totpSetup: () => request('/api/auth/totp/setup', { method: 'POST' }),
   totpEnable: (code) => request('/api/auth/totp/enable', { method: 'POST', body: { code } }),
   totpDisable: (password) => request('/api/auth/totp/disable', { method: 'POST', body: { password } }),

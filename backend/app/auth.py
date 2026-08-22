@@ -11,7 +11,19 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import Role, User
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+# Fail-secure: ohne gesetztes SECRET_KEY wird der Start verweigert. Nur im
+# ausdrücklichen Dev-Modus (PERMITRA_DEV=1) ein zufälliges Prozess-Secret –
+# damit lässt sich lokal starten, ausgestellte Tokens überleben aber keinen
+# Neustart. Kein hartkodierter Default (sonst fälschbare Admin-Tokens).
+SECRET_KEY = os.environ.get("SECRET_KEY", "").strip()
+if not SECRET_KEY:
+    if os.environ.get("PERMITRA_DEV") == "1":
+        SECRET_KEY = secrets.token_hex(32)
+    else:
+        raise RuntimeError(
+            "SECRET_KEY ist nicht gesetzt – Start verweigert (fail-secure). "
+            "Setze SECRET_KEY (z.B. `openssl rand -hex 32`) oder PERMITRA_DEV=1 für lokale Entwicklung."
+        )
 ALGORITHM = "HS256"
 TOKEN_LIFETIME_HOURS = int(os.environ.get("TOKEN_LIFETIME_HOURS", "8"))
 
@@ -30,10 +42,12 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def create_token(user: User) -> str:
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": user.username,
         "role": user.role.value,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_LIFETIME_HOURS),
+        "iat": int(now.timestamp()),
+        "exp": now + timedelta(hours=TOKEN_LIFETIME_HOURS),
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -46,6 +60,18 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(User).filter(User.username == payload.get("sub")).first()
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Benutzer nicht gefunden")
+    # Fail-secure: deaktivierte Konten haben keinen Zugriff (auch mit gültigem Token)
+    if not user.is_active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Konto ist deaktiviert")
+    # Sofortige Rücknahme: Tokens, die vor der letzten Invalidierung (Deaktivierung,
+    # Passwortwechsel/-reset) ausgestellt wurden, gelten nicht mehr
+    if user.token_valid_from is not None:
+        iat = payload.get("iat")
+        valid_from = user.token_valid_from
+        if valid_from.tzinfo is None:
+            valid_from = valid_from.replace(tzinfo=timezone.utc)
+        if iat is None or iat < int(valid_from.timestamp()):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sitzung ist nicht mehr gültig")
     return user
 
 

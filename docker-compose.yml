@@ -18,6 +18,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg2://permitra:${DB_PASSWORD:-permitra}@db:5432/permitra
       SECRET_KEY: ${SECRET_KEY:-please-change-me-in-production}
+      # Demo-/Testbetrieb: legt die bekannten Demo-Benutzer an. In Produktion
+      # NICHT setzen – dann entsteht ein Erst-Admin mit Zufallspasswort (Log).
+      PERMITRA_DEMO: ${PERMITRA_DEMO:-}
       # E-Mail-Versand (leer = aus) und Basis-URL für Links in Mails
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

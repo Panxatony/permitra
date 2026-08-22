@@ -764,6 +764,17 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     rule = get_rule_or_404(db, rule_id)
     if new_status in (RuleStatus.approved, RuleStatus.rejected) and rule.status != RuleStatus.in_review:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Regel ist nicht im Review")
+    # Vier-Augen-Prinzip: wer die Regel eingereicht/erstellt hat, darf sie nicht
+    # selbst freigeben (gilt auch für Admins) – BSI-Funktionstrennung
+    if new_status == RuleStatus.approved:
+        last_version = max(rule.versions, key=lambda v: v.version, default=None)
+        submitter = last_version.changed_by if last_version else rule.created_by
+        if user.username in {submitter, rule.created_by}:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Vier-Augen-Prinzip: eigene bzw. selbst eingereichte Regeln können nicht "
+                "selbst freigegeben werden",
+            )
     # Steht die Zonen-Beziehung der Regel auf Block (z.B. nach einer
     # Matrix-Änderung), ist "Freigeben" die Löschungsfreigabe: Die Regel wird
     # deaktiviert und je Komponente auf "zu löschen" gesetzt – sie erscheint
@@ -892,6 +903,17 @@ def set_impl_status(
 ):
     """Umsetzungsstatus je Komponente pflegen (Betrieb), z.B. {"FW-Cluster-FFM": "umgesetzt"}."""
     rule = get_rule_or_404(db, rule_id)
+    # Validierung: nur bekannte Statuswerte und nur Komponenten dieser Regel
+    allowed_status = {"offen", "neu", "zu ändern", "zu löschen", "umgesetzt", "deaktiviert"}
+    component_names = {c.name for c in rule.components}
+    for name, value in impl_status.items():
+        if name not in component_names:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                f"Komponente '{name}' gehört nicht zur Regel {rule_id}")
+        if value not in allowed_status:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                f"Ungültiger Umsetzungsstatus '{value}' "
+                                f"(erlaubt: {', '.join(sorted(allowed_status))})")
     rule.impl_status = {**(rule.impl_status or {}), **impl_status}
     rule.version += 1
     add_version(db, rule, user, f"Umsetzungsstatus: {impl_status}")

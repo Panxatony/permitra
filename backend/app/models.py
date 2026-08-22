@@ -366,6 +366,10 @@ class User(Base):
     # Zwei-Faktor (TOTP): Secret wird beim Setup gesetzt, zählt erst mit enabled
     totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
     totp_enabled: Mapped[bool] = mapped_column(default=False)
+    # Sitzungs-Invalidierung: vor diesem Zeitpunkt ausgestellte Tokens gelten
+    # nicht mehr (gesetzt bei Deaktivierung, Passwortwechsel/-reset)
+    token_valid_from: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
 
     passkeys: Mapped[list["Passkey"]] = relationship(back_populates="user",
                                                     cascade="all, delete-orphan")

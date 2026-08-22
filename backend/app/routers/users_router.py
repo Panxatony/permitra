@@ -111,6 +111,9 @@ def update_user(
         value = getattr(payload, field)
         if value is not None:
             setattr(user, field, value)
+    # Deaktivierung und Rollenwechsel entziehen bestehende Tokens sofort
+    if payload.is_active is False or payload.role is not None:
+        user.token_valid_from = utcnow()
     db.commit()
     db.refresh(user)
     return user

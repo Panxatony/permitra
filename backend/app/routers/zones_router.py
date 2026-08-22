@@ -205,29 +205,16 @@ def set_pap_level(
     return zone
 
 
-@router.delete("/{name}", status_code=204)
+@router.delete("/{name}")
 def delete_zone(
     name: str,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect)),
+    user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
-    zone = find_zone(db, name)
-    if not zone:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Zone nicht gefunden")
-    used = db.query(Rule).filter(
-        (Rule.source_zone.ilike(zone.name)) | (Rule.destination_zone.ilike(zone.name))
-    ).count()
-    if used:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"Zone '{zone.name}' wird von {used} Regel(n) verwendet und kann nicht gelöscht werden",
-        )
-    # Matrix-Einträge explizit mitlöschen (SQLite erzwingt FK-Cascade nicht immer)
-    db.query(ZonePolicy).filter(
-        (ZonePolicy.from_zone_id == zone.id) | (ZonePolicy.to_zone_id == zone.id)
-    ).delete(synchronize_session=False)
-    db.delete(zone)
-    db.commit()
+    """Zonen-Löschung läuft wie alle Zonen-Änderungen über den Freigabe-Workflow
+    (zwei Change Approver). Direkt gelöscht wird nichts – die Prüfung auf
+    verwendende Regeln/Netz-Zuordnungen erfolgt bei Antrag und Anwendung."""
+    return _create_batch(db, user, [{"type": "zone_delete", "name": name}], "")
 
 
 @router.get("/overview")
@@ -373,6 +360,28 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                 batch_id=batch_id, change_type="zone_create",
                 from_zone=name, to_zone="", old_policy=None, new_policy=level,
                 requested_by=user.username, comment=item.get("description", ""),
+            ))
+            continue
+        if item.get("type") == "zone_delete":
+            name = (item.get("name") or "").strip()
+            zone = find_zone(db, name)
+            if not zone:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{name}' nicht gefunden")
+            used = db.query(Rule).filter(
+                (Rule.source_zone.ilike(zone.name)) | (Rule.destination_zone.ilike(zone.name))
+            ).count()
+            if used:
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    f"Zone '{zone.name}' wird von {used} Regel(n) verwendet")
+            nets = db.query(ZoneNetwork).filter(ZoneNetwork.zone_id == zone.id).count()
+            if nets:
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    f"Zone '{zone.name}' hat noch {nets} Netz-Zuordnung(en) – "
+                                    "bitte zuerst umhängen oder entfernen")
+            rows.append(ZonePolicyChange(
+                batch_id=batch_id, change_type="zone_delete",
+                from_zone=zone.name, to_zone="", old_policy=None, new_policy="delete",
+                requested_by=user.username, comment=comment,
             ))
             continue
         if item.get("type") == "net_add":
@@ -587,7 +596,9 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
         )
     else:
         batch = [change]
-    if any(c.requested_by == user.username for c in batch) and user.role != Role.admin:
+    # Vier-Augen-Prinzip ausnahmslos – auch Admins können eigene Anträge nicht
+    # selbst freigeben (BSI: Funktionstrennung)
+    if any(c.requested_by == user.username for c in batch):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Vier-Augen-Prinzip: eigene Anträge können nicht selbst freigegeben werden",
@@ -616,6 +627,23 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
             if item.change_type == "zone_create" and not find_zone(db, item.from_zone):
                 db.add(Zone(name=item.from_zone, pap_level=item.new_policy,
                             description=item.comment, sort_order=db.query(Zone).count()))
+            elif item.change_type == "zone_delete":
+                zone = find_zone(db, item.from_zone)
+                if zone:
+                    # Erneute Integritätsprüfung zum Anwendungszeitpunkt (fail-secure)
+                    used = db.query(Rule).filter(
+                        (Rule.source_zone.ilike(zone.name)) | (Rule.destination_zone.ilike(zone.name))
+                    ).count()
+                    nets = db.query(ZoneNetwork).filter(ZoneNetwork.zone_id == zone.id).count()
+                    if used or nets:
+                        raise HTTPException(
+                            status.HTTP_409_CONFLICT,
+                            f"Zone '{zone.name}' wird noch verwendet ({used} Regel(n), "
+                            f"{nets} Netz-Zuordnung(en)) – Löschung abgebrochen")
+                    db.query(ZonePolicy).filter(
+                        (ZonePolicy.from_zone_id == zone.id) | (ZonePolicy.to_zone_id == zone.id)
+                    ).delete(synchronize_session=False)
+                    db.delete(zone)
         db.flush()
         # Netzwerk-Zuordnungen anwenden (nach evtl. neu angelegten Zonen)
         from ..vrf import get_vrf
