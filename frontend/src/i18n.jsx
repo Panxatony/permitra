@@ -247,6 +247,8 @@ const EN = {
   '(Netzwerk-Prefixe, Status active/planned)': '(network prefixes, status active/planned)',
   '(gespeichert – leer lassen)': '(stored – leave empty)',
   'TLS-Zertifikat prüfen': 'Verify TLS certificate',
+  'Zu importierende Status (kommagetrennt)': 'Statuses to import (comma-separated)',
+  'übersprungen': 'skipped',
   'NetBox-Konfiguration gespeichert': 'NetBox configuration saved',
   'Verbindung ok': 'Connection ok',
   'Verbindung testen': 'Test connection',

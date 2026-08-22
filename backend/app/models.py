@@ -399,6 +399,7 @@ class NetboxConfig(Base):
     url: Mapped[str] = mapped_column(String(256), default="")
     token_enc: Mapped[str] = mapped_column(Text, default="")  # Fernet-verschlüsselt
     verify_tls: Mapped[bool] = mapped_column(default=True)
+    statuses: Mapped[str] = mapped_column(String(128), default="active,reserved")  # zu importierende Prefix-Status
     last_import_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 

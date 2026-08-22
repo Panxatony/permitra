@@ -21,14 +21,14 @@ export default function Admin() {
   const [tokenName, setTokenName] = useState('')
   const [newToken, setNewToken] = useState('')
   const [netbox, setNetbox] = useState(null)
-  const [nbForm, setNbForm] = useState({ url: '', token: '', verify_tls: true })
+  const [nbForm, setNbForm] = useState({ url: '', token: '', verify_tls: true, statuses: 'active,reserved' })
 
   const load = () => {
     api.users().then(setUsers).catch((e) => setError(e.message))
     api.settings().then(setSettings).catch(() => setSettings({}))
     api.auditLog({ limit: 50 }).then(setAudit).catch(() => setAudit([]))
     api.apiTokens().then(setTokens).catch(() => setTokens([]))
-    api.netboxConfig().then((c) => { setNetbox(c); setNbForm((f) => ({ ...f, url: c.url, verify_tls: c.verify_tls })) })
+    api.netboxConfig().then((c) => { setNetbox(c); setNbForm((f) => ({ ...f, url: c.url, verify_tls: c.verify_tls, statuses: c.statuses || 'active,reserved' })) })
       .catch(() => setNetbox(null))
   }
   useEffect(() => { load() }, [])
@@ -196,6 +196,11 @@ export default function Admin() {
               placeholder={netbox?.configured ? t('(gespeichert – leer lassen)') : ''}
               onChange={(e) => setNbForm({ ...nbForm, token: e.target.value })} />
           </label>
+          <label>{t('Zu importierende Status (kommagetrennt)')}
+            <input value={nbForm.statuses}
+              onChange={(e) => setNbForm({ ...nbForm, statuses: e.target.value })}
+              placeholder="active,reserved" />
+          </label>
           <label className="checkbox" style={{ alignSelf: 'end' }}>
             <input type="checkbox" checked={nbForm.verify_tls}
               onChange={(e) => setNbForm({ ...nbForm, verify_tls: e.target.checked })} />
@@ -212,7 +217,8 @@ export default function Admin() {
             {t('Verbindung testen')}
           </button>
           <button className="btn btn-ghost" onClick={() => act(() => api.netboxImport()
-            .then((r) => ({ detail: `${t('Import fertig')}: ${r.fetched} geladen, ${r.pending} zur Übernahme bereit` })))}>
+            .then((r) => ({ detail: `${t('Import fertig')}: ${r.fetched} geladen, ${r.pending} zur Übernahme bereit`
+              + (r.skipped_statuses?.length ? ` (${t('übersprungen')}: ${r.skipped_statuses.join(', ')})` : '') })))}>
             {t('Jetzt importieren')}
           </button>
           {netbox?.last_import_at && (

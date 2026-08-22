@@ -15,6 +15,7 @@ def _config_out(cfg: NetboxConfig | None) -> dict:
         "configured": bool(cfg and cfg.url and cfg.token_enc),
         "url": cfg.url if cfg else "",
         "verify_tls": cfg.verify_tls if cfg else True,
+        "statuses": (cfg.statuses if cfg and cfg.statuses else "active,reserved"),
         "last_import_at": cfg.last_import_at.isoformat() if cfg and cfg.last_import_at else None,
     }
 
@@ -34,6 +35,8 @@ def set_config(payload: dict, db: Session = Depends(get_db),
     cfg = _get(db) or NetboxConfig()
     cfg.url = (payload.get("url") or "").strip()
     cfg.verify_tls = bool(payload.get("verify_tls", True))
+    if "statuses" in payload:
+        cfg.statuses = (payload.get("statuses") or "active,reserved").strip()
     token = (payload.get("token") or "").strip()
     if token:
         cfg.token_enc = encrypt_token(token)

@@ -61,10 +61,12 @@ def netbox_server():
 
 
 def test_import_prefixes(db, netbox_server):
-    db.add(NetboxConfig(url=netbox_server, token_enc=netbox.encrypt_token("x"), verify_tls=True))
+    db.add(NetboxConfig(url=netbox_server, token_enc=netbox.encrypt_token("x"),
+                        verify_tls=True, statuses="active,reserved"))
     db.commit()
     result = netbox.import_prefixes(db)
-    assert result == {"fetched": 2, "pending": 2}
+    # Dedupliziert über netbox_id, auch wenn pro Status abgefragt wird
+    assert result["pending"] == 2
     cidrs = {p.cidr for p in db.query(NetboxPrefix).all()}
     assert cidrs == {"10.20.0.0/24", "10.20.1.0/24"}
     # Idempotent: erneuter Import aktualisiert statt zu duplizieren

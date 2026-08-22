@@ -1,4 +1,4 @@
-"""NetBox-Anbindung: Prefix-Import (Status active/planned) in die Staging-Tabelle.
+"""NetBox-Anbindung: Prefix-Import (konfigurierbare Status) in die Staging-Tabelle.
 
 Der API-Token wird mit Fernet verschlüsselt gespeichert (Schlüssel aus
 SECRET_KEY abgeleitet). Der Import ist ein reiner Lesevorgang gegen die
@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import ssl
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 from .auth import SECRET_KEY
 from .models import NetboxConfig, NetboxPrefix, utcnow
 
-IMPORT_STATUSES = ("active", "planned")
+DEFAULT_STATUSES = ("active", "reserved")
 
 
 def _fernet() -> Fernet:
@@ -43,8 +44,10 @@ def get_config(db: Session) -> NetboxConfig | None:
     return db.query(NetboxConfig).first()
 
 
-def _request(cfg: NetboxConfig, path: str) -> dict:
-    url = cfg.url.rstrip("/") + path
+def _request(cfg: NetboxConfig, path_or_url: str) -> dict:
+    # Absolute URL (z.B. aus dem 'next'-Feld) direkt verwenden, sonst an die
+    # Basis-URL anhängen
+    url = path_or_url if path_or_url.startswith("http") else cfg.url.rstrip("/") + path_or_url
     req = urllib.request.Request(url, headers={
         "Authorization": f"Token {decrypt_token(cfg.token_enc)}",
         "Accept": "application/json",
@@ -54,19 +57,26 @@ def _request(cfg: NetboxConfig, path: str) -> dict:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
-    with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
-        return json.loads(resp.read())
+    try:
+        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode()[:400]
+        except Exception:
+            pass
+        raise RuntimeError(f"NetBox HTTP {exc.code} bei {url}: {body or exc.reason}")
 
 
 def test_connection(cfg: NetboxConfig) -> dict:
-    """Verbindungstest: liefert NetBox-Version und Prefix-Anzahl."""
-    status = json.dumps({"status": {"active": "active", "planned": "planned"}})  # noqa: F841
+    """Verbindungstest: liefert die Prefix-Anzahl."""
     data = _request(cfg, "/api/ipam/prefixes/?limit=1")
     return {"ok": True, "prefix_total": data.get("count", 0)}
 
 
 def import_prefixes(db: Session) -> dict:
-    """Holt aktive/geplante Prefixe aus NetBox in die Staging-Tabelle.
+    """Holt Prefixe der konfigurierten Status aus NetBox in die Staging-Tabelle.
 
     Bereits übernommene (adopted) Einträge bleiben unangetastet; neue kommen
     hinzu, vorhandene werden aktualisiert; in NetBox verschwundene, noch nicht
@@ -75,30 +85,41 @@ def import_prefixes(db: Session) -> dict:
     if not cfg or not cfg.url or not cfg.token_enc:
         raise ValueError("NetBox ist nicht konfiguriert")
 
-    query = urllib.parse.urlencode([("status", s) for s in IMPORT_STATUSES] + [("limit", 500)])
-    path = f"/api/ipam/prefixes/?{query}"
     seen_netbox_ids: set[int] = set()
     fetched = 0
-    while path:
-        data = _request(cfg, path)
-        for p in data.get("results", []):
-            fetched += 1
-            nid = p["id"]
-            seen_netbox_ids.add(nid)
-            cidr = p.get("prefix") or ""
-            status_val = (p.get("status") or {}).get("value", "")
-            vrf = ((p.get("vrf") or {}).get("name") or "") if p.get("vrf") else ""
-            desc = p.get("description") or ""
-            row = db.query(NetboxPrefix).filter(NetboxPrefix.netbox_id == nid).first()
-            if row:
-                row.cidr, row.status, row.vrf, row.description = cidr, status_val, vrf, desc
-                row.last_seen = utcnow()
-            else:
-                db.add(NetboxPrefix(netbox_id=nid, cidr=cidr, status=status_val,
-                                    vrf=vrf, description=desc, last_seen=utcnow()))
-        nxt = data.get("next")
-        # NetBox liefert absolute URLs für next; nur den Pfad+Query behalten
-        path = ("/" + nxt.split("/", 3)[3]) if nxt else None
+    skipped: list[str] = []
+    # Jeden Status EINZELN abfragen – so scheitert der Import nicht, wenn ein
+    # Status (z.B. 'planned') auf der Instanz für Prefixe gar nicht existiert
+    statuses = [s.strip() for s in (cfg.statuses or "").split(",") if s.strip()] or list(DEFAULT_STATUSES)
+    for wanted in statuses:
+        query = urllib.parse.urlencode([("status", wanted), ("limit", 500)])
+        path = f"/api/ipam/prefixes/?{query}"
+        try:
+            data = _request(cfg, path)
+        except RuntimeError as exc:
+            if "not one of the available choices" in str(exc):
+                skipped.append(wanted)
+                continue
+            raise
+        while path:
+            for p in data.get("results", []):
+                fetched += 1
+                nid = p["id"]
+                seen_netbox_ids.add(nid)
+                cidr = p.get("prefix") or ""
+                status_val = (p.get("status") or {}).get("value", "")
+                vrf = ((p.get("vrf") or {}).get("name") or "") if p.get("vrf") else ""
+                desc = p.get("description") or ""
+                row = db.query(NetboxPrefix).filter(NetboxPrefix.netbox_id == nid).first()
+                if row:
+                    row.cidr, row.status, row.vrf, row.description = cidr, status_val, vrf, desc
+                    row.last_seen = utcnow()
+                else:
+                    db.add(NetboxPrefix(netbox_id=nid, cidr=cidr, status=status_val,
+                                        vrf=vrf, description=desc, last_seen=utcnow()))
+            path = data.get("next")  # absolute URL der nächsten Seite
+            if path:
+                data = _request(cfg, path)
 
     # Nicht mehr vorhandene, noch nicht übernommene Staging-Einträge entfernen
     stale = (db.query(NetboxPrefix)
@@ -111,4 +132,4 @@ def import_prefixes(db: Session) -> dict:
     cfg.last_import_at = utcnow()
     db.commit()
     pending = db.query(NetboxPrefix).filter(NetboxPrefix.adopted == False).count()  # noqa: E712
-    return {"fetched": fetched, "pending": pending}
+    return {"fetched": fetched, "pending": pending, "skipped_statuses": skipped}
