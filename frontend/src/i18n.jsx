@@ -295,6 +295,7 @@ const EN = {
   'Schutzbedarf & Verantwortlicher': 'Protection level & owner',
   'kein Verantwortlicher': 'no owner assigned',
   'BSI-Dokumentation': 'BSI documentation',
+  'Zone bearbeiten': 'Edit zone',
   'Verantwortlicher (Person/Team)': 'Owner (person/team)',
   'Beschreibung (Zweck der Zone)': 'Description (purpose of the zone)',
   'Vertraulichkeit': 'Confidentiality',

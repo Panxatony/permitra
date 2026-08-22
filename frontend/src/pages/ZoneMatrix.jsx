@@ -388,7 +388,7 @@ export default function ZoneMatrix() {
                 <tr>
                   <th>{t('Zone')}</th><th>{t('Schutzbedarf & Verantwortlicher')}</th>
                   <th>{t('Netzwerke')}</th><th>{t('P-A-P-Einstufung')}</th><th>{t('Regeln')}</th>
-                  <th>{t('Angebunden an')}</th><th>{t('ACI (intra-zonal)')}</th>
+                  <th>{t('Angebunden an')}</th><th>{t('ACI (intra-zonal)')}</th><th></th>
                 </tr>
               </thead>
               <tbody>
@@ -401,10 +401,6 @@ export default function ZoneMatrix() {
                         {z.schutzbedarf || 'normal'}
                       </span>
                       <div className="muted small">{z.owner || t('kein Verantwortlicher')}</div>
-                      {canEdit && (
-                        <button className="btn btn-ghost" style={{ padding: '.1rem .45rem', fontSize: '.75rem' }}
-                          onClick={() => setMetaZone({ ...z })}>{t('Bearbeiten')}</button>
-                      )}
                     </td>
                     <td>
                       <Link to="/networks" className="rule-link" title="Zonen-Zuordnung auf der Seite Netzwerke pflegen">
@@ -416,53 +412,26 @@ export default function ZoneMatrix() {
                       </div>
                     </td>
                     <td>
-                      {canEdit ? (
-                        <select value={z.pap_level || 'intern'}
-                          onChange={async (e) => {
-                            try {
-                              await api.setZonePapLevel(z.name, e.target.value)
-                              load()
-                            } catch (err) { setError(err.message) }
-                          }}>
-                          <option value="extern">extern (Nord)</option>
-                          <option value="pap">P-A-P-Ebene</option>
-                          <option value="intern">intern (Süd)</option>
-                        </select>
-                      ) : (
-                        { extern: 'extern (Nord)', pap: 'P-A-P-Ebene', intern: 'intern (Süd)' }[z.pap_level || 'intern']
-                      )}
+                      {{ extern: 'extern (Nord)', pap: 'P-A-P-Ebene', intern: 'intern (Süd)' }[z.pap_level || 'intern']}
                     </td>
                     <td>{z.rule_count}</td>
                     <td>
-                      {canEdit ? (
-                        <span className="attach-select">
-                          {fwComponents.map((f) => {
-                            const attached = z.firewalls.some((x) => x.id === f.id)
-                            return (
-                              <label key={f.id} className="checkbox">
-                                <input type="checkbox" checked={attached}
-                                  onChange={async () => {
-                                    const ids = attached
-                                      ? z.firewalls.filter((x) => x.id !== f.id).map((x) => x.id)
-                                      : [...z.firewalls.map((x) => x.id), f.id]
-                                    try { await api.setZoneComponents(z.name, ids); load() }
-                                    catch (err) { setError(err.message) }
-                                  }} />
-                                <span className={`badge platform-${f.type}`}>{f.name}</span>
-                              </label>
-                            )
-                          })}
-                        </span>
-                      ) : (
-                        z.firewalls.length
-                          ? z.firewalls.map((f) => (
-                              <span key={f.id} className={`badge platform-${f.type}`}>{f.name}</span>
-                            ))
-                          : <span className="badge status-rejected">{t('keine Firewall-Anbindung')}</span>
-                      )}
+                      {z.firewalls.length
+                        ? z.firewalls.map((f) => (
+                            <span key={f.id} className={`badge platform-${f.type}`}>{f.name}</span>
+                          ))
+                        : <span className="badge status-rejected">{t('keine Firewall-Anbindung')}</span>}
                     </td>
                     <td>
                       {z.aci.map((a) => <span key={a.id} className="badge platform-aci">{a.name}</span>)}
+                    </td>
+                    <td className="row-actions">
+                      {canEdit && (
+                        <button className="btn btn-ghost"
+                          onClick={() => setMetaZone({ ...z, component_ids: z.firewalls.map((f) => f.id) })}>
+                          {t('Bearbeiten')}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -473,7 +442,7 @@ export default function ZoneMatrix() {
       </section>
 
       {metaZone && (
-        <Modal title={`${t('BSI-Dokumentation')}: ${metaZone.name}`} onClose={() => setMetaZone(null)}>
+        <Modal title={`${t('Zone bearbeiten')}: ${metaZone.name}`} onClose={() => setMetaZone(null)}>
           <form className="modal-form" onSubmit={async (e) => {
             e.preventDefault()
             try {
@@ -481,6 +450,8 @@ export default function ZoneMatrix() {
                 owner: metaZone.owner, description: metaZone.description,
                 cia_c: metaZone.cia_c, cia_i: metaZone.cia_i, cia_a: metaZone.cia_a,
               })
+              await api.setZonePapLevel(metaZone.name, metaZone.pap_level || 'intern')
+              await api.setZoneComponents(metaZone.name, metaZone.component_ids || [])
               setMetaZone(null)
               load()
             } catch (err) { setError(err.message) }
@@ -504,6 +475,34 @@ export default function ZoneMatrix() {
                   </select>
                 </label>
               ))}
+            </div>
+            <div className="grid-2">
+              <label>{t('P-A-P-Einstufung')}
+                <select value={metaZone.pap_level || 'intern'}
+                  onChange={(e) => setMetaZone({ ...metaZone, pap_level: e.target.value })}>
+                  <option value="extern">extern (Nord)</option>
+                  <option value="pap">P-A-P-Ebene</option>
+                  <option value="intern">intern (Süd)</option>
+                </select>
+              </label>
+              <label>{t('Angebunden an')}
+                <span className="attach-select">
+                  {fwComponents.map((f) => {
+                    const ids = metaZone.component_ids || []
+                    const attached = ids.includes(f.id)
+                    return (
+                      <label key={f.id} className="checkbox">
+                        <input type="checkbox" checked={attached}
+                          onChange={() => setMetaZone({
+                            ...metaZone,
+                            component_ids: attached ? ids.filter((x) => x !== f.id) : [...ids, f.id],
+                          })} />
+                        <span className={`badge platform-${f.type}`}>{f.name}</span>
+                      </label>
+                    )
+                  })}
+                </span>
+              </label>
             </div>
             <p className="muted small">
               {t('Gesamt-Schutzbedarf nach Maximumprinzip:')}{' '}
