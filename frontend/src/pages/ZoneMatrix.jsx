@@ -97,6 +97,8 @@ async function exportPlanMermaid() {
 /* Nord-Süd-Sicht nach BSI P-A-P: externe Zonen (Nord) – P-A-P-Ebene mit den
    Firewall-Clustern und DMZ-/Transferzonen – interne Zonen (Süd). */
 function ZoneReachability({ overview }) {
+  // Hover auf Zone/Firewall hebt alle zugehörigen Verbindungen hervor
+  const [hover, setHover] = useState(null)
   if (!overview || !overview.zones.length) return null
   const zones = overview.zones
   const firewalls = {}
@@ -228,7 +230,7 @@ function ZoneReachability({ overview }) {
   const H = y
 
   return (
-    <div className="topology-wrap zone-reach">
+    <div className={`topology-wrap zone-reach${hover ? ' has-hover' : ''}`}>
       <div className="plan-head">
         <div>
           <strong>Zonenplan (bereinigter Netzplan)</strong>
@@ -271,10 +273,11 @@ function ZoneReachability({ overview }) {
             const sameColumn = Math.abs(zp.x - fp.x) < 20
             const ax = sameColumn ? fp.x : (anchors[`${f.id}|${z.name}`] ?? fp.x)
             const my = (zy + fy) / 2
+            const active = hover === z.name || hover === `fw:${f.id}`
             return (
               <path key={`${z.name}-${f.id}`}
                 d={`M ${zp.x} ${zy} C ${zp.x} ${my}, ${ax} ${my}, ${ax} ${fy}`}
-                className="topo-link zone-link">
+                className={`topo-link zone-link${active ? ' link-active' : ''}`}>
                 <title>{`${z.name} ist über ${f.name} erreichbar`}</title>
               </path>
             )
@@ -284,7 +287,7 @@ function ZoneReachability({ overview }) {
           const p = fwPos[f.id]
           const color = FW_COLORS[f.type] || { fill: '#eef1f6', stroke: '#66707c' }
           return (
-            <g key={f.id}>
+            <g key={f.id} onMouseEnter={() => setHover(`fw:${f.id}`)} onMouseLeave={() => setHover(null)}>
               <rect x={p.x - 85} y={p.y - BOX_H / 2} width={170} height={BOX_H} rx={8}
                 fill={color.fill} stroke={color.stroke} strokeWidth="2.5">
                 <title>{`${f.name} (${f.type === 'juniper' ? 'Juniper SRX' : 'Check Point'}) – ${f.location}`}</title>
@@ -299,7 +302,7 @@ function ZoneReachability({ overview }) {
           const sub = `${z.schutzbedarf || 'normal'}${z.owner ? ' · ' + z.owner : ''}`
           const subShort = sub.length > 24 ? sub.slice(0, 23) + '…' : sub
           return (
-            <g key={z.name}>
+            <g key={z.name} onMouseEnter={() => setHover(z.name)} onMouseLeave={() => setHover(null)}>
               <rect x={p.x - BOX_W / 2} y={p.y - BOX_H / 2} width={BOX_W} height={BOX_H} rx={8}
                 className={`zone-box zone-sb-${(z.schutzbedarf || 'normal').replace(' ', '_')}`
                   + (z.has_firewall ? '' : ' zone-box-warn')}>

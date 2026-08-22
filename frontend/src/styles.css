@@ -463,3 +463,8 @@ table.matrix .row-head { background: #f7f9fc; position: sticky; left: 0; z-index
 .zone-node-sub { font-size: 8.5px; text-anchor: middle; fill: #5a6572; }
 .zone-aci-chip { fill: #e3f5ec; stroke: #157a52; stroke-width: 1; }
 .zone-aci-text { font-size: 8px; font-weight: 700; text-anchor: middle; fill: #157a52; }
+/* Zonenplan-Hover: Zone/Firewall anfassen -> zugehörige Verbindungen blau,
+   alle übrigen abgedimmt */
+.zone-reach.has-hover .zone-link { opacity: .15; }
+.zone-reach .zone-link.link-active { opacity: 1; stroke: var(--primary); stroke-width: 2.8; }
+.zone-reach .zone-box, .zone-reach .topology-svg g { cursor: default; }
