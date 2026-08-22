@@ -49,13 +49,13 @@ RULE_ID_RE = re.compile(r"^SR(\d+)$")
 
 
 def next_rule_id(db: Session) -> str:
-    """Nächste freie SR-Nummer (Format wie in der Kommunikationsmatrix, z.B. SR0855)."""
+    """Nächste freie SR-Nummer, 5-stellig aufgefüllt (z.B. SR00855) – bis 99999 Regeln."""
     max_num = 0
     for (rid,) in db.query(Rule.rule_id).all():
         m = RULE_ID_RE.match(rid)
         if m:
             max_num = max(max_num, int(m.group(1)))
-    return f"SR{max_num + 1:04d}"
+    return f"SR{max_num + 1:05d}"
 
 
 def get_rule_or_404(db: Session, rule_id: str) -> Rule:

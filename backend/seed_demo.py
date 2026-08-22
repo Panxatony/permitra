@@ -343,7 +343,7 @@ def seed(wipe: bool):
         return sorted(fws.values(), key=lambda c: c.name)
 
     for i, (src_zone, dst_zone) in enumerate(plans, start=1):
-        rule_id = f"SR{i:04d}"
+        rule_id = f"SR{i:05d}"
         intra = src_zone == dst_zone
         # Komponenten wie die automatische Auflösung: Intra-Zone -> ACI, sonst FW-Cluster
         rule_components_list = resolve_seed_components(src_zone, dst_zone)
@@ -405,8 +405,8 @@ def seed(wipe: bool):
 
     # Zwei bewusste Konflikt-Beispiele (Überlappung) zum Testen der Warnungen
     for rid, src, src_alias in (
-        ("SR0101", "10.10.20.0/24", "NET-VPN"),
-        ("SR0102", "10.10.20.128/25", "NET-VPN-B"),
+        ("SR00101", "10.10.20.0/24", "NET-VPN"),
+        ("SR00102", "10.10.20.128/25", "NET-VPN-B"),
     ):
         rule = Rule(
             rule_id=rid,
@@ -429,7 +429,7 @@ def seed(wipe: bool):
     # Umsetzung: Firewall-Regel auf beiden Clustern (Standort-Transit) plus
     # ACI Contract, weil das Ziel-Segment Contracts erzwingt (L3Out -> EPG).
     rule = Rule(
-        rule_id="SR0103",
+        rule_id="SR00103",
         vrf_id=vrf_it.id, name="Admin-Zugriff-PROD-APP", application="Infrastruktur",
         components=[components["FW-Cluster-BER"], components["FW-Cluster-FFM"],
                     components["ACI-Fabric-FFM"]],

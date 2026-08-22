@@ -34,7 +34,7 @@ Zentrale Webanwendung zur Verwaltung von Sicherheitsregeln für **Juniper SRX**,
 Inhaltliche Änderungen an freigegebenen Regeln setzen den Status auf `Entwurf` zurück.
 Getrennt davon pflegt der Betrieb den **Umsetzungsstatus je Plattform** (`offen/neu/umgesetzt/deaktiviert` – entspricht den Spalten „Status Juniper“/„Status ACI“ im Excel).
 
-**Datenmodell**: Rule-ID im `SR####`-Format mit Auto-Vergabe, Application, Quell-/Ziel-Zonen
+**Datenmodell**: Rule-ID im `SR#####`-Format (5-stellig, bis 99999 Regeln) mit Auto-Vergabe, Application, Quell-/Ziel-Zonen
 (Dropdown aus der Zonenverwaltung), mehrere Dienste (Protokoll/Port) pro Regel, Anlass,
 Requestor, Bearbeiter, Change-ID, Fachlicher Bezug, Gültigkeitszeitraum, Versionshistorie
 mit Snapshots, Kommentare.
@@ -177,7 +177,7 @@ Deterministisch (fester Seed), komplett fiktiv (Netze aus `10.10.0.0/16`, Hosts 
 vollständiger Allow/Block-Matrix, ~100 Regeln über alle Workflow-Status (freigegeben,
 im Review mit Kommentaren, Entwurf, abgelehnt, deaktiviert), Firewall-Regeln zwischen
 Zonen (Juniper/Check Point), ACI-Regeln intra-zonal, plus zwei bewusst überlappende
-Regeln (SR0101/SR0102) zum Testen der Konflikt-Warnungen.
+Regeln (SR00101/SR00102) zum Testen der Konflikt-Warnungen.
 
 ## Sicherheitszonen
 
@@ -272,7 +272,7 @@ Menüpunkt „Adress-Suche" (`GET /api/rules/ip-search?q=`, `GET /api/rules/path
 
 ## Beispiel-Workflow
 
-1. **Architekt** legt eine Regel an (ID wird automatisch vergeben, z.B. `SR0855`):
+1. **Architekt** legt eine Regel an (ID wird automatisch vergeben, z.B. `SR00855` (5-stellig, bis 99999 Regeln)):
    Quelle `10.0.1.0/24`, Ziel `192.168.1.0/24`, Dienst `TCP/443`, Anlass „Erlaubt HTTPS-Verkehr für Webserver“.
    Die Anwendung prüft dabei: gültige CIDR/Hostnamen, Ports 1–65535, keine doppelten IDs, Gültigkeitszeitraum – und warnt bei **Konflikten** (überlappende Netze/Ports, Duplikate, permit/deny-Shadowing).
 2. Regel **zum Review einreichen** → **Betrieb** prüft, kommentiert und gibt frei (oder lehnt ab).

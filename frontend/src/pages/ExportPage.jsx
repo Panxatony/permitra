@@ -158,7 +158,7 @@ export default function ExportPage() {
               </select>
             </label>
             <label>{t('Nur bestimmte Regeln (IDs, kommagetrennt)')}
-              <input value={ids} onChange={(e) => setIds(e.target.value)} placeholder="SR0855, SR0846" />
+              <input value={ids} onChange={(e) => setIds(e.target.value)} placeholder="SR00855, SR00846" />
             </label>
             <label className="checkbox">
               <input type="checkbox" checked={onlyApproved} onChange={(e) => setOnlyApproved(e.target.checked)} />
