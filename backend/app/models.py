@@ -390,6 +390,25 @@ class Setting(Base):
     value: Mapped[str] = mapped_column(String(256), default="")
 
 
+class ApiToken(Base):
+    """Read-only Service-Token für Automatisierung (Ansible/Terraform).
+
+    Nur der Hash wird gespeichert; der Klartext wird einmalig bei Erstellung
+    ausgegeben. Tokens erlauben ausschließlich lesende Zugriffe (GET)."""
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))
+    prefix: Mapped[str] = mapped_column(String(16), index=True)  # sichtbarer Anfang
+    token_hash: Mapped[str] = mapped_column(String(64), index=True)
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked: Mapped[bool] = mapped_column(default=False)
+
+
 class AuthToken(Base):
     """Einmal-Token für Aktivierungs- und Passwort-Reset-Links (nur Hash gespeichert)."""
 

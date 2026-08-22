@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -52,7 +52,44 @@ def create_token(user: User) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+API_TOKEN_PREFIX = "pat_"
+
+
+def _service_principal_from_pat(request, token: str, db: Session) -> User:
+    """Validiert einen read-only API-Token und liefert einen (nicht persistierten)
+    Service-Principal. Nur GET-Zugriffe sind erlaubt (fail-secure)."""
+    from .models import ApiToken
+
+    if request is not None and request.method not in ("GET", "HEAD", "OPTIONS"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "API-Token sind read-only – nur lesende Zugriffe erlaubt")
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    pat = db.query(ApiToken).filter(ApiToken.token_hash == digest).first()
+    if not pat or pat.revoked:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API-Token ungültig oder widerrufen")
+    if pat.expires_at is not None:
+        exp = pat.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < datetime.now(timezone.utc):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API-Token ist abgelaufen")
+    # Letzte Nutzung sparsam aktualisieren (nicht bei jedem Request schreiben)
+    now = datetime.now(timezone.utc)
+    if pat.last_used_at is None or (now - (pat.last_used_at if pat.last_used_at.tzinfo
+                                           else pat.last_used_at.replace(tzinfo=timezone.utc))).total_seconds() > 60:
+        pat.last_used_at = now
+        db.commit()
+    principal = User(username=f"token:{pat.name}", password_hash="", role=Role.operations,
+                     is_active=True)
+    principal.is_service_token = True
+    return principal
+
+
+def get_current_user(request: Request = None, token: str = Depends(oauth2_scheme),
+                     db: Session = Depends(get_db)) -> User:
+    # Read-only Service-Token (Automatisierung) statt JWT
+    if token and token.startswith(API_TOKEN_PREFIX):
+        return _service_principal_from_pat(request, token, db)
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.PyJWTError:

@@ -125,6 +125,35 @@ Change approvers land on a focused approvals page after login: open rule reviews
 - **2FA (TOTP)**: self-service on the account page (secret for authenticator apps, activation by code); login then asks for the code as a second factor. Implemented per RFC 6238 without extra dependencies.
 - **Passkeys (WebAuthn)**: registration on the account page, passwordless sign-in on the login page. Requires HTTPS (or localhost); configured via `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (default derived from `PERMITRA_BASE_URL`).
 
+## Automation: read-only API tokens (Ansible/Terraform)
+
+Permitra is API-first, so external tools can use it as the source of truth. Create a
+**read-only API token** in the admin area (shown once). Tokens allow only `GET` requests
+(writes return 403) and never expose admin endpoints. Use `updated_since` for efficient polling.
+
+```yaml
+# Ansible
+- name: Read approved rules from Permitra
+  ansible.builtin.uri:
+    url: "https://permitra.example.org/api/rules?status=approved&component=FW-Cluster-BER"
+    headers:
+      Authorization: "Bearer {{ permitra_token }}"
+  register: permitra
+# permitra.json.items is the source of truth for templates/modules
+```
+
+```hcl
+# Terraform
+data "http" "permitra_rules" {
+  url             = "https://permitra.example.org/api/rules?status=approved"
+  request_headers = { Authorization = "Bearer ${var.permitra_token}" }
+}
+locals { rules = jsondecode(data.http.permitra_rules.response_body).items }
+```
+
+Endpoints: `GET/POST/DELETE /api/api-tokens` (admin). The token itself is authenticated via
+`Authorization: Bearer pat_…`.
+
 ## Change management integration (optional)
 
 Permitra sends a JSON webhook on approval events (fire-and-forget, never blocks):

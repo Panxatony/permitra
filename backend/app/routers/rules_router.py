@@ -220,6 +220,7 @@ def list_rules(
     platform: str | None = None,
     component: str | None = Query(None, description="Name (Teilstring) einer Komponente"),
     vrf: str | None = Query(None, description="Umgebung/VRF (Name); leer = alle"),
+    updated_since: str | None = Query(None, description="ISO-Zeitstempel; nur seither geänderte Regeln (Polling)"),
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -239,6 +240,13 @@ def list_rules(
         )
     if rule_status:
         query = query.filter(Rule.status == rule_status)
+    if updated_since:
+        from datetime import datetime as _dt
+        try:
+            query = query.filter(Rule.updated_at >= _dt.fromisoformat(updated_since))
+        except ValueError:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                "updated_since muss ein ISO-Zeitstempel sein")
     if application:
         query = query.filter(Rule.application.ilike(f"%{application}%"))
     rules = query.order_by(Rule.rule_id.desc()).all()

@@ -17,11 +17,15 @@ export default function Admin() {
   const [link, setLink] = useState('')
   const [settings, setSettings] = useState({})
   const [audit, setAudit] = useState([])
+  const [tokens, setTokens] = useState([])
+  const [tokenName, setTokenName] = useState('')
+  const [newToken, setNewToken] = useState('')
 
   const load = () => {
     api.users().then(setUsers).catch((e) => setError(e.message))
     api.settings().then(setSettings).catch(() => setSettings({}))
     api.auditLog({ limit: 50 }).then(setAudit).catch(() => setAudit([]))
+    api.apiTokens().then(setTokens).catch(() => setTokens([]))
   }
   useEffect(() => { load() }, [])
 
@@ -175,6 +179,56 @@ export default function Admin() {
           <button className="btn btn-primary" type="submit">{t('Benutzer anlegen')}</button>
         </div>
       </form>
+
+      <section className="card" style={{ marginTop: '1rem' }}>
+        <h3>{t('API-Tokens (read-only)')} <span className="muted small">{t('für Ansible/Terraform u.a.')}</span></h3>
+        <p className="muted small">
+          {t('Nur lesender Zugriff (GET). Als Header verwenden: Authorization: Bearer <token>')}
+        </p>
+        {newToken && (
+          <div className="infobox">
+            {t('Neuer Token (wird nur einmal angezeigt):')}{' '}
+            <code style={{ userSelect: 'all', wordBreak: 'break-all' }}>{newToken}</code>
+          </div>
+        )}
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>{t('Name')}</th><th>Prefix</th><th>{t('Zuletzt genutzt')}</th><th>{t('Gültig bis')}</th><th>{t('Status')}</th><th></th></tr>
+            </thead>
+            <tbody>
+              {tokens.map((tok) => (
+                <tr key={tok.id}>
+                  <td><strong>{tok.name}</strong></td>
+                  <td><code>{tok.prefix}…</code></td>
+                  <td className="small">{tok.last_used_at ? new Date(tok.last_used_at).toLocaleString('de-DE') : '–'}</td>
+                  <td className="small">{tok.expires_at ? tok.expires_at.slice(0, 10) : t('unbefristet')}</td>
+                  <td><span className={`badge ${tok.revoked ? 'status-deactivated' : 'status-approved'}`}>
+                    {tok.revoked ? t('widerrufen') : t('aktiv')}</span></td>
+                  <td className="row-actions">
+                    {!tok.revoked && <button className="btn btn-ghost"
+                      onClick={() => act(() => api.revokeApiToken(tok.id), t('Token widerrufen'))}>{t('Widerrufen')}</button>}
+                  </td>
+                </tr>
+              ))}
+              {!tokens.length && <tr><td colSpan={6} className="muted">{t('Keine Tokens.')}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <form className="filterbar" style={{ marginTop: '.6rem' }} onSubmit={async (e) => {
+          e.preventDefault()
+          if (!tokenName.trim()) return
+          setNewToken('')
+          try {
+            const r = await api.createApiToken(tokenName.trim())
+            setNewToken(r.token); setTokenName(''); load()
+          } catch (err) { setError(err.message) }
+        }}>
+          <input value={tokenName} onChange={(e) => setTokenName(e.target.value)}
+            placeholder={t('Name, z.B. "Ansible-Prod"')} />
+          <button className="btn btn-primary" type="submit">{t('Token erzeugen')}</button>
+        </form>
+      </section>
 
       <section className="card" style={{ marginTop: '1rem' }}>
         <h3>{t('Audit-Log')} <span className="muted small">{t('(letzte 50 Ereignisse; vollständig über die API /api/audit-log für SIEM)')}</span></h3>

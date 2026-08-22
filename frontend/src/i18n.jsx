@@ -245,6 +245,19 @@ const EN = {
   // Administration & Konto
   'Administration': 'Administration',
   'Audit-Log': 'Audit log',
+  'API-Tokens (read-only)': 'API tokens (read-only)',
+  'für Ansible/Terraform u.a.': 'for Ansible/Terraform and more',
+  'Nur lesender Zugriff (GET). Als Header verwenden: Authorization: Bearer <token>':
+    'Read-only access (GET). Use as header: Authorization: Bearer <token>',
+  'Neuer Token (wird nur einmal angezeigt):': 'New token (shown only once):',
+  'Zuletzt genutzt': 'Last used',
+  'widerrufen': 'revoked',
+  'aktiv': 'active',
+  'Widerrufen': 'Revoke',
+  'Token widerrufen': 'Token revoked',
+  'Keine Tokens.': 'No tokens.',
+  'Name, z.B. "Ansible-Prod"': 'Name, e.g. "Ansible-Prod"',
+  'Token erzeugen': 'Create token',
   '(letzte 50 Ereignisse; vollständig über die API /api/audit-log für SIEM)':
     '(last 50 events; full log via the /api/audit-log API for SIEM)',
   'Ereignis': 'Event',
