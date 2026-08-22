@@ -231,6 +231,14 @@ cd backend && ../.venv/bin/python -m pytest tests/
 
 Tracked as GitLab issues: email notifications, ServiceNow adapter, configurable mandatory fields, rule rollback, risk hints (any-to-any, risky services), SIEM audit log export, AD/LDAP sign-in, read-only API tokens for automation (Ansible/Terraform). Multi-environment support (overlapping IP ranges per environment, e.g. IT/OT) is fully built and currently dormant behind a single default environment.
 
+## How this project was built
+
+In the spirit of transparency: **Permitra was built with [Claude](https://claude.com/claude-code), Anthropic's AI coding assistant** — every commit carries the co-author trailer.
+
+The author is a solution architect who has delivered many cloud infrastructure projects, each of them accompanied by Excel sheets full of security rules. With limited programming skills of their own, working with Claude made it possible to turn that hands-on domain experience into a working solution: the architecture principles, workflows and requirements behind Permitra come from real project practice; the implementation grew out of an iterative dialogue with the AI.
+
+That is also part of why Permitra is open source: so that experienced developers can review the code critically, point out what should be done better — and use the ideas as inspiration for their own work.
+
 ## License
 
 Permitra is open source under the [Apache License 2.0](LICENSE).
