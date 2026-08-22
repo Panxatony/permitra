@@ -6,6 +6,7 @@ import { useLang } from '../i18n'
 
 const SB_BADGE = { normal: 'status-draft', 'hoch': 'status-in_review', 'sehr hoch': 'status-rejected' }
 const zoneLabel = (z) => (z.code ? `${z.code}-${z.name}` : z.name)
+const zref = (z) => z.code || z.name
 const SB_LABEL = (z) => `${z.schutzbedarf || 'normal'} (C:${z.cia_c || 'normal'} I:${z.cia_i || 'normal'} V:${z.cia_a || 'normal'})`
 
 function cellLabel(p) {
@@ -350,6 +351,7 @@ export default function ZoneMatrix() {
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
   const [newZone, setNewZone] = useState('')
+  const [newZoneCode, setNewZoneCode] = useState('')
   const [newZoneLevel, setNewZoneLevel] = useState('intern')
   const [netInputs, setNetInputs] = useState({})  // Zone -> CIDR-Eingabe
   const [saving, setSaving] = useState('')
@@ -401,6 +403,7 @@ export default function ZoneMatrix() {
       api.components().then((cs) => setFwComponents(cs.filter((c) => c.type !== 'aci'))).catch(() => {})
       api.matrixChanges().then(setChanges).catch(() => setChanges([]))
       api.settings().then(setSettings).catch(() => setSettings({}))
+      api.zoneNextCode().then((r) => setNewZoneCode((c) => c || r.code)).catch(() => {})
       const data = await api.zoneMatrix()
       setZones(data.zones)
       const map = {}
@@ -461,7 +464,7 @@ export default function ZoneMatrix() {
     setError('')
     try {
       const items = [
-        ...draftZones.map((z) => ({ type: 'zone_create', name: z.name, pap_level: z.pap_level })),
+        ...draftZones.map((z) => ({ type: 'zone_create', name: z.name, code: z.code, pap_level: z.pap_level })),
         ...Object.entries(draft).map(([key, policy]) => {
           const [from_zone, to_zone] = key.split('|')
           return { type: 'policy', from_zone, to_zone, policy, temporary: false }
@@ -495,16 +498,18 @@ export default function ZoneMatrix() {
   const addZone = (e) => {
     e.preventDefault()
     const name = newZone.trim()
-    if (!name) return
+    const code = newZoneCode.trim()
+    if (!name || !code) { setError('Bitte Zonen-ID und Name angeben.'); return }
     if (!editMode) setEditMode(true)
-    if (zones.some((z) => z.name.toUpperCase() === name.toUpperCase())
-      || draftZones.some((z) => z.name.toUpperCase() === name.toUpperCase())) {
-      setError(`Zone '${name}' existiert bereits.`)
+    if (zones.some((z) => z.name.toUpperCase() === name.toUpperCase() || (z.code || '').toUpperCase() === code.toUpperCase())
+      || draftZones.some((z) => z.name.toUpperCase() === name.toUpperCase() || z.code.toUpperCase() === code.toUpperCase())) {
+      setError(`Zone '${code} / ${name}' existiert bereits.`)
       return
     }
     setError('')
-    setDraftZones((list) => [...list, { name, pap_level: newZoneLevel }])
+    setDraftZones((list) => [...list, { name, code, pap_level: newZoneLevel }])
     setNewZone('')
+    api.zoneNextCode().then((r) => setNewZoneCode(r.code)).catch(() => setNewZoneCode(''))
   }
 
   const removeZone = async (name) => {
@@ -728,7 +733,7 @@ export default function ZoneMatrix() {
                 <th className="row-head">{zoneLabel(from)}</th>
                 {zones.map((to) => {
                   if (from.id === to.id) return <td key={to.id} className="cell-self">–</td>
-                  const key = `${from.name}|${to.name}`
+                  const key = `${zref(from)}|${zref(to)}`
                   const p = policies[key]
                   const pend = pendingMap[key]
                   const draftPolicy = draft[key]
@@ -748,7 +753,7 @@ export default function ZoneMatrix() {
                           : 'nicht gepflegt – erlaubt mit Hinweis'}`
                         + (draftPolicy ? ` – Entwurf: ${draftPolicy === 'allow_only' ? 'Allow' : 'Block'} (noch nicht beantragt)` : '')
                         + (pend ? ` – Antrag auf ${pend.new_policy === 'allow_only' ? 'Allow' : 'Block'} wartet auf Freigabe (${pend.requested_by})` : '')}
-                      onClick={() => cycle(from.name, to.name)}
+                      onClick={() => cycle(zref(from), zref(to))}
                     >
                       {`${label}${draftPolicy ? ' ✎' : ''}${pend ? ' ⏳' : ''}`}
                     </td>
@@ -764,8 +769,10 @@ export default function ZoneMatrix() {
         <div className="zone-manage">
           {true ? (
             <form className="zone-add" onSubmit={addZone}>
+              <input value={newZoneCode} onChange={(e) => setNewZoneCode(e.target.value)}
+                placeholder="Zonen-ID, z.B. Z130" style={{ maxWidth: '120px' }} />
               <input value={newZone} onChange={(e) => setNewZone(e.target.value)}
-                placeholder="Neue Zone, z.B. T-NEW" />
+                placeholder="Zonen-Name, z.B. T-NEW" />
               <select value={newZoneLevel} onChange={(e) => setNewZoneLevel(e.target.value)}>
                 <option value="extern">extern (Nord)</option>
                 <option value="pap">P-A-P-Ebene</option>
@@ -774,7 +781,7 @@ export default function ZoneMatrix() {
               <button className="btn btn-primary" type="submit">{t('Zone anlegen')} (in Antrag)</button>
               {draftZones.map((z) => (
                 <span key={z.name} className="zone-chip">
-                  ✎ {z.name} <span className="muted small">({z.pap_level})</span>
+                  ✎ {z.code}-{z.name} <span className="muted small">({z.pap_level})</span>
                   <button type="button"
                     onClick={() => setDraftZones(draftZones.filter((x) => x.name !== z.name))}>✕</button>
                 </span>

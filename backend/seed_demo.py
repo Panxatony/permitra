@@ -293,6 +293,7 @@ def seed(wipe: bool):
         db.add(zone)
         zones[name] = zone
     db.flush()
+    zc = lambda name: zones[name].code  # Zonen-ID (führend für Regeln)
     # Netzwerk-Zuordnung: jedes Netzwerk gehört zu genau einer Zone; "any" -> INET
     for name, _descr, net in ZONES:
         if net:
@@ -422,8 +423,8 @@ def seed(wipe: bool):
             name=f"{app}-{dst_zone}-{i:03d}",
             application=app,
             components=rule_components_list,
-            source_zone=src_zone,
-            destination_zone=dst_zone,
+            source_zone=zc(src_zone),
+            destination_zone=zc(dst_zone),
             source=make_addresses(src_zone),
             destination=make_addresses(dst_zone),
             services=make_services(dst_zone),
@@ -467,7 +468,7 @@ def seed(wipe: bool):
         rule = Rule(
             rule_id=rid,
             vrf_id=vrf_it.id, name=f"Konflikt-Demo-{rid}", application="Portal",
-            components=[fw_ber], source_zone="VPN", destination_zone="MGMT",
+            components=[fw_ber], source_zone=zc("VPN"), destination_zone=zc("MGMT"),
             source=[{"ip": src, "alias": src_alias}],
             destination=[{"ip": "10.10.80.10", "alias": "jump01.demo.local"}],
             services=[{"protocol": "TCP", "port": "22"}], action=RuleAction.permit,
@@ -489,7 +490,7 @@ def seed(wipe: bool):
         vrf_id=vrf_it.id, name="Admin-Zugriff-PROD-APP", application="Infrastruktur",
         components=[components["FW-Cluster-BER"], components["FW-Cluster-FFM"],
                     components["ACI-Fabric-FFM"]],
-        source_zone="MGMT", destination_zone="PROD-APP",
+        source_zone=zc("MGMT"), destination_zone=zc("PROD-APP"),
         source=[{"ip": "10.10.80.10", "alias": "jump01.demo.local"}],
         destination=[{"ip": "10.10.30.20", "alias": "app20.demo.local"}],
         services=[{"protocol": "TCP", "port": "8443"}], action=RuleAction.permit,

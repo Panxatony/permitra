@@ -12,6 +12,7 @@ import re
 from sqlalchemy.orm import Session
 
 from .models import Rule, RuleStatus, SecurityComponent, Zone
+from .zone_check import zone_ref
 
 BAND_LABELS = {
     "extern": "Extern (Nord) – Internet / Partner",
@@ -42,7 +43,7 @@ def build_mermaid(db: Session, generated_at: str = "") -> str:
             continue
         for component in rule.components:
             if component.type.value == "aci":
-                aci_by_zone.setdefault(rule.destination_zone.upper(), set()).add(component.name)
+                aci_by_zone.setdefault((rule.destination_zone or '').upper(), set()).add(component.name)
 
     firewalls: dict[int, SecurityComponent] = {}
     for zone in zones:
@@ -73,7 +74,7 @@ def build_mermaid(db: Session, generated_at: str = "") -> str:
             parts = [f"<b>{label}</b>", f"Schutzbedarf: {zone.schutzbedarf}"]
             if zone.owner:
                 parts.append(f"Verantwortlich: {zone.owner}")
-            aci = sorted(aci_by_zone.get(zone.name.upper(), ()))
+            aci = sorted(aci_by_zone.get(zone_ref(zone).upper(), ()))
             if aci:
                 parts.append(f"ACI intra-zonal: {', '.join(aci)}")
             lines.append(f'    {_node_id(zone.name)}["{"<br/>".join(parts)}"]')

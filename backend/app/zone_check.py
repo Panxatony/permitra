@@ -61,7 +61,7 @@ def resolve_zone_for_entries(db: Session, entries: list[dict], vrf_id: int | Non
         if zone is None:
             unassigned.append(ip)
         else:
-            zones_hit.add(zone.name)
+            zones_hit.add(zone_ref(zone))  # führend: die Zonen-ID
     resolved = zones_hit.copy().pop() if len(zones_hit) == 1 else None
     return resolved, unassigned, zones_hit
 
@@ -74,12 +74,24 @@ class ZoneCheckResult:
     messages: list[str] = field(default_factory=list)
 
 
-def find_zone(db: Session, name: str) -> Zone | None:
-    name = (name or "").strip()
-    if not name:
+def zone_ref(zone: Zone) -> str:
+    """Kanonischer Referenzwert einer Zone: die Zonen-ID (code), sonst der Name.
+    Dieser Wert wird auf Regeln gespeichert (führend für die Regeln)."""
+    return (zone.code or zone.name) if zone else ""
+
+
+def find_zone(db: Session, ref: str) -> Zone | None:
+    """Löst eine Zone per ID (code) ODER Name auf (case-insensitiv). Die ID hat
+    Vorrang – sie ist der führende Identifier."""
+    ref = (ref or "").strip()
+    if not ref:
         return None
-    for zone in db.query(Zone).all():
-        if zone.name.upper() == name.upper():
+    zones = db.query(Zone).all()
+    for zone in zones:  # zuerst über die Zonen-ID
+        if (zone.code or "").upper() == ref.upper():
+            return zone
+    for zone in zones:  # dann über den Namen (Altdaten, Nutzereingabe)
+        if zone.name.upper() == ref.upper():
             return zone
     return None
 

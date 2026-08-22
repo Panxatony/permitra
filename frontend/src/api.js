@@ -211,6 +211,7 @@ export const api = {
   deleteAciGateway: (id) => request(`/api/aci-gateways/${id}`, { method: 'DELETE' }),
   zones: () => request('/api/zones'),
   createZone: (payload) => request('/api/zones', { method: 'POST', body: payload }),
+  zoneNextCode: () => request('/api/zones/next-code'),
   deleteZone: (name) => request(`/api/zones/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   zoneMatrix: () => request('/api/zones/matrix'),
   zoneOverview: () => request('/api/zones/overview'),

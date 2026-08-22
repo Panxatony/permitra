@@ -24,7 +24,7 @@ from ..schemas import (
     ZonePolicyOut,
     ZonePolicySet,
 )
-from ..zone_check import check_zone_pair, find_zone, get_policy
+from ..zone_check import check_zone_pair, find_zone, get_policy, zone_ref
 
 router = APIRouter(prefix="/api/zones", tags=["zones"])
 
@@ -34,15 +34,39 @@ def list_zones(db: Session = Depends(get_db), _: User = Depends(get_current_user
     return db.query(Zone).order_by(Zone.sort_order, Zone.name).all()
 
 
+def next_zone_code(db: Session) -> str:
+    """Nächste freie Zonen-ID (Z010, Z020, … in 10er-Schritten)."""
+    import re
+    max_num = 0
+    for (code,) in db.query(Zone.code).all():
+        m = re.match(r"^Z(\d+)$", (code or "").upper())
+        if m:
+            max_num = max(max_num, int(m.group(1)))
+    nxt = (max_num // 10 + 1) * 10 if max_num else 10
+    return f"Z{nxt:03d}"
+
+
+@router.get("/next-code")
+def get_next_code(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.architect))):
+    return {"code": next_zone_code(db)}
+
+
 @router.post("", response_model=ZoneOut, status_code=201)
 def create_zone(
     payload: ZoneCreate,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(Role.architect)),
 ):
-    if find_zone(db, payload.name):
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Zone '{payload.name}' existiert bereits")
-    zone = Zone(**payload.model_dump())
+    code = (payload.code or "").strip()
+    if not code:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Zonen-ID (code) ist erforderlich")
+    if find_zone(db, code) or find_zone(db, payload.name):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            f"Zone mit ID '{code}' oder Name '{payload.name}' existiert bereits")
+    data = payload.model_dump()
+    data["code"] = code
+    zone = Zone(**data)
     db.add(zone)
     db.commit()
     db.refresh(zone)
@@ -230,7 +254,7 @@ def overview(db: Session = Depends(get_db), _: User = Depends(get_current_user))
 
     result = []
     for zone in zones:
-        zname = zone.name.upper()
+        zname = zone_ref(zone).upper()
         zone_rules = [
             r for r in rules
             if (r.source_zone or "").upper() == zname or (r.destination_zone or "").upper() == zname
@@ -303,8 +327,8 @@ def matrix(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
         zones=zones,
         policies=[
             ZonePolicyOut(
-                from_zone=p.from_zone.name,
-                to_zone=p.to_zone.name,
+                from_zone=zone_ref(p.from_zone),
+                to_zone=zone_ref(p.to_zone),
                 policy=p.policy,
                 temporary=p.temporary,
                 note=p.note,
@@ -350,16 +374,21 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
     for item in items:
         if item.get("type") == "zone_create":
             name = (item.get("name") or "").strip()
+            code = (item.get("code") or "").strip()
             if not name:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Zonenname fehlt")
-            if find_zone(db, name):
-                raise HTTPException(status.HTTP_409_CONFLICT, f"Zone '{name}' existiert bereits")
+            if not code:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Zonen-ID (code) fehlt")
+            if find_zone(db, name) or find_zone(db, code):
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    f"Zone mit ID '{code}' oder Name '{name}' existiert bereits")
             level = (item.get("pap_level") or "intern").lower()
             if level not in ("extern", "pap", "intern"):
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Ungültige P-A-P-Einstufung")
+            # to_zone trägt die Zonen-ID (bei zone_create sonst ungenutzt)
             rows.append(ZonePolicyChange(
                 batch_id=batch_id, change_type="zone_create",
-                from_zone=name, to_zone="", old_policy=None, new_policy=level,
+                from_zone=name, to_zone=code, old_policy=None, new_policy=level,
                 requested_by=user.username, comment=item.get("description", ""),
             ))
             continue
@@ -369,7 +398,7 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             if not zone:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{name}' nicht gefunden")
             used = db.query(Rule).filter(
-                (Rule.source_zone.ilike(zone.name)) | (Rule.destination_zone.ilike(zone.name))
+                (Rule.source_zone.ilike(zone_ref(zone))) | (Rule.destination_zone.ilike(zone_ref(zone)))
             ).count()
             if used:
                 raise HTTPException(status.HTTP_409_CONFLICT,
@@ -381,7 +410,7 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                                     "bitte zuerst umhängen oder entfernen")
             rows.append(ZonePolicyChange(
                 batch_id=batch_id, change_type="zone_delete",
-                from_zone=zone.name, to_zone="", old_policy=None, new_policy="delete",
+                from_zone=zone_ref(zone), to_zone="", old_policy=None, new_policy="delete",
                 requested_by=user.username, comment=comment,
             ))
             continue
@@ -470,8 +499,8 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
         pending = (
             db.query(ZonePolicyChange)
             .filter(ZonePolicyChange.change_type == "policy",
-                    ZonePolicyChange.from_zone == (zone_a.name if zone_a else from_name),
-                    ZonePolicyChange.to_zone == (zone_b.name if zone_b else to_name),
+                    ZonePolicyChange.from_zone == (zone_ref(zone_a) if zone_a else from_name),
+                    ZonePolicyChange.to_zone == (zone_ref(zone_b) if zone_b else to_name),
                     ZonePolicyChange.status == "pending")
             .first()
         )
@@ -482,8 +511,8 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             )
         rows.append(ZonePolicyChange(
             batch_id=batch_id, change_type="policy",
-            from_zone=zone_a.name if zone_a else from_name,
-            to_zone=zone_b.name if zone_b else to_name,
+            from_zone=zone_ref(zone_a) if zone_a else from_name,
+            to_zone=zone_ref(zone_b) if zone_b else to_name,
             old_policy=current.policy.value if current else None,
             new_policy=new_policy,
             old_temporary=current.temporary if current else False,
@@ -640,7 +669,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
         # Erst Zonen anlegen, dann Matrix-Zellen anwenden
         for item in batch:
             if item.change_type == "zone_create" and not find_zone(db, item.from_zone):
-                db.add(Zone(name=item.from_zone, pap_level=item.new_policy,
+                db.add(Zone(name=item.from_zone, code=item.to_zone, pap_level=item.new_policy,
                             description=item.comment, sort_order=db.query(Zone).count()))
             elif item.change_type == "zone_delete":
                 zone = find_zone(db, item.from_zone)
