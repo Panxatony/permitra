@@ -92,6 +92,9 @@ COMPONENTS = [
     ("FW-Cluster-Provider", ComponentType.juniper, "Extern (Provider)",
      "(Management beim Provider)", 0,
      "Firewall-Cluster des externen Providers – Internet-Übergang; Anbindung über FW-Cluster-BER"),
+    ("FW-Cluster-Provider-2", ComponentType.juniper, "Extern (Provider 2)",
+     "(Management beim Provider)", 0,
+     "Zweiter Provider-Cluster – redundanter Übergang (u.a. VPN-Einwahl); Anbindung über FW-Cluster-BER"),
 ]
 
 # --- Bausteine für Regeln ----------------------------------------------------
@@ -225,6 +228,12 @@ def seed(wipe: bool):
             link_type="BGP Peering",
             description="Upstream-Anbindung an den externen Provider (Internet-Übergang)",
         ),
+        ComponentLink(
+            component_a_id=min(fw_ber_c.id, components["FW-Cluster-Provider-2"].id),
+            component_b_id=max(fw_ber_c.id, components["FW-Cluster-Provider-2"].id),
+            link_type="BGP Peering",
+            description="Redundante Upstream-Anbindung an den zweiten Provider-Cluster",
+        ),
     ])
 
     # ACI Anycast Gateways – PBR-Anbindung an den Check Point Cluster (FFM)
@@ -344,6 +353,9 @@ def seed(wipe: bool):
     zones["MGMT"].components = [fw_ber, fw_ffm, fw_ffm_dc]
     # Audit/SIEM sammelt von allen internen Firewall-Clustern
     zones["AUDIT"].components = [fw_ber, fw_ffm, fw_ffm_dc]
+    # VPN-Einwahl terminiert an beiden Provider-Clustern (redundant), weiter über BER
+    zones["VPN"].components = [fw_ber, components["FW-Cluster-Provider"],
+                               components["FW-Cluster-Provider-2"]]
     # Internet ("any") erreicht die Umgebung über den Provider-Cluster
     db.add(AddressComponentMap(
         ip="any", alias="Internet", vrf_id=vrf_it.id,
