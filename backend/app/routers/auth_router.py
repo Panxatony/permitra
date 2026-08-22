@@ -83,6 +83,19 @@ def me(user: User = Depends(get_current_user)):
     return user
 
 
+@router.put("/notifications", response_model=UserOut)
+def set_notifications(
+    payload: dict,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """E-Mail-Benachrichtigungen ein-/ausschalten (Self-Service)."""
+    user.notify_email = bool(payload.get("notify_email", True))
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 # ---------- Passwort vergessen / setzen ----------
 
 @router.post("/forgot")

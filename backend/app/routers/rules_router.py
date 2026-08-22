@@ -757,12 +757,13 @@ def submit_for_review(
     add_version(db, rule, user, "Zum Review eingereicht")
     db.commit()
     db.refresh(rule)
-    from .. import change_management
+    from .. import change_management, notifications
 
     change_management.notify(
         "rule.submitted",
         {**change_management.rule_payload(rule), "submitted_by": user.username},
     )
+    notifications.rule_submitted(db, rule)
     return rule
 
 
@@ -804,13 +805,16 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
                            text=(decision.comment + "\n" if decision.comment else "") + removal_note))
             db.commit()
             db.refresh(rule)
-            from .. import change_management
+            from .. import change_management, notifications
 
             change_management.notify(
                 "rule.delete_approved",
                 {**change_management.rule_payload(rule),
                  "decided_by": user.username, "comment": decision.comment},
             )
+            notifications.rule_decided(db, rule, True, user.username, decision.comment)
+            notifications.rule_implementation_pending(
+                db, rule, "Löschung freigegeben – Regel auf den Komponenten entfernen")
             return rule
     rule.status = new_status
     if new_status == RuleStatus.approved:
@@ -828,13 +832,19 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     db.commit()
     db.refresh(rule)
     # Optionaler Change-Management-Webhook (z.B. ServiceNow) – fire-and-forget
-    from .. import change_management
+    from .. import change_management, notifications
 
     change_management.notify(
         f"rule.{new_status.value}",
         {**change_management.rule_payload(rule),
          "decided_by": user.username, "comment": decision.comment},
     )
+    if new_status in (RuleStatus.approved, RuleStatus.rejected):
+        notifications.rule_decided(db, rule, new_status == RuleStatus.approved,
+                                   user.username, decision.comment)
+    if new_status == RuleStatus.approved and impl_pending(rule):
+        notifications.rule_implementation_pending(
+            db, rule, "Regel freigegeben – Umsetzung auf den Komponenten erforderlich")
     return rule
 
 

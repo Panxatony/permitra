@@ -73,9 +73,15 @@ async def expiry_job():
         try:
             db = SessionLocal()
             try:
+                from .expiry import expiring_rules
+                from . import notifications
+
+                # Vor dem Deaktivieren den Stand für die Rezertifizierungs-Mail erfassen
+                soon_expired, soon_expiring = expiring_rules(db, days=30)
                 count = expire_rules(db)
                 if count:
                     logger.info("Gültigkeits-Job: %d Regel(n) automatisch deaktiviert", count)
+                notifications.recertification_due(db, soon_expired, soon_expiring)
             finally:
                 db.close()
         except Exception:  # Job darf die App nie mitreißen

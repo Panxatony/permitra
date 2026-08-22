@@ -374,6 +374,7 @@ class UserOut(BaseModel):
     role: Role
     is_active: bool = True
     totp_enabled: bool = False
+    notify_email: bool = True
 
 
 class UserCreate(BaseModel):

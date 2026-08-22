@@ -374,6 +374,8 @@ class User(Base):
     failed_logins: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
+    # E-Mail-Benachrichtigungen (Reviews, Freigaben, Rezertifizierung); Opt-out
+    notify_email: Mapped[bool] = mapped_column(default=True)
 
     passkeys: Mapped[list["Passkey"]] = relationship(back_populates="user",
                                                     cascade="all, delete-orphan")

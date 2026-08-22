@@ -261,6 +261,10 @@ const EN = {
   'Link (falls keine Mail ankommt, manuell übermitteln):':
     'Link (share manually if no mail arrives):',
   'Konto & Sicherheit': 'Account & security',
+  'Benachrichtigungen': 'Notifications',
+  'E-Mail bei Reviews, Freigaben und Rezertifizierung (erfordert eine hinterlegte E-Mail-Adresse).':
+    'Email on reviews, approvals and recertification (requires a stored email address).',
+  'E-Mail-Benachrichtigungen aktiv': 'Email notifications enabled',
   'Passwort ändern': 'Change password',
   'Aktuelles Passwort': 'Current password',
   'Neues Passwort (min. 8 Zeichen)': 'New password (min. 8 characters)',

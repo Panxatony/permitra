@@ -136,6 +136,7 @@ export const api = {
         if (r?.access_token) localStorage.setItem(TOKEN_KEY, r.access_token)
         return r
       }),
+  setNotifications: (on) => request('/api/auth/notifications', { method: 'PUT', body: { notify_email: on } }),
   totpSetup: () => request('/api/auth/totp/setup', { method: 'POST' }),
   totpEnable: (code) => request('/api/auth/totp/enable', { method: 'POST', body: { code } }),
   totpDisable: (password) => request('/api/auth/totp/disable', { method: 'POST', body: { password } }),

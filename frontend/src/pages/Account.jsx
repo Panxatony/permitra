@@ -87,6 +87,19 @@ export default function Account() {
 
       <div className="detail-grid">
         <section className="card">
+          <h2>{t('Benachrichtigungen')}</h2>
+          <p className="muted small">
+            {t('E-Mail bei Reviews, Freigaben und Rezertifizierung (erfordert eine hinterlegte E-Mail-Adresse).')}
+          </p>
+          <label className="checkbox">
+            <input type="checkbox" checked={me.notify_email !== false}
+              onChange={(e) => act(() => api.setNotifications(e.target.checked)
+                .then((u) => { setMe(u); return { detail: t('Einstellung gespeichert') } }))()} />
+            {t('E-Mail-Benachrichtigungen aktiv')}
+          </label>
+        </section>
+
+        <section className="card">
           <h2>{t('Passwort ändern')}</h2>
           <form onSubmit={changePw} className="modal-form">
             <label>{t('Aktuelles Passwort')}

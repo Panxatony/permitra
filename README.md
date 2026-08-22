@@ -111,7 +111,8 @@ Change approvers land on a focused approvals page after login: open rule reviews
 ## User management, email & sign-in security
 
 - **Admin area** (`/admin`, role admin): create/update/deactivate users, assign roles, trigger password resets. New users without a password receive an **activation link** (valid 72h) — by email if SMTP is configured; the link is also shown to the admin.
-- **Email delivery** (foundation for future notifications), disabled while `SMTP_HOST` is empty:
+- **Email notifications** (Issue #5): on rule submission (→ change approvers), approval/rejection (→ requester), implementation/decommission required (→ operations) and recertification (→ operations, from the daily expiry job). Recipients are derived from roles; each user can opt out on the account page (`notify_email`). Requires SMTP and a stored email address; silently does nothing otherwise.
+- **Email delivery**, disabled while `SMTP_HOST` is empty:
 
   ```bash
   SMTP_HOST=… SMTP_PORT=587 SMTP_USER=… SMTP_PASSWORD=… SMTP_FROM=…
