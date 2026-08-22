@@ -300,7 +300,7 @@ export default function Admin() {
                   <td className="small">{e.detail || (e.status || '')}</td>
                 </tr>
               ))}
-              {!audit.length && <tr><td colSpan={5} className="muted">{t('Keine Einträge.')}</td></tr>}
+              {!audit.length && <tr><td colSpan={6} className="muted">{t('Keine Einträge.')}</td></tr>}
             </tbody>
           </table>
         </div>

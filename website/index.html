@@ -72,6 +72,13 @@
   .bsi-ok { border-top: 4px solid var(--good); }
   .bsi-part { border-top: 4px solid #d9a63e; }
   .bsi-open { border-top: 4px solid #c65b5b; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.2rem; margin-top: 1.5rem; }
+  .shot { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(20,30,50,.06); display: flex; flex-direction: column; }
+  .shot.wide { grid-column: 1 / -1; }
+  .shot a { display: block; line-height: 0; }
+  .shot img { width: 100%; height: auto; display: block; border-bottom: 1px solid var(--border); }
+  .shot figcaption { padding: .7rem .95rem; font-size: .88rem; color: var(--muted); }
+  .shot figcaption strong { color: var(--ink); font-weight: 700; }
   footer { padding: 2.2rem 0 2.8rem; color: var(--muted); font-size: .88rem; }
   footer .wrap { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 </style>
@@ -273,11 +280,79 @@
           for an application – handy for audits and application reviews.</span>
         </p>
       </div>
+      <div class="card">
+        <h3><span class="lang-de">Revisionssichere Protokollierung &amp; SIEM</span><span class="lang-en">Tamper-evident logging &amp; SIEM</span></h3>
+        <p>
+          <span class="lang-de">Anmelde-, Admin- und Zugriffsereignisse werden append-only mit Quell-IP protokolliert
+          (Regeln werden soft-gelöscht, nie zerstört) und lassen sich per Syslog oder Webhook
+          an ein SIEM streamen.</span>
+          <span class="lang-en">Sign-in, admin and access events are logged append-only with source IP (rules are
+          soft-deleted, never destroyed) and can be streamed to a SIEM via syslog or webhook.</span>
+        </p>
+      </div>
+      <div class="card">
+        <h3><span class="lang-de">Automatisierung: API &amp; NetBox</span><span class="lang-en">Automation: API &amp; NetBox</span></h3>
+        <p>
+          <span class="lang-de">Read-only API-Tokens binden Ansible/Terraform an; Netz-Prefixe lassen sich
+          direkt aus NetBox importieren (Vorschau vor Übernahme). Authentisierung mit
+          2FA/Passkeys und Login-Sperre.</span>
+          <span class="lang-en">Read-only API tokens connect Ansible/Terraform; network prefixes import
+          directly from NetBox (preview before commit). Authentication with 2FA/passkeys
+          and login lockout.</span>
+        </p>
+      </div>
     </div>
   </div>
 </section>
 
-<section id="bsi">
+<section id="screenshots">
+  <div class="wrap">
+    <h2><span class="lang-de">Einblicke</span><span class="lang-en">Screenshots</span></h2>
+    <p class="lede">
+      <span class="lang-de">Aufnahmen aus der öffentlichen Demo mit Beispieldaten – von der Dashboard-Übersicht bis zur revisionssicheren Protokollierung.</span>
+      <span class="lang-en">Captures from the public demo with sample data – from the dashboard overview to tamper-evident audit logging.</span>
+    </p>
+    <div class="shots">
+      <figure class="shot wide">
+        <a href="img/dashboard.png" target="_blank" rel="noopener"><img src="img/dashboard.png" alt="Permitra Dashboard" loading="lazy"></a>
+        <figcaption>
+          <span class="lang-de"><strong>Dashboard:</strong> Regeln nach Status, Verteilung je Firewall-Cluster/ACI-Fabric und die letzten Änderungen auf einen Blick.</span>
+          <span class="lang-en"><strong>Dashboard:</strong> rules by status, distribution across firewall clusters/ACI fabrics and the latest changes at a glance.</span>
+        </figcaption>
+      </figure>
+      <figure class="shot">
+        <a href="img/rules.png" target="_blank" rel="noopener"><img src="img/rules.png" alt="Regelübersicht" loading="lazy"></a>
+        <figcaption>
+          <span class="lang-de"><strong>Regelwerk:</strong> eindeutige Rule-IDs, abgeleitete Quell-/Ziel-Zonen, Dienste, Umsetzungskomponenten und Freigabestatus – filterbar nach APP-ID und Risiko.</span>
+          <span class="lang-en"><strong>Rule set:</strong> unique rule IDs, derived source/destination zones, services, implementation components and approval status – filterable by APP-ID and risk.</span>
+        </figcaption>
+      </figure>
+      <figure class="shot">
+        <a href="img/zones.png" target="_blank" rel="noopener"><img src="img/zones.png" alt="Zonenplan" loading="lazy"></a>
+        <figcaption>
+          <span class="lang-de"><strong>Zonenplan (BSI):</strong> automatisch generierter Netzplan nach dem P-A-P-Modell mit Zonen-IDs, Schutzbedarf und ACI-Kennzeichnung.</span>
+          <span class="lang-en"><strong>Zone diagram (BSI):</strong> auto-generated network plan following the P-A-P model with zone IDs, protection levels and ACI markers.</span>
+        </figcaption>
+      </figure>
+      <figure class="shot wide">
+        <a href="img/analysis.png" target="_blank" rel="noopener"><img src="img/analysis.png" alt="Pfad-Analyse" loading="lazy"></a>
+        <figcaption>
+          <span class="lang-de"><strong>Analyse:</strong> Pfad-Prüfung Quelle → Ziel über alle beteiligten Firewall-Cluster und ACI-Fabrics, inklusive der passenden Regeln – mit Druck-/PDF-Ausgabe.</span>
+          <span class="lang-en"><strong>Analysis:</strong> path check source → destination across every firewall cluster and ACI fabric involved, including the matching rules – with print/PDF output.</span>
+        </figcaption>
+      </figure>
+      <figure class="shot wide">
+        <a href="img/admin-audit.png" target="_blank" rel="noopener"><img src="img/admin-audit.png" alt="Audit-Log" loading="lazy"></a>
+        <figcaption>
+          <span class="lang-de"><strong>Audit-Log:</strong> revisionssichere Protokollierung von Anmelde-, Admin- und Zugriffsereignissen mit Quell-IP – vollständig über die API an ein SIEM anbindbar.</span>
+          <span class="lang-en"><strong>Audit log:</strong> tamper-evident logging of sign-in, admin and access events with source IP – fully streamable to a SIEM via the API.</span>
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="bsi">
   <div class="wrap">
     <h2><span class="lang-de">BSI-Anforderungen: Was Permitra abdeckt – und was (noch) nicht</span><span class="lang-en">BSI requirements: what Permitra covers – and what it does not (yet)</span></h2>
     <p class="lede">
@@ -299,21 +374,24 @@
           <li><span class="lang-de">Auswirkungsanalyse: Matrix-Änderungen zeigen betroffene Regeln; Allow→Block setzt freigegebene Regeln in den Review</span><span class="lang-en">Impact analysis: matrix changes show affected rules; allow→block resets approved rules to review</span></li>
           <li><span class="lang-de">Temporäre Regeln: automatische Deaktivierung nach Ablauf, Rezertifizierung</span><span class="lang-en">Temporary rules: automatic deactivation on expiry, recertification</span></li>
           <li><span class="lang-de">Soll-Ist-Abgleich (Drift) gegen Gerätekonfigurationen</span><span class="lang-en">Drift comparison against device configurations</span></li>
+          <li><span class="lang-de">Erzwingbare Pflichtfelder je Regel: Begründung, Verantwortlicher und Gültigkeit (administrativ schaltbar)</span><span class="lang-en">Enforceable mandatory fields per rule: justification, owner and validity (toggled by admins)</span></li>
+          <li><span class="lang-de">Risikoanalyse: Warnungen bei any-to-any und riskanten Diensten, CIA-gewichtete Bewertung</span><span class="lang-en">Risk analysis: warnings for any-to-any and risky services, CIA-weighted scoring</span></li>
+          <li><span class="lang-de">Revisionssicheres Audit-Log: Anmelde-, Admin- und Zugriffsereignisse mit Quell-IP, append-only mit Soft-Delete, SIEM-Anbindung (Syslog/Webhook)</span><span class="lang-en">Tamper-evident audit log: sign-in, admin and access events with source IP, append-only with soft-delete, SIEM streaming (syslog/webhook)</span></li>
+          <li><span class="lang-de">E-Mail-Benachrichtigungen für Review, Freigabe und Rezertifizierung; Aktivierung/Reset</span><span class="lang-en">Email notifications for review, approval and recertification; activation/reset</span></li>
+          <li><span class="lang-de">Authentisierung: 2FA (TOTP) und Passkeys, Login-Sperre nach Fehlversuchen, rollenbasierte Rechte</span><span class="lang-en">Authentication: 2FA (TOTP) and passkeys, login lockout after failed attempts, role-based access</span></li>
+          <li><span class="lang-de">Automatisierung: read-only API-Tokens (Ansible/Terraform) und NetBox-Import der Netz-Prefixe</span><span class="lang-en">Automation: read-only API tokens (Ansible/Terraform) and NetBox import of network prefixes</span></li>
         </ul>
       </div>
       <div class="bsi-col bsi-part">
         <h3>🟡 <span class="lang-de">Teilweise</span><span class="lang-en">Partially</span></h3>
         <ul>
-          <li><span class="lang-de">Begründung, Verantwortlicher und Gültigkeit je Regel: Felder vorhanden, aber noch nicht als Pflicht erzwingbar</span><span class="lang-en">Justification, owner and validity per rule: fields exist but cannot yet be enforced as mandatory</span></li>
-          <li><span class="lang-de">Monitoring/Logging: lückenlose Historie und vollständige REST-API, aber noch kein dediziertes SIEM-Audit-Log</span><span class="lang-en">Monitoring/logging: complete history and full REST API, but no dedicated SIEM audit log yet</span></li>
-          <li><span class="lang-de">Benachrichtigungen: E-Mail-Fundament (Aktivierung/Reset) steht, Workflow-Notifications folgen</span><span class="lang-en">Notifications: email foundation (activation/reset) exists, workflow notifications to follow</span></li>
+          <li><span class="lang-de">Integritätssicherung des Audit-Logs: append-only und SIEM-Push vorhanden; kryptographische Hash-Kette und garantierte At-least-once-Zustellung geplant</span><span class="lang-en">Audit-log integrity: append-only and SIEM push in place; cryptographic hash chain and guaranteed at-least-once delivery planned</span></li>
           <li><span class="lang-de">Change-Management: generischer Webhook vorhanden, konkreter ServiceNow-Adapter offen</span><span class="lang-en">Change management: generic webhook available, concrete ServiceNow adapter open</span></li>
         </ul>
       </div>
       <div class="bsi-col bsi-open">
         <h3>🔴 <span class="lang-de">Nicht adressiert</span><span class="lang-en">Not covered</span></h3>
         <ul>
-          <li><span class="lang-de">Risikoanalyse/Risikomatrix und Warnungen bei riskanten Regeln (any-to-any, riskante Dienste)</span><span class="lang-en">Risk analysis/risk matrix and warnings for risky rules (any-to-any, risky services)</span></li>
           <li><span class="lang-de">Rollback auf frühere Regel-Versionen (Snapshots existieren bereits)</span><span class="lang-en">Rollback to earlier rule versions (snapshots already exist)</span></li>
           <li><span class="lang-de">AD/LDAP-Anmeldung (lokale Konten mit 2FA/Passkeys vorhanden)</span><span class="lang-en">AD/LDAP sign-in (local accounts with 2FA/passkeys available)</span></li>
           <li><span class="lang-de">Nutzungsbasierte Erkennung veralteter Regeln (Hit-Counter der Geräte) – erfordert Geräte-Adapter</span><span class="lang-en">Usage-based detection of stale rules (device hit counters) – requires device adapters</span></li>
@@ -333,9 +411,9 @@
     <h2><span class="lang-de">Live-Demo</span><span class="lang-en">Live demo</span></h2>
     <p class="lede">
       <span class="lang-de">Die öffentliche Demo läuft mit fiktiven Beispieldaten
-      (11 Zonen, rund 100 Regeln, 4 Sicherheitskomponenten) und wird jede Nacht zurückgesetzt.</span>
+      (12 Zonen, rund 100 Regeln, 6 Sicherheitskomponenten) und wird jede Nacht zurückgesetzt.</span>
       <span class="lang-en">The public demo runs on fictional sample data
-      (11 zones, around 100 rules, 4 security components) and is reset every night.</span>
+      (12 zones, around 100 rules, 6 security components) and is reset every night.</span>
     </p>
     <div class="demo-box">
       <strong><a href="https://demo.permitra.de">demo.permitra.de</a></strong>
@@ -403,7 +481,8 @@
     <span>© 2026 Permitra</span>
     <span>
       <a href="https://demo.permitra.de">Demo</a> ·
-      <a href="#features"><span class="lang-de">Funktionen</span><span class="lang-en">Features</span></a>
+      <a href="#features"><span class="lang-de">Funktionen</span><span class="lang-en">Features</span></a> ·
+      <a href="#screenshots"><span class="lang-de">Einblicke</span><span class="lang-en">Screenshots</span></a>
     </span>
   </div>
 </footer>
