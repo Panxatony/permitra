@@ -451,6 +451,12 @@ def seed(wipe: bool):
     db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
                        change_note="Demo-Regel angelegt", changed_by="demo-seed"))
 
+    # Minimalprinzip: Die Demo-Matrix ist vollständig gepflegt -> default-deny
+    # für ungepflegte Zonen-Beziehungen aktivieren (BSI-Empfehlung, Issue #13)
+    from app.settings import set_setting
+
+    set_setting(db, "zone_matrix_default", "deny")
+
     db.commit()
     rules_count = db.query(Rule).count()
     zone_count = db.query(Zone).count()

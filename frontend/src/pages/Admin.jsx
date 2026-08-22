@@ -15,8 +15,12 @@ export default function Admin() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [link, setLink] = useState('')
+  const [settings, setSettings] = useState({})
 
-  const load = () => api.users().then(setUsers).catch((e) => setError(e.message))
+  const load = () => {
+    api.users().then(setUsers).catch((e) => setError(e.message))
+    api.settings().then(setSettings).catch(() => setSettings({}))
+  }
   useEffect(() => { load() }, [])
 
   const act = async (fn, successMsg = '') => {
@@ -110,6 +114,22 @@ export default function Admin() {
           </tbody>
         </table>
       </div>
+
+      <section className="card" style={{ margin: '1rem 0' }}>
+        <h3>{t('Einstellungen')}</h3>
+        <label style={{ maxWidth: '640px' }}>
+          {t('Zonen-Matrix: Verhalten für ungepflegte Zonen-Beziehungen')}
+          <select value={settings.zone_matrix_default || 'permit'}
+            onChange={(e) => act(() => api.updateSettings({ zone_matrix_default: e.target.value })
+              .then((s) => { setSettings(s); return { detail: t('Einstellung gespeichert') } }))}>
+            <option value="permit">{t('default-permit – erlaubt mit Hinweis (Bestandsverhalten)')}</option>
+            <option value="deny">{t('default-deny – Minimalprinzip: Regeln erst nach expliziter Matrix-Freigabe (BSI-Empfehlung)')}</option>
+          </select>
+        </label>
+        <p className="muted small">
+          {t('Bei default-deny werden neue Regeln für Zonen-Beziehungen ohne Matrix-Eintrag abgelehnt, bis die Beziehung per Matrixantrag (zwei Freigaben) auf Allow gesetzt ist.')}
+        </p>
+      </section>
 
       <form onSubmit={create} className="object-form card">
         <h3>{t('Neuen Benutzer anlegen')}</h3>

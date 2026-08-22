@@ -359,6 +359,15 @@ class User(Base):
                                                     cascade="all, delete-orphan")
 
 
+class Setting(Base):
+    """Permitra-Einstellungen (Admin-Bereich), z.B. zone_matrix_default."""
+
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(256), default="")
+
+
 class AuthToken(Base):
     """Einmal-Token für Aktivierungs- und Passwort-Reset-Links (nur Hash gespeichert)."""
 

@@ -108,12 +108,19 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
     if src.upper() == dst.upper():
         return ZoneCheckResult(True, "intra", messages=["Intra-Zonen-Verkehr (gleiche Zone)"])
 
+    # Minimalprinzip (BSI): Verhalten für ungepflegte Beziehungen ist konfigurierbar
+    from .settings import get_setting
+
+    default_deny = get_setting(db, "zone_matrix_default") == "deny"
+
     zone_a, zone_b = find_zone(db, src), find_zone(db, dst)
     if not zone_a or not zone_b:
         missing = [n for n, z in ((src, zone_a), (dst, zone_b)) if not z]
         result = ZoneCheckResult(
-            True, "undefined",
-            messages=[f"Zone(n) nicht in der Zonenverwaltung gepflegt: {', '.join(missing)}"],
+            not default_deny, "undefined",
+            messages=[f"Zone(n) nicht in der Zonenverwaltung gepflegt: {', '.join(missing)}"
+                      + (" – default-deny: bitte Zone anlegen und Beziehung freigeben"
+                         if default_deny else "")],
         )
         _aci_cross_zone_hint(result, platforms)
         return result
@@ -121,8 +128,10 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
     policy = get_policy(db, zone_a, zone_b)
     if not policy:
         result = ZoneCheckResult(
-            True, "undefined",
-            messages=[f"Beziehung {zone_a.name} → {zone_b.name} ist in der Matrix nicht gepflegt"],
+            not default_deny, "undefined",
+            messages=[f"Beziehung {zone_a.name} → {zone_b.name} ist in der Matrix nicht gepflegt"
+                      + (" – Minimalprinzip (default-deny): bitte per Matrixantrag auf Allow "
+                         "setzen (zwei Freigaben)" if default_deny else "")],
         )
         _aci_cross_zone_hint(result, platforms)
         return result

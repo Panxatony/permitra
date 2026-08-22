@@ -187,6 +187,7 @@ export default function ZoneMatrix() {
   const [newZoneLevel, setNewZoneLevel] = useState('intern')
   const [netInputs, setNetInputs] = useState({})  // Zone -> CIDR-Eingabe
   const [saving, setSaving] = useState('')
+  const [settings, setSettings] = useState({})
   const [editMode, setEditMode] = useState(false)
   const [draft, setDraft] = useState({})        // "from|to" -> neue Policy
   const [draftZones, setDraftZones] = useState([])  // [{name, pap_level}]
@@ -231,6 +232,7 @@ export default function ZoneMatrix() {
       api.zoneOverview().then(setOverview).catch(() => setOverview(null))
       api.components().then((cs) => setFwComponents(cs.filter((c) => c.type !== 'aci'))).catch(() => {})
       api.matrixChanges().then(setChanges).catch(() => setChanges([]))
+      api.settings().then(setSettings).catch(() => setSettings({}))
       const data = await api.zoneMatrix()
       setZones(data.zones)
       const map = {}
@@ -467,6 +469,11 @@ export default function ZoneMatrix() {
         )}
       </div>
 
+      {settings.zone_matrix_default === 'deny' && (
+        <div className="infobox">
+          {t('Minimalprinzip aktiv (default-deny): Für Zonen-Beziehungen ohne Matrix-Eintrag werden Sicherheitsregeln abgelehnt, bis die Beziehung hier per Antrag auf Allow gesetzt ist.')}
+        </div>
+      )}
       <div className="matrix-legend">
         <span className="badge cell-allow">Allow</span> Regeln erlaubt (Durchsetzung per Firewall)
         <span className="badge cell-block">Block</span> keine Regeln zulässig
@@ -503,7 +510,10 @@ export default function ZoneMatrix() {
                       key={to.id}
                       className={`${cls} ${canEdit && editMode ? 'cell-edit' : ''}`
                         + `${pend ? ' cell-pending' : ''}${draftPolicy ? ' cell-draft' : ''}`}
-                      title={`${from.name} → ${to.name}: ${p ? cellLabel(p) : 'nicht gepflegt'}`
+                      title={`${from.name} → ${to.name}: ${p ? cellLabel(p)
+                        : settings.zone_matrix_default === 'deny'
+                          ? 'nicht gepflegt – default-deny: Regeln werden abgelehnt'
+                          : 'nicht gepflegt – erlaubt mit Hinweis'}`
                         + (draftPolicy ? ` – Entwurf: ${draftPolicy === 'allow_only' ? 'Allow' : 'Block'} (noch nicht beantragt)` : '')
                         + (pend ? ` – Antrag auf ${pend.new_policy === 'allow_only' ? 'Allow' : 'Block'} wartet auf Freigabe (${pend.requested_by})` : '')}
                       onClick={() => cycle(from.name, to.name)}

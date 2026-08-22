@@ -335,6 +335,14 @@ cd backend && ../.venv/bin/python -m pytest tests/
   die Ereignisse; ein ServiceNow-Adapter (Scripted REST API/MID-Server) erzeugt daraus das
   Change-Ticket und schreibt die Ticket-Nummer per `PUT /api/rules/{id}` in `change_id` zurück.
 
+## Einstellungen (Admin-Bereich)
+
+- **Minimalprinzip / default-deny** (`zone_matrix_default`): Verhalten für Zonen-Beziehungen
+  ohne Matrix-Eintrag. `permit` = erlaubt mit Hinweis (Bestandsverhalten), `deny` = Regeln
+  werden abgelehnt (422), bis die Beziehung per Matrixantrag (zwei Freigaben) explizit auf
+  Allow gesetzt ist — BSI-Empfehlung, im Demo-Datensatz aktiv. Pflege im Admin-Bereich,
+  API `GET/PUT /api/settings`; die Matrix kennzeichnet ungepflegte Zellen entsprechend.
+
 ## Benutzerverwaltung, E-Mail & Anmeldesicherheit
 
 - **Admin-Bereich** (`/admin`, Rolle admin): Benutzer anlegen/ändern/deaktivieren, Rollen

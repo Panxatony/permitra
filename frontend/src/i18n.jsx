@@ -291,6 +291,19 @@ const EN = {
   'Passwort wiederholen': 'Repeat password',
   'Passwort speichern': 'Save password',
   'Zur Anmeldung': 'Go to login',
+  // Einstellungen (default-deny)
+  'Einstellungen': 'Settings',
+  'Einstellung gespeichert': 'Setting saved',
+  'Zonen-Matrix: Verhalten für ungepflegte Zonen-Beziehungen':
+    'Zone matrix: behaviour for unmaintained zone relationships',
+  'default-permit – erlaubt mit Hinweis (Bestandsverhalten)':
+    'default-permit – allowed with a hint (legacy behaviour)',
+  'default-deny – Minimalprinzip: Regeln erst nach expliziter Matrix-Freigabe (BSI-Empfehlung)':
+    'default-deny – least privilege: rules only after explicit matrix approval (BSI recommendation)',
+  'Bei default-deny werden neue Regeln für Zonen-Beziehungen ohne Matrix-Eintrag abgelehnt, bis die Beziehung per Matrixantrag (zwei Freigaben) auf Allow gesetzt ist.':
+    'With default-deny, new rules for zone relationships without a matrix entry are rejected until the relationship is set to Allow via a matrix request (two approvals).',
+  'Minimalprinzip aktiv (default-deny): Für Zonen-Beziehungen ohne Matrix-Eintrag werden Sicherheitsregeln abgelehnt, bis die Beziehung hier per Antrag auf Allow gesetzt ist.':
+    'Least privilege active (default-deny): security rules for zone relationships without a matrix entry are rejected until the relationship is set to Allow via a request here.',
   'Unbekanntes Netz:': 'Unknown network:',
   'ist keinem bekannten Netzwerk zugeordnet. Bitte das Netzwerk zuerst auf der Seite':
     'does not belong to any known network. Please first add the network on the',
