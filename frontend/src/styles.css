@@ -468,3 +468,7 @@ table.matrix .row-head { background: #f7f9fc; position: sticky; left: 0; z-index
 .zone-reach.has-hover .zone-link { opacity: .15; }
 .zone-reach .zone-link.link-active { opacity: 1; stroke: var(--primary); stroke-width: 2.8; }
 .zone-reach .zone-box, .zone-reach .topology-svg g { cursor: default; }
+/* Risiko-Badges (Issue #10) */
+.risk-niedrig { background: #e4e8ee; color: #46505c; }
+.risk-mittel { background: #fff0d2; color: var(--amber); }
+.risk-hoch { background: #fadddd; color: var(--red); }

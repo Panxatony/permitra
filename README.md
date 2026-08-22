@@ -105,6 +105,8 @@ Change approvers land on a focused approvals page after login: open rule reviews
 
 ## Settings (admin area)
 
+- **Risk hints** (Issue #10): rules are checked for risky patterns (source and destination both `any`, very broad networks ≤/8, risky services like RDP/Telnet/SMB/DB-direct — weighted higher from exposed source zones, `any` service across zones). Severity is raised by the target zone's protection level (a simple risk matrix). Non-blocking; shown on the rule detail page and filterable in the rule list (`risk=flagged`). API: `GET /api/rules/{id}/risk`.
+- **Audit log for SIEM** (Issue #11): unified, machine-readable change log (rule versions, zone/matrix/network requests) at `GET /api/audit-log` (admin only; `since`/`type`/`limit`), plus optional per-event push via syslog (`AUDIT_SYSLOG_HOST`) or webhook (`AUDIT_WEBHOOK_URL`). A compact viewer is on the admin page.
 - **Least privilege / default-deny** (`zone_matrix_default`): behaviour for zone relationships without a matrix entry. `permit` = allowed with a hint (legacy behaviour, default), `deny` = rules are rejected (422) until the relationship is explicitly set to Allow via a matrix request with two approvals — BSI recommendation, active in the demo dataset. API: `GET/PUT /api/settings`.
 - **Mandatory fields for rules** (`require_justification`, `require_requestor`, `require_valid_until`): justification, requestor and expiry date are **mandatory by default** (BSI documentation duties) — the admin area offers a deactivation option per field. Enforced server-side (422 with field list), marked with `*` in the rule form.
 

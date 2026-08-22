@@ -4,7 +4,7 @@ import { api } from '../api'
 import { AddressList, ComponentBadges, ServiceList, STATUS_LABELS, StatusBadge } from '../components/shared'
 import { useLang } from '../i18n'
 
-const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: '', status: '', component: '', impl: '' }
+const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: '', status: '', component: '', impl: '', risk: '' }
 
 export default function RuleList() {
   const PAGE_SIZE = 50
@@ -18,6 +18,7 @@ export default function RuleList() {
     ...EMPTY_FILTERS,
     status: searchParams.get('status') || '',
     impl: searchParams.get('impl') || '',
+    risk: searchParams.get('risk') || '',
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -48,6 +49,7 @@ export default function RuleList() {
       ...EMPTY_FILTERS,
       status: searchParams.get('status') || '',
       impl: searchParams.get('impl') || '',
+      risk: searchParams.get('risk') || '',
     }
     setFilters(next)
     setPage(0)
@@ -93,6 +95,10 @@ export default function RuleList() {
         <select value={filters.impl} onChange={set('impl')}>
           <option value="">{t('Umsetzung')}</option>
           <option value="pending">{t('Umzusetzen (offen / zu ändern)')}</option>
+        </select>
+        <select value={filters.risk} onChange={set('risk')}>
+          <option value="">{t('Risiko')}</option>
+          <option value="flagged">{t('Mit Risiko-Hinweis')}</option>
         </select>
         <select value={filters.component} onChange={set('component')}>
           <option value="">{t('Komponente')}</option>

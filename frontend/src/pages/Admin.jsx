@@ -16,10 +16,12 @@ export default function Admin() {
   const [notice, setNotice] = useState('')
   const [link, setLink] = useState('')
   const [settings, setSettings] = useState({})
+  const [audit, setAudit] = useState([])
 
   const load = () => {
     api.users().then(setUsers).catch((e) => setError(e.message))
     api.settings().then(setSettings).catch(() => setSettings({}))
+    api.auditLog({ limit: 50 }).then(setAudit).catch(() => setAudit([]))
   }
   useEffect(() => { load() }, [])
 
@@ -173,6 +175,29 @@ export default function Admin() {
           <button className="btn btn-primary" type="submit">{t('Benutzer anlegen')}</button>
         </div>
       </form>
+
+      <section className="card" style={{ marginTop: '1rem' }}>
+        <h3>{t('Audit-Log')} <span className="muted small">{t('(letzte 50 Ereignisse; vollständig über die API /api/audit-log für SIEM)')}</span></h3>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>{t('Zeitpunkt')}</th><th>{t('Ereignis')}</th><th>{t('Objekt')}</th><th>{t('Von')}</th><th>{t('Details')}</th></tr>
+            </thead>
+            <tbody>
+              {audit.map((e, i) => (
+                <tr key={i}>
+                  <td className="small">{e.timestamp ? new Date(e.timestamp).toLocaleString('de-DE') : '–'}</td>
+                  <td><code>{e.event}</code></td>
+                  <td>{e.object}</td>
+                  <td>{e.actor || '–'}</td>
+                  <td className="small">{e.detail || (e.status || '')}</td>
+                </tr>
+              ))}
+              {!audit.length && <tr><td colSpan={5} className="muted">{t('Keine Einträge.')}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   )
 }

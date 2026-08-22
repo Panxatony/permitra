@@ -210,6 +210,9 @@ const EN = {
   'Zuordnung beantragen': 'Request mapping',
   'Umzusetzen': 'To implement',
   'Umsetzung': 'Implementation',
+  'Risiko': 'Risk',
+  'Mit Risiko-Hinweis': 'With risk warning',
+  'Schutzbedarf Ziel': 'Target protection level',
   'Umzusetzen (offen / zu ändern)': 'To implement (open / to change)',
   'Weitere Plattformen via Capirca/Aerleon:': 'More platforms via Capirca/Aerleon:',
   // Freigaben-Seite (Change Approver)
@@ -241,6 +244,13 @@ const EN = {
   'neu': 'new',
   // Administration & Konto
   'Administration': 'Administration',
+  'Audit-Log': 'Audit log',
+  '(letzte 50 Ereignisse; vollständig über die API /api/audit-log für SIEM)':
+    '(last 50 events; full log via the /api/audit-log API for SIEM)',
+  'Ereignis': 'Event',
+  'Objekt': 'Object',
+  'Details': 'Details',
+  'Keine Einträge.': 'No entries.',
   'Benutzerverwaltung – weitere Permitra-Einstellungen folgen hier.':
     'User management – more Permitra settings will follow here.',
   'Benutzer löschen?': 'Delete user?',

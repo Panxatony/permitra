@@ -355,6 +355,7 @@ class AddressMapOut(AddressMapCreate):
 class ResolveRequest(BaseModel):
     source: list[AddressEntry] = []
     destination: list[AddressEntry] = []
+    services: list[Service] = []   # für die Live-Risikobewertung
     source_zone: str = ""
     destination_zone: str = ""
     vrf: str = ""

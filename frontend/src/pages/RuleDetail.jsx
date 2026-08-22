@@ -14,6 +14,7 @@ export default function RuleDetail() {
   const [rule, setRule] = useState(null)
   const [impl, setImpl] = useState(null)
   const [conflicts, setConflicts] = useState([])
+  const [risk, setRisk] = useState(null)
   const [comment, setComment] = useState('')
   const [reviewComment, setReviewComment] = useState('')
   const [error, setError] = useState('')
@@ -22,6 +23,7 @@ export default function RuleDetail() {
     try {
       setRule(await api.rule(id))
       api.conflicts(id).then(setConflicts).catch(() => setConflicts([]))
+      api.risk(id).then(setRisk).catch(() => setRisk(null))
       api.implementation(id).then(setImpl).catch(() => setImpl(null))
     } catch (err) {
       setError(err.message)
@@ -63,6 +65,17 @@ export default function RuleDetail() {
         <StatusBadge status={rule.status} />
       </div>
 
+      {risk && risk.level !== 'none' && (
+        <div className={risk.level === 'hoch' ? 'error' : 'warnbox'}>
+          <strong>⚠️ {t('Risiko')}: {risk.level.toUpperCase()}</strong>
+          {' '}({t('Schutzbedarf Ziel')}: {risk.schutzbedarf_ziel})
+          <ul>
+            {risk.findings.map((f, i) => (
+              <li key={i}><span className={`badge risk-${f.severity}`}>{f.severity}</span> {f.detail}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {conflicts.length > 0 && (
         <div className="warnbox">
           ⚠️ {conflicts.length} mögliche Konflikte:

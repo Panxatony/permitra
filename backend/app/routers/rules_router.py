@@ -215,6 +215,7 @@ def list_rules(
     protocol: str | None = None,
     rule_status: RuleStatus | None = Query(None, alias="status"),
     impl: str | None = Query(None, description="'pending' = freigegebene Regeln mit offener Umsetzung"),
+    risk: str | None = Query(None, description="'flagged' = nur Regeln mit Risiko-Hinweis"),
     application: str | None = None,
     platform: str | None = None,
     component: str | None = Query(None, description="Name (Teilstring) einer Komponente"),
@@ -278,6 +279,9 @@ def list_rules(
         ]
     if impl == "pending":
         rules = [r for r in rules if impl_pending(r)]
+    if risk == "flagged":
+        from ..risk import assess_rule
+        rules = [r for r in rules if assess_rule(db, r)["level"] != "none"]
     return RuleListOut(total=len(rules), items=rules[offset:offset + limit])
 
 
@@ -832,13 +836,16 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     db.commit()
     db.refresh(rule)
     # Optionaler Change-Management-Webhook (z.B. ServiceNow) – fire-and-forget
-    from .. import change_management, notifications
+    from .. import audit, change_management, notifications
 
     change_management.notify(
         f"rule.{new_status.value}",
         {**change_management.rule_payload(rule),
          "decided_by": user.username, "comment": decision.comment},
     )
+    audit.emit({"type": "rule", "event": f"rule.{new_status.value}", "object": rule.rule_id,
+                "actor": user.username, "detail": decision.comment,
+                "timestamp": rule.updated_at.isoformat() if rule.updated_at else None})
     if new_status in (RuleStatus.approved, RuleStatus.rejected):
         notifications.rule_decided(db, rule, new_status == RuleStatus.approved,
                                    user.username, decision.comment)
@@ -1033,3 +1040,32 @@ def conflicts(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get
             }
         )
     return warnings
+
+
+@router.get("/{rule_id}/risk")
+def rule_risk(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Risikoanalyse einer Regel (any-to-any, breite Netze, riskante Dienste;
+    Schweregrad gewichtet nach Schutzbedarf der Ziel-Zone)."""
+    from ..risk import assess_rule
+
+    return assess_rule(db, get_rule_or_404(db, rule_id))
+
+
+@router.post("/risk/assess")
+def risk_assess(payload: ResolveRequest, db: Session = Depends(get_db),
+                _: User = Depends(get_current_user)):
+    """Live-Risikobewertung fürs Regelformular (ohne gespeicherte Regel)."""
+    from types import SimpleNamespace
+
+    from ..risk import assess_rule
+
+    vrf_obj = get_vrf(db, payload.vrf or None)
+    draft = SimpleNamespace(
+        source=[e.model_dump() for e in payload.source],
+        destination=[e.model_dump() for e in payload.destination],
+        services=[s.model_dump() for s in payload.services] if getattr(payload, "services", None) else [],
+        source_zone=payload.source_zone or "",
+        destination_zone=payload.destination_zone or "",
+        vrf_id=vrf_obj.id,
+    )
+    return assess_rule(db, draft)
