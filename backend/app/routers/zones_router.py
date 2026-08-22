@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_roles
 from ..database import get_db
 from ..models import (
+    Comment,
     Role,
     ZoneNetwork,
     Rule,
@@ -488,19 +489,50 @@ def request_policy_change(
     }], payload.note)
 
 
+def _affected_rules(db: Session, from_zone: str, to_zone: str, statuses=None):
+    """Aktive Regeln der Zonen-Beziehung from -> to (für die Auswirkungsanalyse
+    von Matrix-Änderungen auf Allow -> Block)."""
+    statuses = statuses or (RuleStatus.approved, RuleStatus.in_review, RuleStatus.draft)
+    return (
+        db.query(Rule)
+        .filter(Rule.source_zone.ilike(from_zone), Rule.destination_zone.ilike(to_zone),
+                Rule.status.in_(statuses))
+        .order_by(Rule.rule_id)
+        .all()
+    )
+
+
 @router.get("/matrix/changes")
 def list_changes(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    """Änderungsanträge und Historie der Kommunikationsmatrix (neueste zuerst)."""
+    """Änderungsanträge und Historie der Kommunikationsmatrix (neueste zuerst).
+
+    Offene Anträge auf Block enthalten die Auswirkungsanalyse: welche aktiven
+    Regeln der Beziehung wären betroffen (freigegebene würden bei Freigabe in
+    den Review zurückgesetzt)."""
     changes = (
         db.query(ZonePolicyChange)
         .order_by(ZonePolicyChange.status != "pending", ZonePolicyChange.requested_at.desc())
         .limit(200)
         .all()
     )
+    def impact(c):
+        """Auswirkungsanalyse nur für offene Block-Anträge (Allow -> Deny)."""
+        if c.status != "pending" or c.change_type != "policy" or c.new_policy != "block_all":
+            return {}
+        rules = _affected_rules(db, c.from_zone, c.to_zone)
+        return {
+            "affected_count": len(rules),
+            "affected_rules": [
+                {"rule_id": r.rule_id, "name": r.name, "status": r.status.value}
+                for r in rules[:50]
+            ],
+        }
+
     return [
         {
             "id": c.id, "batch_id": c.batch_id, "change_type": c.change_type,
             "from_zone": c.from_zone, "to_zone": c.to_zone,
+            **impact(c),
             "old_policy": c.old_policy, "new_policy": c.new_policy,
             "old_temporary": c.old_temporary, "new_temporary": c.new_temporary,
             "status": c.status, "requested_by": c.requested_by,
@@ -554,6 +586,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
             status.HTTP_403_FORBIDDEN,
             "Die zweite Freigabe muss durch einen anderen Change Approver erfolgen",
         )
+    reviews_reset = []
     if approve:
         # Erst Zonen anlegen, dann Matrix-Zellen anwenden
         for item in batch:
@@ -603,6 +636,20 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                 db.add(policy)
             policy.policy = item.new_policy
             policy.temporary = item.new_temporary
+            # Allow -> Block macht bestehende freigegebene Regeln der Beziehung
+            # ungültig: zurück in den Review (mit Versionseintrag und Kommentar)
+            if item.new_policy == "block_all":
+                from .rules_router import add_version
+
+                note = (f"Matrix-Änderung {zone_a.name} → {zone_b.name} auf Block "
+                        f"(Antrag {change.batch_id[:8]}): Regel muss neu bewertet werden")
+                for rule in _affected_rules(db, zone_a.name, zone_b.name,
+                                            statuses=(RuleStatus.approved,)):
+                    rule.status = RuleStatus.in_review
+                    rule.version += 1
+                    add_version(db, rule, user, note)
+                    db.add(Comment(rule_pk=rule.id, author=user.username, text=note))
+                    reviews_reset.append(rule.rule_id)
     for item in batch:
         item.status = "approved" if approve else "rejected"
         item.decided_by = user.username
@@ -624,9 +671,16 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                  "to_zone": c.to_zone, "new_policy": c.new_policy, "extra": c.extra or {}}
                 for c in batch
             ],
+            "reviews_reset": reviews_reset,
         },
     )
-    return {"status": batch[0].status, "batch_id": change.batch_id, "items": len(batch)}
+    result = {"status": batch[0].status, "batch_id": change.batch_id, "items": len(batch)}
+    if reviews_reset:
+        result["reviews_reset"] = reviews_reset
+        result["detail"] = (f"{len(reviews_reset)} freigegebene Regel(n) der Beziehung wurden "
+                            f"in den Review zurückgesetzt: {', '.join(reviews_reset[:10])}"
+                            + (" …" if len(reviews_reset) > 10 else ""))
+    return result
 
 
 @router.post("/matrix/changes/{change_id}/approve")

@@ -664,6 +664,12 @@ export default function ZoneMatrix() {
                         {c.change_type === 'zone_create' && <span className="badge platform-unknown comp-badge">Zone</span>}
                         {c.change_type.startsWith('net_') && <span className="badge platform-unknown comp-badge">Netz</span>}
                         {itemLabel(c)}
+                        {c.affected_count > 0 && (
+                          <span className="badge status-rejected comp-badge"
+                            title={`Betroffene Regeln: ${c.affected_rules.map((r) => r.rule_id).join(', ')}`}>
+                            ⚠ {c.affected_count} Regel(n) betroffen
+                          </span>
+                        )}
                       </div>
                     ))}
                   </td>

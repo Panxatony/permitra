@@ -144,7 +144,26 @@ export default function Approvals() {
                   · {t('Freigaben')}: {b.first_approved_by ? `1/2 (${b.first_approved_by})` : '0/2'}
                 </span>
                 <ul style={{ margin: '.4rem 0 0 1.2rem' }}>
-                  {b.items.map((c) => <li key={c.id}>{itemLabel(c)}</li>)}
+                  {b.items.map((c) => (
+                    <li key={c.id}>
+                      {itemLabel(c)}
+                      {c.affected_count > 0 && (
+                        <div className="warnbox" style={{ margin: '.35rem 0 .2rem', padding: '.4rem .6rem' }}>
+                          ⚠ {t('Betrifft')} <strong>{c.affected_count}</strong> {t('aktive Regel(n) dieser Beziehung')}{' – '}
+                          {t('freigegebene werden bei Freigabe in den Review zurückgesetzt:')}{' '}
+                          {c.affected_rules.map((r, i) => (
+                            <span key={r.rule_id}>
+                              {i > 0 && ', '}
+                              <Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link>
+                              <span className="muted small"> ({t(
+                                { approved: 'Freigegeben', in_review: 'Im Review', draft: 'Entwurf' }[r.status] || r.status)})</span>
+                            </span>
+                          ))}
+                          {c.affected_count > c.affected_rules.length && ' …'}
+                        </div>
+                      )}
+                    </li>
+                  ))}
                 </ul>
               </div>
               <div className="row-actions" style={{ alignSelf: 'center' }}>

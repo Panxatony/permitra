@@ -217,6 +217,10 @@ const EN = {
   'Offene Zonen- & Netzwerk-Anträge': 'Open zone & network requests',
   'Keine offenen Anträge.': 'No open requests.',
   'Antrag von': 'Request by',
+  'Betrifft': 'Affects',
+  'aktive Regel(n) dieser Beziehung': 'active rule(s) of this relationship',
+  'freigegebene werden bei Freigabe in den Review zurückgesetzt:':
+    'approved ones will be reset to review when this is approved:',
   'Du hast bereits freigegeben – die zweite Freigabe muss ein anderer Change Approver erteilen.':
     'You have already approved – the second approval must come from a different change approver.',
   'Details und Historie auf der Seite': 'Details and history on the page',
