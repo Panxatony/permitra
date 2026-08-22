@@ -370,6 +370,7 @@ table.matrix .row-head { background: #f7f9fc; position: sticky; left: 0; z-index
 /* Komponenten */
 .component-form { max-width: 100%; margin-top: 1rem; }
 .row-actions { white-space: nowrap; }
+.approval-box { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; padding: .9rem 1rem; }
 .row-actions .btn { padding: .2rem .5rem; font-size: .8rem; }
 
 /* Adress-Suche */

@@ -671,6 +671,12 @@ def submit_for_review(
     add_version(db, rule, user, "Zum Review eingereicht")
     db.commit()
     db.refresh(rule)
+    from .. import change_management
+
+    change_management.notify(
+        "rule.submitted",
+        {**change_management.rule_payload(rule), "submitted_by": user.username},
+    )
     return rule
 
 
@@ -693,6 +699,14 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
         db.add(Comment(rule_pk=rule.id, author=user.username, text=decision.comment))
     db.commit()
     db.refresh(rule)
+    # Optionaler Change-Management-Webhook (z.B. ServiceNow) – fire-and-forget
+    from .. import change_management
+
+    change_management.notify(
+        f"rule.{new_status.value}",
+        {**change_management.rule_payload(rule),
+         "decided_by": user.username, "comment": decision.comment},
+    )
     return rule
 
 

@@ -10,6 +10,7 @@ import ObjectCatalog from './pages/ObjectCatalog'
 import Recertification from './pages/Recertification'
 import ExportPage from './pages/ExportPage'
 import Login from './pages/Login'
+import Approvals from './pages/Approvals'
 import RuleDetail from './pages/RuleDetail'
 import RuleForm from './pages/RuleForm'
 import RuleList from './pages/RuleList'
@@ -63,17 +64,30 @@ function Layout({ children }) {
           </div>
         </div>
         <nav>
-          <Link to="/">{t('Dashboard')}</Link>
-          <Link to="/rules">{t('Regeln')}</Link>
-          {(user.role === 'architect' || user.role === 'admin') && <Link to="/rules/new">{t('Neue Regel')}</Link>}
-          <Link to="/search">{t('Analyse')}</Link>
-          <Link to="/recertification">{t('Rezertifizierung')}</Link>
-          <Link to="/zones">{t('Sicherheitszonen')}</Link>
-          <Link to="/networks">{t('Netzwerke')}</Link>
-          <Link to="/components">{t('Komponenten')}</Link>
-          <Link to="/gateways">{t('ACI Gateways')}</Link>
-          <Link to="/objects">{t('Objekte')}</Link>
-          <Link to="/export">{t('Export')}</Link>
+          {user.role === 'change_approver' ? (
+            <>
+              {/* Verschlankte Ansicht: Approver sehen nur, was sie für Entscheidungen brauchen */}
+              <Link to="/approvals">{t('Freigaben')}</Link>
+              <Link to="/rules">{t('Regeln')}</Link>
+              <Link to="/zones">{t('Sicherheitszonen')}</Link>
+              <Link to="/networks">{t('Netzwerke')}</Link>
+            </>
+          ) : (
+            <>
+              <Link to="/">{t('Dashboard')}</Link>
+              {user.role === 'admin' && <Link to="/approvals">{t('Freigaben')}</Link>}
+              <Link to="/rules">{t('Regeln')}</Link>
+              {(user.role === 'architect' || user.role === 'admin') && <Link to="/rules/new">{t('Neue Regel')}</Link>}
+              <Link to="/search">{t('Analyse')}</Link>
+              <Link to="/recertification">{t('Rezertifizierung')}</Link>
+              <Link to="/zones">{t('Sicherheitszonen')}</Link>
+              <Link to="/networks">{t('Netzwerke')}</Link>
+              <Link to="/components">{t('Komponenten')}</Link>
+              <Link to="/gateways">{t('ACI Gateways')}</Link>
+              <Link to="/objects">{t('Objekte')}</Link>
+              <Link to="/export">{t('Export')}</Link>
+            </>
+          )}
         </nav>
       </header>
       <main>{children}</main>
@@ -81,11 +95,19 @@ function Layout({ children }) {
   )
 }
 
+function Home() {
+  // Change Approver starten fokussiert auf der Freigaben-Seite
+  const user = getUser()
+  if (user?.role === 'change_approver') return <Navigate to="/approvals" replace />
+  return <Dashboard />
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/" element={<Layout><Dashboard /></Layout>} />
+      <Route path="/" element={<Layout><Home /></Layout>} />
+      <Route path="/approvals" element={<Layout><Approvals /></Layout>} />
       <Route path="/rules" element={<Layout><RuleList /></Layout>} />
       <Route path="/recertification" element={<Layout><Recertification /></Layout>} />
       <Route path="/rules/new" element={<Layout><RuleForm /></Layout>} />

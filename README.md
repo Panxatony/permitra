@@ -331,8 +331,25 @@ cd backend && ../.venv/bin/python -m pytest tests/
 
 - **LDAP/AD**: `auth.py` kapselt die Anmeldung an einer Stelle – dort kann statt der lokalen
   Passwortprüfung ein LDAP-Bind erfolgen (z.B. `ldap3`), Rollen über AD-Gruppen gemappt werden.
-- **ServiceNow-Change-Tickets**: Beim Statuswechsel `approved` einen Hook aufrufen, der per
-  ServiceNow-REST-API ein Change-Ticket erzeugt und die Ticket-Nummer in `change_id` schreibt.
+- **ServiceNow-Change-Tickets**: Der generische Change-Management-Webhook (siehe unten) liefert
+  die Ereignisse; ein ServiceNow-Adapter (Scripted REST API/MID-Server) erzeugt daraus das
+  Change-Ticket und schreibt die Ticket-Nummer per `PUT /api/rules/{id}` in `change_id` zurück.
+
+## Change-Management-Integration (optional)
+
+Permitra sendet bei Freigabe-Ereignissen einen JSON-Webhook (fire-and-forget, blockiert nie):
+
+```bash
+CHANGE_WEBHOOK_URL=https://instanz.service-now.com/api/x_permitra/change   # leer = aus
+CHANGE_WEBHOOK_TOKEN=…   # optional, wird als "Authorization: Bearer" gesendet
+```
+
+Ereignisse: `rule.submitted`, `rule.approved`, `rule.rejected`,
+`zone_change.approved`, `zone_change.rejected`. Payload:
+`{"event": …, "source": "permitra", "timestamp": …, "data": {…}}` –
+bei Regeln u.a. `rule_id`, Zonen, Adressen, Dienste, Komponenten, `change_id`,
+bei Sammelanträgen `batch_id` und die Einzeländerungen. Implementierung:
+`backend/app/change_management.py`.
 - **CMDB/Ticket-Integration**: Die komplette Funktionalität ist als REST-API verfügbar (`/docs`).
 
 ## Lizenz

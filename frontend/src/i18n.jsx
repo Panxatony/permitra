@@ -206,6 +206,28 @@ const EN = {
   'Umsetzung': 'Implementation',
   'Umzusetzen (offen / zu ändern)': 'To implement (open / to change)',
   'Weitere Plattformen via Capirca/Aerleon:': 'More platforms via Capirca/Aerleon:',
+  // Freigaben-Seite (Change Approver)
+  'Alles, was auf deine Entscheidung wartet – Regel-Reviews (eine Freigabe) und Zonen-/Netzwerk-Anträge (zwei Freigaben durch verschiedene Approver).':
+    'Everything awaiting your decision – rule reviews (one approval) and zone/network requests (two approvals by different approvers).',
+  'Offene Regel-Reviews': 'Open rule reviews',
+  'Keine Regeln im Review – alles erledigt.': 'No rules in review – all done.',
+  'Beantragt von': 'Requested by',
+  'Freigeben': 'Approve',
+  'Ablehnen': 'Reject',
+  'Offene Zonen- & Netzwerk-Anträge': 'Open zone & network requests',
+  'Keine offenen Anträge.': 'No open requests.',
+  'Antrag von': 'Request by',
+  'Du hast bereits freigegeben – die zweite Freigabe muss ein anderer Change Approver erteilen.':
+    'You have already approved – the second approval must come from a different change approver.',
+  'Details und Historie auf der Seite': 'Details and history on the page',
+  'Begründung für die Ablehnung:': 'Reason for rejection:',
+  'freigegeben': 'approved',
+  'abgelehnt': 'rejected',
+  'Freigabe erteilt': 'Approval granted',
+  'Antrag abgelehnt': 'Request rejected',
+  'Neue Zone': 'New zone',
+  'Netz': 'Network',
+  'neu': 'new',
   'Unbekanntes Netz:': 'Unknown network:',
   'ist keinem bekannten Netzwerk zugeordnet. Bitte das Netzwerk zuerst auf der Seite':
     'does not belong to any known network. Please first add the network on the',

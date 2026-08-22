@@ -580,6 +580,22 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
         if comment:
             item.comment = (item.comment + "\n" if item.comment else "") + comment
     db.commit()
+    # Optionaler Change-Management-Webhook (z.B. ServiceNow)
+    from .. import change_management
+
+    change_management.notify(
+        f"zone_change.{batch[0].status}",
+        {
+            "batch_id": change.batch_id,
+            "decided_by": user.username,
+            "requested_by": batch[0].requested_by,
+            "items": [
+                {"change_type": c.change_type, "from_zone": c.from_zone,
+                 "to_zone": c.to_zone, "new_policy": c.new_policy, "extra": c.extra or {}}
+                for c in batch
+            ],
+        },
+    )
     return {"status": batch[0].status, "batch_id": change.batch_id, "items": len(batch)}
 
 
