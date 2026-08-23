@@ -36,6 +36,102 @@ function BarList({ rows, max }) {
   )
 }
 
+/* The coverage figure, with what it does not cover.
+
+   The percentage is never rendered on its own: an aggregate improves by looking
+   away, so how much of the estate it actually measured sits directly under it,
+   and the components it could not measure are listed rather than dropped. A
+   figure computed from a configuration nobody has re-uploaded in months says so
+   too. */
+function Coverage({ c, t, lang }) {
+  const nothing = c.measured === 0
+  const trend = c.unjustified_change
+
+  return (
+    <section className="card wide coverage-card">
+      <h2>{t('Backed by an approved rule')}</h2>
+      <div className="coverage-head">
+        <div className="coverage-figure">
+          <div className={`coverage-percent ${nothing ? 'muted' : ''}`}>
+            {nothing ? '–' : `${c.percent} %`}
+          </div>
+          <div className="coverage-scope">
+            {nothing
+              ? t('No device configuration has been uploaded yet')
+              : `${t('measured on')} ${c.measured}/${c.components_total} ${t('components')}`}
+          </div>
+        </div>
+
+        {!nothing && (
+          <div className="coverage-facts">
+            <p>
+              <strong>{c.unjustified}</strong>{' '}
+              {c.unjustified === 1
+                ? t('rule on the devices is backed by no approved security rule')
+                : t('rules on the devices are backed by no approved security rule')}
+              {' '}({c.justified}/{c.total} {t('backed')}).
+            </p>
+            {trend !== null && trend !== 0 && (
+              <p className={trend > 0 ? 'coverage-worse' : 'coverage-better'}>
+                {trend > 0 ? `+${trend}` : trend}{' '}
+                {t('since the previous measurement')}
+                <span className="muted small"> ({c.compared}/{c.measured} {t('comparable')})</span>
+              </p>
+            )}
+            {trend === null && (
+              <p className="muted small">
+                {t('Measured once so far – a trend needs a second upload')}
+              </p>
+            )}
+            {c.stale && (
+              <p className="coverage-worse">
+                {t('Oldest configuration is')} {c.oldest_measurement_age_days} {t('days old')}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {c.not_measured.length > 0 && (
+        <p className="coverage-gap">
+          <strong>{t('Not measured')}:</strong>{' '}
+          {c.not_measured.map((n) => `${n.component} (${t(n.reason)})`).join(', ')} –{' '}
+          <Link to="/components">{t('upload a configuration')}</Link>
+        </p>
+      )}
+
+      {c.per_component.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>{t('Component')}</th><th>{t('Backed')}</th><th>{t('Unbacked')}</th>
+                <th>{t('Share')}</th><th>{t('Change')}</th><th>{t('Measured')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {c.per_component.map((p) => (
+                <tr key={p.component_id}>
+                  <td><Link to="/components">{p.component}</Link></td>
+                  <td>{p.justified}/{p.total}</td>
+                  <td className={p.unjustified ? 'coverage-worse' : ''}>{p.unjustified}</td>
+                  <td>{p.percent} %</td>
+                  <td className={p.change > 0 ? 'coverage-worse' : p.change < 0 ? 'coverage-better' : ''}>
+                    {p.change === null ? '–' : p.change > 0 ? `+${p.change}` : p.change}
+                  </td>
+                  <td className="small">
+                    {p.fetched_at ? new Date(p.fetched_at).toLocaleDateString(dateLocale(lang)) : '–'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  )
+}
+
 export default function Dashboard() {
   const { lang, t } = useLang()
   const [data, setData] = useState(null)
@@ -94,6 +190,8 @@ export default function Dashboard() {
       </div>
 
       <div className="detail-grid">
+        {data.coverage && <Coverage c={data.coverage} t={t} lang={lang} />}
+
         <section className="card">
           <h2>{t('Rules by status')}</h2>
           <BarList

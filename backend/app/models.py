@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Column,
     DateTime,
     Enum,
@@ -685,6 +686,33 @@ class RuleVersion(Base):
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     rule: Mapped[Rule] = relationship(back_populates="versions")
+
+
+class CoverageSnapshot(Base):
+    """What one uploaded configuration measured, kept so a trend has data.
+
+    Written when a configuration arrives, never when somebody reads a page: a
+    point per page view would draw a flat line out of an estate nobody has
+    uploaded anything for in weeks, and flat reads as "stable" rather than
+    "unmeasured". Append-only - this is a series, and rewriting a past
+    measurement would erase the very movement it exists to show.
+
+    total and justified are NULL when the format could not be read. That is a
+    measurement too: it says we looked and could not tell, which is different
+    from finding nothing.
+    """
+
+    __tablename__ = "coverage_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    component_id: Mapped[int] = mapped_column(
+        ForeignKey("security_components.id", ondelete="CASCADE"), index=True
+    )
+    measured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    recognised: Mapped[bool] = mapped_column(Boolean, default=True)
+    total: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    justified: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    uploaded_by: Mapped[str] = mapped_column(String(64), default="")
 
 
 class Comment(Base):
