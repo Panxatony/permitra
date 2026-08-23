@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from .. import coverage
 from ..auth import get_current_user, require_roles
 from ..database import get_db
 from ..drift import analyze_drift
@@ -168,8 +169,14 @@ def upload_actual_config(
     from ..models import utcnow
 
     config.fetched_at = utcnow()
+    # The arrival of a configuration is the only moment a new measurement exists.
+    # Recording it here, rather than when somebody opens the dashboard, is what
+    # makes the trend a series of measurements instead of a series of page views.
+    snapshot = coverage.record_snapshot(db, component, payload.content, user.username)
     db.commit()
-    return {"status": "ok", "bytes": len(payload.content)}
+    return {"status": "ok", "bytes": len(payload.content),
+            "coverage": {"recognised": snapshot.recognised,
+                         "total": snapshot.total, "justified": snapshot.justified}}
 
 
 @router.get("/{component_id}/drift")

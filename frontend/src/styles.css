@@ -469,6 +469,22 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .coverage-bar span { display: block; height: 100%; background: var(--green); border-radius: 999px; }
 .coverage-text { font-size: .9rem; color: var(--muted); }
 
+/* Dashboard coverage card. The percentage is deliberately not the only large
+   thing: the scope line under it carries the same weight in the layout, so the
+   number is never read without knowing how much of the estate it covers. */
+.coverage-head { display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap; margin-bottom: .8rem; }
+.coverage-figure { min-width: 11rem; }
+.coverage-percent { font-size: 2.6rem; font-weight: 700; line-height: 1.1; }
+.coverage-scope { font-size: .85rem; color: var(--muted); margin-top: .2rem; max-width: 22ch; }
+.coverage-facts { flex: 1; min-width: 18rem; display: flex; flex-direction: column; gap: .35rem; }
+.coverage-facts p { margin: 0; font-size: .92rem; }
+.coverage-worse { color: var(--red); }
+.coverage-better { color: var(--green); }
+.coverage-gap {
+  margin: 0 0 .9rem; padding: .55rem .75rem; font-size: .9rem;
+  border-left: 3px solid var(--amber); background: var(--panel-alt-2); border-radius: 4px;
+}
+
 /* Security zone overview */
 .attach-select { display: flex; flex-direction: column; gap: .15rem; }
 .attach-select .checkbox { margin: 0; }
