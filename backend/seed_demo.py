@@ -455,7 +455,7 @@ def seed(wipe: bool):
         db.add(
             RuleVersion(
                 rule_pk=rule.id, version=1,
-                snapshot={"seed": "demo"}, change_note="Demo-Regel angelegt",
+                snapshot={"seed": "demo"}, change_note="Demo rule created",
                 changed_by="demo-seed",
             )
         )
@@ -489,7 +489,7 @@ def seed(wipe: bool):
         db.add(rule)
         db.flush()
         db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
-                           change_note="Demo-Regel angelegt", changed_by="demo-seed"))
+                           change_note="Demo rule created", changed_by="demo-seed"))
 
     # Demo rule spanning all three components: MGMT (behind FW BER) -> PROD-APP (FFM).
     # Implementation: firewall rule on both clusters (site transit) plus an
@@ -515,7 +515,7 @@ def seed(wipe: bool):
     db.add(rule)
     db.flush()
     db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
-                       change_note="Demo-Regel angelegt", changed_by="demo-seed"))
+                       change_note="Demo rule created", changed_by="demo-seed"))
 
     # Least privilege: the demo matrix is fully maintained -> enable default-deny
     # for unmaintained zone relationships (BSI recommendation, issue #13)

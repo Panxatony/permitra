@@ -129,6 +129,7 @@ CATALOG: dict[str, dict[str, str]] = {
             "Das initiale Admin-Passwort kann nicht nach {path} geschrieben werden ({error}) – Start verweigert (fail-secure). Setze PERMITRA_INITIAL_ADMIN_PASSWORD oder richte PERMITRA_INITIAL_ADMIN_PASSWORD_FILE auf einen beschreibbaren Pfad.",
         "Component not found": "Komponente nicht gefunden",
         ". Define it once via the address mapping.": ". Bitte einmalig über die Adress-Zuordnung festlegen.",
+        "Demo rule created": "Demo-Regel angelegt",
         "Description updated": "Beschreibung aktualisiert",
         "Destination": "Ziel",
         "EPG not found": "EPG nicht gefunden",
