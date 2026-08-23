@@ -12,7 +12,7 @@ from ..database import get_db
 from ..domain_values import IMPL_STATUSES
 from ..expiry import expiring_rules, invalid_validity_rules
 from ..exporters.generic import rule_to_dict
-from ..messages import _
+from ..messages import _, render
 from ..models import (
     IN_FORCE,
     AddressComponentMap,
@@ -203,13 +203,23 @@ def enforce_required_fields(db: Session, payload):
         )
 
 
-def add_version(db: Session, rule: Rule, user: User, note: str):
+def add_version(db: Session, rule: Rule, user: User, note: str, **values):
+    """Records one version. `note` is the English message *template*, untranslated.
+
+    Translating it here would freeze the entry in whichever language the
+    instance was set to at the time, and a history that is half English is
+    exactly what an instance switched to German ends up with. The values are
+    stored beside it and the sentence is put together when somebody reads it -
+    see messages.render(). A note a person typed comes through as `note` with no
+    values and is never treated as a template.
+    """
     db.add(
         RuleVersion(
             rule_pk=rule.id,
             version=rule.version,
             snapshot=snapshot(rule),
             change_note=note,
+            change_values=values or None,
             changed_by=user.username,
         )
     )
@@ -684,7 +694,7 @@ def create_rule(
         except IntegrityError:
             db.rollback()
             continue
-        add_version(db, rule, user, _("Rule created"))
+        add_version(db, rule, user, "Rule created")
         db.commit()
         db.refresh(rule)
         return rule
@@ -730,7 +740,7 @@ def update_rule(
     # A substantive change to an approved rule resets the review
     if rule.status in (*IN_FORCE, RuleStatus.rejected):
         rule.status = RuleStatus.draft
-    add_version(db, rule, user, payload.change_note or _("Rule changed"))
+    add_version(db, rule, user, payload.change_note or "Rule changed")
     db.commit()
     db.refresh(rule)
     return rule
@@ -760,10 +770,10 @@ def delete_rule(
     rule.deleted_at = _now()
     rule.status = RuleStatus.deleted
     rule.version += 1
-    add_version(db, rule, user, _("Rule set to deleted"))
+    add_version(db, rule, user, "Rule set to deleted")
     db.commit()
     audit.record(db, "rule", "rule.deleted", actor=user.username, object=rule.rule_id,
-                 detail=_("Rule deleted (soft delete): {name}", name=rule.name),
+                 detail="Rule deleted (soft delete): {name}", detail_values={"name": rule.name},
                  source_ip=(request.client.host if request and request.client else ""))
 
 
@@ -821,7 +831,7 @@ def restore_version(
     rule.status = RuleStatus.draft  # a rollback goes through the normal review
     rule.removal_reason = ""        # checks above passed – removal proposal is moot
     rule.version += 1
-    add_version(db, rule, user, _("Rolled back to version {version}", version=version))
+    add_version(db, rule, user, "Rolled back to version {version}", version=version)
     db.commit()
     db.refresh(rule)
     return rule
@@ -839,7 +849,7 @@ def submit_for_review(
                             _("The rule is in status '{status}'", status=_(rule.status.value)))
     rule.status = RuleStatus.in_review
     rule.version += 1
-    add_version(db, rule, user, _("Submitted for review"))
+    add_version(db, rule, user, "Submitted for review")
     db.commit()
     db.refresh(rule)
     from .. import change_management, notifications
@@ -886,14 +896,25 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
                    if (rule.impl_status or {}).get(c.name) != "deactivated"},
             }
             rule.version += 1
-            reason = rule.removal_reason or _(
-                "The zone relation {from_zone} → {to_zone} is Block",
-                from_zone=rule.source_zone, to_zone=rule.destination_zone)
-            removal_note = _("Removal approved: {reason} – "
-                             "remove the rule on the components ('to remove')",
-                             reason=reason)
+            # Two templates rather than one with the reason nested inside it: a
+            # nested reason would have to be translated before it is stored,
+            # which is what froze these entries in one language to begin with.
+            # A reason somebody typed stays a value and is kept as typed.
+            if rule.removal_reason:
+                note_template = ("Removal approved: {reason} – "
+                                 "remove the rule on the components ('to remove')")
+                note_values = {"reason": rule.removal_reason}
+            else:
+                note_template = ("Removal approved: the zone relation {from_zone} → "
+                                 "{to_zone} is Block – remove the rule on the "
+                                 "components ('to remove')")
+                note_values = {"from_zone": rule.source_zone,
+                               "to_zone": rule.destination_zone}
             rule.removal_reason = ""   # the proposal has been decided
-            add_version(db, rule, user, removal_note)
+            add_version(db, rule, user, note_template, **note_values)
+            # The comment and the mail below are written now and read as they
+            # were written, so those do get the language of the moment.
+            removal_note = render(note_template, note_values)
             db.add(Comment(rule_pk=rule.id, author=user.username,
                            text=(decision.comment + "\n" if decision.comment else "") + removal_note))
             db.commit()
@@ -950,7 +971,7 @@ def approve(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.change_approver)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.approved, _("Rule approved"))
+    return _decide(db, rule_id, user, decision, RuleStatus.approved, "Rule approved")
 
 
 @router.post("/{rule_id}/reject", response_model=RuleOut)
@@ -960,7 +981,7 @@ def reject(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.change_approver)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.rejected, _("Rule rejected"))
+    return _decide(db, rule_id, user, decision, RuleStatus.rejected, "Rule rejected")
 
 
 @router.post("/{rule_id}/deactivate", response_model=RuleOut)
@@ -970,7 +991,7 @@ def deactivate(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.operations, Role.architect)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.deactivated, _("Rule deactivated"))
+    return _decide(db, rule_id, user, decision, RuleStatus.deactivated, "Rule deactivated")
 
 
 @router.post("/{rule_id}/extend", response_model=RuleOut)
@@ -999,8 +1020,8 @@ def extend_validity(
                             _("The new valid-until date must be in the future"))
     rule.valid_until = new_date.isoformat()
     rule.version += 1
-    add_version(db, rule, user, _("Recertified: validity extended until {valid_until}",
-                                  valid_until=rule.valid_until))
+    add_version(db, rule, user, "Recertified: validity extended until {valid_until}",
+                valid_until=rule.valid_until)
     if payload.comment:
         db.add(Comment(rule_pk=rule.id, author=user.username, text=payload.comment))
     db.commit()
@@ -1032,7 +1053,7 @@ def set_impl_status(
                                   value=value, allowed=", ".join(sorted(allowed_status))))
     rule.impl_status = {**(rule.impl_status or {}), **impl_status}
     rule.version += 1
-    add_version(db, rule, user, _("Implementation status: {impl_status}", impl_status=impl_status))
+    add_version(db, rule, user, "Implementation status: {impl_status}", impl_status=impl_status)
     _sync_active_status(db, rule, user)
     db.commit()
     db.refresh(rule)
@@ -1056,10 +1077,10 @@ def _sync_active_status(db: Session, rule: Rule, user: User) -> None:
     or deleted is somewhere the rollout status has no say over, and promoting it
     would overwrite a decision that was made deliberately."""
     if rule.status == RuleStatus.approved and fully_implemented(rule):
-        note = _("Implemented on every component – the rule is active")
+        note = "Implemented on every component – the rule is active"
         rule.status = RuleStatus.active
     elif rule.status == RuleStatus.active and not fully_implemented(rule):
-        note = _("No longer implemented on every component – the rule is approved again")
+        note = "No longer implemented on every component – the rule is approved again"
         rule.status = RuleStatus.approved
     else:
         return

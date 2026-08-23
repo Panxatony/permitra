@@ -82,7 +82,7 @@ def create_user(
     db.commit()
     db.refresh(user)
     audit.record(db, "admin", "user.created", actor=admin.username, object=user.username,
-                 detail=_("Role {role}", role=user.role.value),
+                 detail="Role {role}", detail_values={"role": user.role.value},
                  source_ip=audit.client_ip(request))
 
     result = {"user": UserOut.model_validate(user).model_dump()}

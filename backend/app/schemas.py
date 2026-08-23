@@ -3,7 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .domain_values import PAP_LEVELS, PROTECTION_LEVELS
-from .messages import _
+from .messages import _, render
 from .models import ComponentType, Role, RuleAction, RuleStatus, ZonePolicyType
 from .validation import validate_ip_entry, validate_service
 
@@ -182,12 +182,26 @@ class CommentOut(BaseModel):
 
 
 class RuleVersionOut(BaseModel):
+    """One history entry, put into words as it is served.
+
+    The entry is stored as an English template plus its values, so the language
+    is decided here rather than on the day it was written - see
+    messages.render(). change_values is dropped from the response: it is the
+    raw material for the sentence, not a second copy of it.
+    """
+
     model_config = ConfigDict(from_attributes=True)
     version: int
     snapshot: dict
     change_note: str
+    change_values: dict | None = Field(default=None, exclude=True)
     changed_by: str
     changed_at: datetime
+
+    @model_validator(mode="after")
+    def _translate_note(self):
+        self.change_note = render(self.change_note, self.change_values)
+        return self
 
 
 class RuleOut(RuleFields):

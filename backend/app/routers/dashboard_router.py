@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..database import get_db
 from ..expiry import expiring_rules
+from ..messages import render
 from ..models import (
     IN_FORCE,
     AciGateway,
@@ -68,7 +69,8 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
             {
                 "rule_id": rule_id,
                 "version": v.version,
-                "change_note": v.change_note,
+                # Stored as a template, put into words here - see messages.render()
+                "change_note": render(v.change_note, v.change_values),
                 "changed_by": v.changed_by,
                 "changed_at": v.changed_at.isoformat() if v.changed_at else None,
             }

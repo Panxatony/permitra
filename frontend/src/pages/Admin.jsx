@@ -355,7 +355,7 @@ export default function Admin() {
                   <td>{e.object}</td>
                   <td>{e.actor || '–'}</td>
                   <td className="small">{e.source_ip || '–'}</td>
-                  <td className="small">{e.detail || (e.status || '')}</td>
+                  <td className="small">{e.detail || (e.status ? t(e.status) : '')}</td>
                 </tr>
               ))}
               {!audit.length && <tr><td colSpan={6} className="muted">{t('No entries.')}</td></tr>}

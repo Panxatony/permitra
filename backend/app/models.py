@@ -675,7 +675,12 @@ class RuleVersion(Base):
     rule_pk: Mapped[int] = mapped_column(ForeignKey("rules.id", ondelete="CASCADE"), index=True)
     version: Mapped[int] = mapped_column(Integer)
     snapshot: Mapped[dict] = mapped_column(JSON)
+    # The English message template and the values it takes, kept apart so the
+    # entry can be rendered in whatever language the instance is set to when
+    # somebody reads it. A note a person typed is stored here as-is, with no
+    # values. See messages.render().
     change_note: Mapped[str] = mapped_column(Text, default="")
+    change_values: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     changed_by: Mapped[str] = mapped_column(String(64), default="")
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

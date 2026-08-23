@@ -77,7 +77,7 @@ def run_import(db: Session = Depends(get_db), admin: User = Depends(require_role
     try:
         result = import_prefixes(db)
         audit.record(db, "admin", "netbox.import", actor=admin.username,
-                     detail=_("{count} prefixes", count=result.get("fetched", 0)),
+                     detail="{count} prefixes", detail_values={"count": result.get("fetched", 0)},
                      source_ip=audit.client_ip(request))
         return result
     except ValueError as exc:

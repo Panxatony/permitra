@@ -74,8 +74,8 @@ def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: 
                 RuleVersion(
                     rule_pk=rule.id, version=rule.version,
                     snapshot={"auto": "address-object-update"},
-                    change_note=_("Address object '{name}': IP {old_ip} → {new_ip}",
-                                  name=obj.name, old_ip=old_ip, new_ip=obj.ip),
+                    change_note="Address object '{name}': IP {old_ip} → {new_ip}",
+                    change_values={"name": obj.name, "old_ip": old_ip, "new_ip": obj.ip},
                     changed_by=username,
                 )
             )
