@@ -36,7 +36,10 @@ from app.models import (
 from app.routers.rules_router import add_version
 from app.schemas import RuleVersionOut
 
-APP = pathlib.Path(__file__).resolve().parent.parent / "app"
+BACKEND = pathlib.Path(__file__).resolve().parent.parent
+# The seed writes history entries too, and its notes are what the demo shows to
+# every visitor - so it is held to the same standard as the application.
+SOURCES = [BACKEND / "app", BACKEND / "seed_demo.py"]
 
 
 @pytest.fixture()
@@ -196,7 +199,8 @@ def _stored_templates() -> set[str]:
     exactly the entries this whole change is about, and reports success.
     """
     found: set[str] = set()
-    for path in APP.rglob("*.py"):
+    paths = [f for s in SOURCES for f in ([s] if s.is_file() else s.rglob("*.py"))]
+    for path in paths:
         tree = ast.parse(path.read_text())
         for scope in [tree] + [n for n in ast.walk(tree)
                                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]:
