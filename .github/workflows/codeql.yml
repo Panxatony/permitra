@@ -42,15 +42,19 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: github/codeql-action/init@v3
+      - uses: github/codeql-action/init@v4
         with:
-          language: ${{ matrix.language }}
+          # `languages`, plural. With the singular the input was silently
+          # ignored, CodeQL fell back to auto-detection, and both matrix jobs
+          # analysed both languages - twice the work for the same result, with
+          # a category label that no longer matched what was analysed.
+          languages: ${{ matrix.language }}
           # security-extended adds queries that are noisier but catch more; for
           # a project of this size the extra findings are reviewable.
           queries: security-extended
 
       # Both languages here are interpreted - there is nothing to compile, and
       # the autobuilder would only spend time discovering that.
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
