@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, getUser } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
-import { useLang } from '../i18n'
+import { dateLocale, useLang } from '../i18n'
 
 const ROLES = ['architect', 'operations', 'change_approver', 'admin']
 
@@ -9,7 +9,7 @@ const ROLES = ['architect', 'operations', 'change_approver', 'admin']
    New users without a password receive an activation link (by email if SMTP is
    configured; the link is also shown on screen). */
 export default function Admin() {
-  const { t } = useLang()
+  const { lang, t } = useLang()
   const me = getUser()
   const [users, setUsers] = useState([])
   const [form, setForm] = useState({ username: '', full_name: '', email: '', role: 'architect' })
@@ -233,13 +233,14 @@ export default function Admin() {
             {t('Test connection')}
           </button>
           <button className="btn btn-ghost" onClick={() => act(() => api.netboxImport()
-            .then((r) => ({ detail: `${t('Import complete')}: ${r.fetched} geladen, ${r.pending} zur Übernahme bereit`
+            .then((r) => ({ detail: t('Import complete: {fetched} fetched, {pending} ready to adopt')
+              .replace('{fetched}', r.fetched).replace('{pending}', r.pending)
               + (r.skipped_statuses?.length ? ` (${t('skipped')}: ${r.skipped_statuses.join(', ')})` : '') })))}>
             {t('Import now')}
           </button>
           {netbox?.last_import_at && (
             <span className="muted small" style={{ alignSelf: 'center' }}>
-              {t('Last import')}: {new Date(netbox.last_import_at).toLocaleString('de-DE')}
+              {t('Last import')}: {new Date(netbox.last_import_at).toLocaleString(dateLocale(lang))}
             </span>
           )}
         </div>
@@ -276,7 +277,7 @@ export default function Admin() {
                 <tr key={tok.id}>
                   <td><strong>{tok.name}</strong></td>
                   <td><code>{tok.prefix}…</code></td>
-                  <td className="small">{tok.last_used_at ? new Date(tok.last_used_at).toLocaleString('de-DE') : '–'}</td>
+                  <td className="small">{tok.last_used_at ? new Date(tok.last_used_at).toLocaleString(dateLocale(lang)) : '–'}</td>
                   <td className="small">{tok.expires_at ? tok.expires_at.slice(0, 10) : t('unlimited')}</td>
                   <td><span className={`badge ${tok.revoked ? 'status-deactivated' : 'status-approved'}`}>
                     {tok.revoked ? t('revoked') : t('active')}</span></td>
@@ -349,7 +350,7 @@ export default function Admin() {
             <tbody>
               {audit.map((e, i) => (
                 <tr key={i}>
-                  <td className="small">{e.timestamp ? new Date(e.timestamp).toLocaleString('de-DE') : '–'}</td>
+                  <td className="small">{e.timestamp ? new Date(e.timestamp).toLocaleString(dateLocale(lang)) : '–'}</td>
                   <td><code>{e.event}</code></td>
                   <td>{e.object}</td>
                   <td>{e.actor || '–'}</td>

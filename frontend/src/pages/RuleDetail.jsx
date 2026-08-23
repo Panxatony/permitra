@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, getUser } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
 import { AddressList, ComponentBadges, Highlighted, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
-import { useLang } from '../i18n'
+import { dateLocale, useLang } from '../i18n'
 
 const IMPL_OPTIONS = ['open', 'new', 'to change', 'to remove', 'implemented', 'deactivated']
 
@@ -16,7 +16,7 @@ export default function RuleDetail() {
   const { id } = useParams()
   const user = getUser()
   const navigate = useNavigate()
-  const { t } = useLang()
+  const { lang, t } = useLang()
   const zoneLabel = useZoneLabels()
   const [rule, setRule] = useState(null)
   const [impl, setImpl] = useState(null)
@@ -223,7 +223,7 @@ export default function RuleDetail() {
             {rule.comments.map((c) => (
               <li key={c.id}>
                 <strong>{c.author}</strong>
-                <span className="muted small"> · {new Date(c.created_at).toLocaleString('de-DE')}</span>
+                <span className="muted small"> · {new Date(c.created_at).toLocaleString(dateLocale(lang))}</span>
                 <p>{c.text}</p>
               </li>
             ))}
@@ -271,7 +271,7 @@ export default function RuleDetail() {
                     <td>v{v.version}</td>
                     <td>{v.change_note}</td>
                     <td>{v.changed_by}</td>
-                    <td>{new Date(v.changed_at).toLocaleString('de-DE')}</td>
+                    <td>{new Date(v.changed_at).toLocaleString(dateLocale(lang))}</td>
                     <td className="row-actions">
                       {isArchitect && v.version < rule.version && (
                         <button className="btn btn-ghost"

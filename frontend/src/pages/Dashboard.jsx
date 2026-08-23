@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { STATUS_LABELS } from '../components/shared'
-import { useLang } from '../i18n'
+import { dateLocale, useLang } from '../i18n'
 
 /* Workflow order, with `active` ahead of `approved`: the interesting number is
    how many rules are approved but not yet on the devices, and that only reads
@@ -136,7 +136,7 @@ export default function Dashboard() {
                       <span className="muted small"> v{c.version}</span></td>
                     <td>{c.change_note}</td>
                     <td>{c.changed_by}</td>
-                    <td>{c.changed_at ? new Date(c.changed_at).toLocaleString('de-DE') : ''}</td>
+                    <td>{c.changed_at ? new Date(c.changed_at).toLocaleString(dateLocale(lang)) : ''}</td>
                   </tr>
                 ))}
               </tbody>
