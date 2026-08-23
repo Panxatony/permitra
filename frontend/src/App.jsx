@@ -52,7 +52,13 @@ function Layout({ children }) {
     <div className="app">
       <header className="topbar">
         <div className="topbar-row">
-          <Link to="/" className="brand">🛡️ Permitra</Link>
+          <Link to="/" className="brand">
+            {/* A file rather than the shield emoji: an emoji depends on the
+                client having an emoji font, and without one it renders as an
+                empty box where the product name should be. */}
+            <img src="/permitra-mark.svg" alt="" className="brand-mark" />
+            Permitra
+          </Link>
           <div className="userbox">
             {vrfs.length > 1 && (
               <label className="vrf-select" title={t('Environment/VRF – separate worlds with possibly overlapping IP ranges (e.g. IT and OT)')}>

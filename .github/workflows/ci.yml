@@ -49,7 +49,9 @@ jobs:
       - run: ruff check . --output-format=concise
         working-directory: backend
       # The browser checks are Python too, and just as able to rot.
-      - run: ruff check e2e --output-format=concise --config backend/ruff.toml
+      # No --config here: that overrides discovery, and e2e/ruff.toml (which
+      # extends the backend one) would never be read.
+      - run: ruff check e2e --output-format=concise
 
   backend-tests:
     name: backend tests (SQLite)

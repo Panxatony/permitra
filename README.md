@@ -1,4 +1,6 @@
-# 🛡️ Permitra
+<img src="frontend/public/permitra-logo.svg" alt="Permitra" width="200">
+
+# Permitra
 
 Central web application for managing network security rules for **Juniper SRX**, **Check Point** and **Cisco ACI contracts** — replacing the Excel-based communication matrix. Permitra is the source of truth for the *intended* state: rules are requested, reviewed, approved and documented here; devices are still configured through the vendors' management tools, and a drift comparison shows where documentation and reality diverge.
 

@@ -199,7 +199,18 @@ code { background: var(--panel-alt); padding: .1em .35em; border-radius: 4px; fo
   background: var(--topbar-bg); color: var(--topbar-text); padding: .55rem 1.2rem .45rem;
 }
 .topbar-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.topbar .brand { color: var(--topbar-text); font-weight: 700; text-decoration: none; font-size: 1.15rem; white-space: nowrap; }
+.topbar .brand {
+  color: var(--topbar-text); font-weight: 700; text-decoration: none;
+  font-size: 1.15rem; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: .5rem;
+}
+/* The mark carries its own light tile, because six of its shapes are white
+   cut-outs rather than holes - dropping the background would leave them as
+   white marks on the dark header. A tile is a normal logo treatment and works
+   on any background. */
+.topbar .brand-mark { width: 1.9rem; height: 1.9rem; border-radius: .34rem; display: block; }
+.brand-heading { margin: 0 0 .4rem; }
+.brand-logo { width: 190px; max-width: 60%; height: auto; display: block; margin: 0 auto; }
 .topbar nav {
   display: flex; gap: 1.3rem; overflow-x: auto; white-space: nowrap;
   scrollbar-width: none; border-top: 1px solid rgba(255, 255, 255, .12); padding-top: .4rem;

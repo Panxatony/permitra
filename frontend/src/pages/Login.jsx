@@ -78,7 +78,9 @@ export default function Login() {
             {THEME_ICONS[theme]}
           </button>
         </div>
-        <h1>🛡️ Permitra</h1>
+        <h1 className="brand-heading">
+          <img src="/permitra-logo.svg" alt="Permitra" className="brand-logo" />
+        </h1>
         <p className="muted">{t('Central management of security rules')}</p>
         <label>
           {t('Username')}
