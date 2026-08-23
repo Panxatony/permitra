@@ -4,30 +4,33 @@ import { api, getToken } from '../api'
 import { Highlighted } from '../components/shared'
 import { useLang } from '../i18n'
 
+/* Labels and hints are English source texts; they are run through t() at the
+   point of display (this list lives outside the component, where t() does not
+   exist). */
 const FORMATS = [
-  { key: 'juniper', label: 'Juniper SRX (CLI)', hint: 'set-Kommandos inkl. Address-Book und Applications' },
-  { key: 'checkpoint-cli', label: 'Check Point (mgmt_cli)', hint: 'Shell-Skript für den Management-Server' },
-  { key: 'checkpoint-api', label: 'Check Point (Management API)', hint: 'JSON-Payloads für die Web-API' },
-  { key: 'aci-json', label: 'ACI (APIC JSON)', hint: 'fvTenant-Baum mit vzFilter und vzBrCP' },
-  { key: 'aci-yaml', label: 'ACI (YAML)', hint: 'Kompakt, z.B. für Ansible' },
-  { key: 'csv', label: 'CSV (Kommunikationsmatrix)', hint: 'Excel-kompatibel, Spalten wie das bisherige Sheet' },
-  { key: 'json', label: 'JSON (vollständig)', hint: 'Alle Felder für Integrationen' },
+  { key: 'juniper', label: 'Juniper SRX (CLI)', hint: 'set commands incl. address book and applications' },
+  { key: 'checkpoint-cli', label: 'Check Point (mgmt_cli)', hint: 'Shell script for the management server' },
+  { key: 'checkpoint-api', label: 'Check Point (Management API)', hint: 'JSON payloads for the web API' },
+  { key: 'aci-json', label: 'ACI (APIC JSON)', hint: 'fvTenant tree with vzFilter and vzBrCP' },
+  { key: 'aci-yaml', label: 'ACI (YAML)', hint: 'Compact, e.g. for Ansible' },
+  { key: 'csv', label: 'CSV (communication matrix)', hint: 'Excel-compatible, columns as in the previous sheet' },
+  { key: 'json', label: 'JSON (complete)', hint: 'All fields for integrations' },
 ]
 
 // Capirca/Aerleon integration: additional platforms via the policy generator
 const AERLEON_FORMATS = [
-  { key: 'aerleon-cisco', target: 'cisco', label: 'Cisco IOS (via Capirca)', hint: 'Extended ACL, generiert mit Aerleon' },
-  { key: 'aerleon-ciscoasa', target: 'ciscoasa', label: 'Cisco ASA (via Capirca)', hint: 'ASA-ACLs, generiert mit Aerleon' },
-  { key: 'aerleon-srx', target: 'srx', label: 'Juniper SRX zonenbasiert (via Capirca)', hint: 'Security Policies je Zonen-Paar' },
-  { key: 'aerleon-paloalto', target: 'paloalto', label: 'Palo Alto (via Capirca)', hint: 'Panorama-XML je Zonen-Paar' },
-  { key: 'aerleon-iptables', target: 'iptables', label: 'Linux iptables (via Capirca)', hint: 'FORWARD-Chain für Gateways' },
-  { key: 'aerleon-policy', target: 'policy', label: 'Capirca/Aerleon Policy (YAML)', hint: 'Objekte + Policy für bestehende Capirca-Pipelines' },
+  { key: 'aerleon-cisco', target: 'cisco', label: 'Cisco IOS (via Capirca)', hint: 'Extended ACL, generated with Aerleon' },
+  { key: 'aerleon-ciscoasa', target: 'ciscoasa', label: 'Cisco ASA (via Capirca)', hint: 'ASA ACLs, generated with Aerleon' },
+  { key: 'aerleon-srx', target: 'srx', label: 'Juniper SRX zone-based (via Capirca)', hint: 'Security policies per zone pair' },
+  { key: 'aerleon-paloalto', target: 'paloalto', label: 'Palo Alto (via Capirca)', hint: 'Panorama XML per zone pair' },
+  { key: 'aerleon-iptables', target: 'iptables', label: 'Linux iptables (via Capirca)', hint: 'FORWARD chain for gateways' },
+  { key: 'aerleon-policy', target: 'policy', label: 'Capirca/Aerleon Policy (YAML)', hint: 'Objects + policy for existing Capirca pipelines' },
 ]
 
 const HOST_FORMATS = [
-  { key: 'host-debian', os: 'debian', label: 'Host-FW: Debian (nftables)', hint: 'nftables.conf für den Ziel-Server', file: 'nftables.conf' },
-  { key: 'host-redhat', os: 'redhat', label: 'Host-FW: RedHat (firewalld)', hint: 'firewall-cmd Rich Rules', file: 'firewalld-rules.sh' },
-  { key: 'host-sles', os: 'sles', label: 'Host-FW: SLES (iptables)', hint: 'iptables-Skript (SLES 15: firewalld nutzen)', file: 'iptables-rules.sh' },
+  { key: 'host-debian', os: 'debian', label: 'Host FW: Debian (nftables)', hint: 'nftables.conf for the target server', file: 'nftables.conf' },
+  { key: 'host-redhat', os: 'redhat', label: 'Host FW: RedHat (firewalld)', hint: 'firewall-cmd rich rules', file: 'firewalld-rules.sh' },
+  { key: 'host-sles', os: 'sles', label: 'Host FW: SLES (iptables)', hint: 'iptables script (SLES 15: use firewalld)', file: 'iptables-rules.sh' },
 ]
 
 export default function ExportPage() {
@@ -60,7 +63,7 @@ export default function ExportPage() {
       let text
       if (host) {
         if (!targetIp.trim()) {
-          setError('Bitte eine Ziel-IP für den Host-Firewall-Export angeben.')
+          setError(t('Please enter a target IP for the host firewall export.'))
           return
         }
         text = await api.exportPreview(`host/${host.os}`, { ip: targetIp.trim() })
@@ -122,8 +125,8 @@ export default function ExportPage() {
             <button key={f.key}
               className={`format-btn ${f.key === fmt ? 'active' : ''}`}
               onClick={() => setFmt(f.key)}>
-              <strong>{f.label}</strong>
-              <span className="muted small">{f.hint}</span>
+              <strong>{t(f.label)}</strong>
+              <span className="muted small">{t(f.hint)}</span>
             </button>
           ))}
           <div className="export-divider muted small">{t('More platforms via Capirca/Aerleon:')}</div>
@@ -131,8 +134,8 @@ export default function ExportPage() {
             <button key={f.key}
               className={`format-btn ${f.key === fmt ? 'active' : ''}`}
               onClick={() => setFmt(f.key)}>
-              <strong>{f.label}</strong>
-              <span className="muted small">{f.hint}</span>
+              <strong>{t(f.label)}</strong>
+              <span className="muted small">{t(f.hint)}</span>
             </button>
           ))}
           <div className="export-divider muted small">{t('Host firewall for a target server:')}</div>
@@ -140,8 +143,8 @@ export default function ExportPage() {
             <button key={f.key}
               className={`format-btn ${f.key === fmt ? 'active' : ''}`}
               onClick={() => setFmt(f.key)}>
-              <strong>{f.label}</strong>
-              <span className="muted small">{f.hint}</span>
+              <strong>{t(f.label)}</strong>
+              <span className="muted small">{t(f.hint)}</span>
             </button>
           ))}
           <div className="export-options">

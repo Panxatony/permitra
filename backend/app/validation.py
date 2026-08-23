@@ -8,6 +8,8 @@ Addresses: one entry per line. Allowed are
 import ipaddress
 import re
 
+from .messages import _
+
 PROTOCOLS = {"TCP", "UDP", "TCP/UDP", "UDP/TCP", "ICMP", "ICMPV6", "ICMP/ICMPV6", "ANY"}
 
 HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
@@ -49,11 +51,11 @@ def validate_ip_entry(ip: str) -> str:
     """Address entries are always an IP/network (IPv4/IPv6) or 'any'."""
     ip = ip.strip()
     if not ip:
-        raise ValueError("IP or network is required")
+        raise ValueError(_("IP or network is required"))
     if ip.lower() == "any":
         return "any"
     if parse_network(ip) is None:
-        raise ValueError(f"'{ip}' is not a valid IP address or network (CIDR)")
+        raise ValueError(_("'{ip}' is not a valid IP address or network (CIDR)", ip=ip))
     return ip
 
 
@@ -74,14 +76,15 @@ def validate_address_entry(entry: str, field: str) -> None:
     if HOSTNAME_RE.match(host_part):
         return
     raise ValueError(
-        f"{field}: '{entry}' is neither a CIDR/IP nor a hostname nor 'any'"
+        _("{field}: '{entry}' is neither a CIDR/IP nor a hostname nor 'any'",
+          field=field, entry=entry)
     )
 
 
 def validate_address_list(value: str, field: str) -> str:
     entries = [line.strip() for line in value.splitlines() if line.strip()]
     if not entries:
-        raise ValueError(f"{field}: at least one entry is required")
+        raise ValueError(_("{field}: at least one entry is required", field=field))
     for entry in entries:
         validate_address_entry(entry, field)
     return "\n".join(entries)
@@ -96,26 +99,27 @@ def validate_port(port: str) -> None:
         if not part:
             continue
         if "-" in part:
-            lo, _, hi = part.partition("-")
+            lo, _sep, hi = part.partition("-")
             if not (lo.isdigit() and hi.isdigit() and 1 <= int(lo) <= int(hi) <= 65535):
-                raise ValueError(f"Invalid port range: '{part}'")
+                raise ValueError(_("Invalid port range: '{part}'", part=part))
         elif part.isdigit():
             if not 1 <= int(part) <= 65535:
-                raise ValueError(f"Port outside 1-65535: '{part}'")
+                raise ValueError(_("Port outside 1-65535: '{part}'", part=part))
         else:
-            raise ValueError(f"Invalid port: '{part}'")
+            raise ValueError(_("Invalid port: '{part}'", part=part))
 
 
 def validate_service(protocol: str, port: str) -> None:
     proto = protocol.strip().upper()
     if proto not in PROTOCOLS:
         raise ValueError(
-            f"Invalid protocol '{protocol}'. Allowed: {', '.join(sorted(PROTOCOLS))}"
+            _("Invalid protocol '{protocol}'. Allowed: {allowed}",
+              protocol=protocol, allowed=", ".join(sorted(PROTOCOLS)))
         )
     if proto.startswith("ICMP"):
         return  # ICMP has no ports
     if proto != "ANY" and not port.strip():
-        raise ValueError(f"{proto} requires a port specification")
+        raise ValueError(_("{proto} requires a port specification", proto=proto))
     validate_port(port)
 
 

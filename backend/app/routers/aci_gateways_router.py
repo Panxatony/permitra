@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_roles
 from ..database import get_db
+from ..messages import _
 from ..models import AciGateway, ComponentType, Role, SecurityComponent, User
 from ..schemas import AciGatewayCreate, AciGatewayOut
 
@@ -18,7 +19,7 @@ def to_out(gw: AciGateway) -> AciGatewayOut:
 def get_gateway_or_404(db: Session, gateway_id: int) -> AciGateway:
     gateway = db.get(AciGateway, gateway_id)
     if not gateway:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "ACI gateway not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("ACI gateway not found"))
     return gateway
 
 
@@ -28,17 +29,18 @@ def validate_pbr_target(db: Session, payload: AciGatewayCreate):
         return
     component = db.get(SecurityComponent, payload.pbr_component_id)
     if not component:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "PBR target component not found")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("PBR target component not found"))
     if component.type != ComponentType.checkpoint:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"PBR attaches to Check Point firewalls – '{component.name}' "
-            f"is of type {component.type.value}",
+            _("PBR attaches to Check Point firewalls – '{name}' "
+              "is of type {component_type}",
+              name=component.name, component_type=component.type.value),
         )
 
 
 @router.get("", response_model=list[AciGatewayOut])
-def list_gateways(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_gateways(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return [to_out(g) for g in db.query(AciGateway).order_by(AciGateway.name).all()]
 
 
@@ -46,10 +48,11 @@ def list_gateways(db: Session = Depends(get_db), _: User = Depends(get_current_u
 def create_gateway(
     payload: AciGatewayCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     if db.query(AciGateway).filter(AciGateway.name.ilike(payload.name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Gateway '{payload.name}' already exists")
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("Gateway '{name}' already exists", name=payload.name))
     validate_pbr_target(db, payload)
     gateway = AciGateway(**payload.model_dump())
     db.add(gateway)
@@ -63,7 +66,7 @@ def update_gateway(
     gateway_id: int,
     payload: AciGatewayCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     gateway = get_gateway_or_404(db, gateway_id)
     duplicate = (
@@ -72,7 +75,8 @@ def update_gateway(
         .first()
     )
     if duplicate:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Gateway '{payload.name}' already exists")
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("Gateway '{name}' already exists", name=payload.name))
     validate_pbr_target(db, payload)
     for key, value in payload.model_dump().items():
         setattr(gateway, key, value)
@@ -85,7 +89,7 @@ def update_gateway(
 def delete_gateway(
     gateway_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     db.delete(get_gateway_or_404(db, gateway_id))
     db.commit()

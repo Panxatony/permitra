@@ -10,10 +10,15 @@ import ipaddress
 
 from sqlalchemy.orm import Session
 
+from .messages import _
 from .zone_check import find_zone
 
-# Risky services (port -> label), critical above all from untrusted zones
-RISKY_PORTS = {
+# Seed for the risky-service list. The list itself lives in the database
+# (models.RiskyPort) so administrators can adapt it: what counts as risky
+# differs per organisation - Telnet on an isolated segment may be deliberate,
+# while SSH from the outside may well deserve a hint. These defaults are what
+# an installation starts with.
+DEFAULT_RISKY_PORTS = {
     "23": "Telnet (unencrypted)",
     "21": "FTP (unencrypted)",
     "3389": "RDP (remote access)",
@@ -34,6 +39,10 @@ RISKY_PORTS = {
 
 # Source zones considered "untrusted"/exposed (origin of risky access)
 UNTRUSTED_PAP = {"external"}
+
+# A source or destination network at least this wide counts as too broad.
+# /8 covers 16.7 million addresses - beyond any plausible "the servers".
+BROAD_PREFIX_MAX = 8
 
 _SEV_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3}
 _SB_WEIGHT = {"normal": 0, "high": 1, "very high": 2}
@@ -70,7 +79,18 @@ def _segments(port_spec: str) -> list[tuple[int, int]]:
     return ranges
 
 
-def risky_ports_in(port_spec: str) -> list[tuple[str, str]]:
+def configured_risky_ports(db: Session) -> dict[str, str]:
+    """The risky-service list of this installation (port -> label).
+
+    Falls back to the defaults while the table is still empty, so a risk
+    assessment never silently loses its criteria."""
+    from .models import RiskyPort
+
+    rows = db.query(RiskyPort).order_by(RiskyPort.port).all()
+    return {r.port: r.label for r in rows} if rows else dict(DEFAULT_RISKY_PORTS)
+
+
+def risky_ports_in(port_spec: str, ports: dict[str, str] | None = None) -> list[tuple[str, str]]:
     """All risky ports covered by a port specification – as (port, label).
 
     Essential for ranges and lists: "20-25" contains FTP (21) and Telnet (23),
@@ -80,8 +100,9 @@ def risky_ports_in(port_spec: str) -> list[tuple[str, str]]:
     ranges = _segments(port_spec)
     if not ranges:
         return []
+    catalogue = DEFAULT_RISKY_PORTS if ports is None else ports
     hits = [
-        (port, label) for port, label in RISKY_PORTS.items()
+        (port, label) for port, label in catalogue.items()
         if any(lo <= int(port) <= hi for lo, hi in ranges)
     ]
     return sorted(hits, key=lambda t: int(t[0]))
@@ -119,38 +140,42 @@ def assess_rule(db: Session, rule) -> dict:
     # 1) Any-to-Any
     if src_any and dst_any:
         findings.append({"severity": "high", "code": "any-to-any",
-                         "detail": "Source and destination are both 'any' – the rule is too broad"})
+                         "detail": _("Source and destination are both 'any' – the rule is too broad")})
     elif src_any:
         findings.append({"severity": _bump("medium", protection_level), "code": "any-source",
-                         "detail": "Source is 'any' – every address may connect"})
+                         "detail": _("Source is 'any' – every address may connect")})
 
     # 2) Very broad networks (<= /8)
-    for label, entries in (("Source", rule.source), ("Destination", rule.destination)):
+    for label, entries in ((_("Source"), rule.source), (_("Destination"), rule.destination)):
         pfx = _broadest_prefix(entries)
-        if pfx is not None and pfx <= 8:
+        if pfx is not None and pfx <= BROAD_PREFIX_MAX:
             findings.append({"severity": "medium", "code": "broad-network",
-                             "detail": f"{label} contains a very broad network (/{pfx})"})
+                             "detail": _("{label} contains a very broad network (/{pfx})",
+                                         label=label, pfx=pfx)})
 
     # 3) Risky services – weighted higher when coming from an exposed source zone
+    risky_ports = configured_risky_ports(db)
     src_zone = find_zone(db, rule.source_zone or "")
     exposed = src_any or (src_zone and src_zone.pap_level in UNTRUSTED_PAP)
     for svc in rule.services or []:
         port = (svc.get("port") or "").strip()
-        for hit_port, label in risky_ports_in(port):
+        for hit_port, label in risky_ports_in(port, risky_ports):
             base = "high" if exposed else "medium"
             # For ranges/lists name the concrete match, otherwise the reviewer
             # searches "20-25" in vain for the actual problem.
-            where = f"Port {hit_port} in {port}" if hit_port != port else f"Port {port}"
+            where = (_("Port {hit_port} in {port}", hit_port=hit_port, port=port)
+                     if hit_port != port else _("Port {port}", port=port))
             findings.append({"severity": _bump(base, protection_level), "code": "risky-service",
-                             "detail": f"Risky service {label} ({where})"
-                                       + (" from an exposed source" if exposed else "")})
+                             "detail": _("Risky service {label} ({where})",
+                                         label=_(label), where=where)
+                                       + (_(" from an exposed source") if exposed else "")})
 
     # 4) Service 'any' across zone boundaries
     cross = (rule.source_zone or "").upper() != (rule.destination_zone or "").upper()
     if cross and any((s.get("protocol") or "").strip().lower() in ("any", "ip")
                      for s in rule.services or []):
         findings.append({"severity": "medium", "code": "any-service",
-                         "detail": "Service 'any' on a cross-zone rule"})
+                         "detail": _("Service 'any' on a cross-zone rule")})
 
     level = "none"
     for f in findings:

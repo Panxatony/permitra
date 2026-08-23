@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
+from .messages import _
 from .models import Zone, ZoneNetwork, ZonePolicy, ZonePolicyType
 from .validation import parse_network
 
@@ -106,8 +107,8 @@ def get_policy(db: Session, from_zone: Zone, to_zone: Zone) -> ZonePolicy | None
 def _aci_cross_zone_hint(result: ZoneCheckResult, platforms: list[str] | None):
     if "aci" in (platforms or []):
         result.messages.append(
-            "ACI is only used within a single zone – this rule crosses zones, "
-            "check the ACI platform assignment"
+            _("ACI is only used within a single zone – this rule crosses zones, "
+              "check the ACI platform assignment")
         )
 
 
@@ -115,9 +116,10 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
                     platforms: list[str] | None = None) -> ZoneCheckResult:
     src, dst = (source_zone or "").strip(), (destination_zone or "").strip()
     if not src or not dst:
-        return ZoneCheckResult(True, "undefined", messages=["Source or destination zone not specified"])
+        return ZoneCheckResult(True, "undefined",
+                               messages=[_("Source or destination zone not specified")])
     if src.upper() == dst.upper():
-        return ZoneCheckResult(True, "intra", messages=["Intra-zone traffic (same zone)"])
+        return ZoneCheckResult(True, "intra", messages=[_("Intra-zone traffic (same zone)")])
 
     # Least privilege (BSI): behaviour for unmaintained relations is configurable
     from .settings import get_setting
@@ -129,8 +131,9 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
         missing = [n for n, z in ((src, zone_a), (dst, zone_b)) if not z]
         result = ZoneCheckResult(
             not default_deny, "undefined",
-            messages=[f"Zone(s) not maintained in the zone administration: {', '.join(missing)}"
-                      + (" – default-deny: create the zone and approve the relation"
+            messages=[_("Zone(s) not maintained in the zone administration: {zones}",
+                        zones=", ".join(missing))
+                      + (_(" – default-deny: create the zone and approve the relation")
                          if default_deny else "")],
         )
         _aci_cross_zone_hint(result, platforms)
@@ -140,9 +143,10 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
     if not policy:
         result = ZoneCheckResult(
             not default_deny, "undefined",
-            messages=[f"Relation {zone_a.name} → {zone_b.name} is not maintained in the matrix"
-                      + (" – least privilege (default-deny): set it to allow via a matrix "
-                         "request (two approvals)" if default_deny else "")],
+            messages=[_("Relation {from_zone} → {to_zone} is not maintained in the matrix",
+                        from_zone=zone_a.name, to_zone=zone_b.name)
+                      + (_(" – least privilege (default-deny): set it to allow via a matrix "
+                           "request (two approvals)") if default_deny else "")],
         )
         _aci_cross_zone_hint(result, platforms)
         return result
@@ -154,11 +158,12 @@ def check_zone_pair(db: Session, source_zone: str, destination_zone: str,
     )
     if policy.policy == ZonePolicyType.block_all:
         result.messages.append(
-            f"The matrix forbids security rules from {zone_a.name} to {zone_b.name} (Block)"
+            _("The matrix forbids security rules from {from_zone} to {to_zone} (Block)",
+              from_zone=zone_a.name, to_zone=zone_b.name)
         )
         return result
 
     if policy.temporary:
-        result.messages.append("The matrix allows this relation only temporarily (Temp)")
+        result.messages.append(_("The matrix allows this relation only temporarily (Temp)"))
     _aci_cross_zone_hint(result, platforms)
     return result

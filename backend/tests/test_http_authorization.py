@@ -122,6 +122,30 @@ def test_rule_deletion_is_admin_only(client):
         assert r.status_code == 403, f"{user} was allowed to delete ({r.status_code})"
 
 
+def test_risk_criteria_are_readable_for_every_role(client):
+    """An approver has to know what a risk hint was raised by, so reading the
+    criteria is deliberately not administrative."""
+    for user in ("arch", "ops", "appr", "adm"):
+        r = client.get("/api/risk/criteria", headers=auth(client, user))
+        assert r.status_code == 200, f"{user} cannot read the criteria: {r.text}"
+        assert r.json()["risky_ports"], "criteria without any service list"
+    assert client.get("/api/risk/criteria").status_code == 401
+
+
+def test_risk_ports_are_admin_only(client):
+    """Changing the yardstick is an administrative act."""
+    for user in ("arch", "ops", "appr"):
+        headers = auth(client, user)
+        assert client.put("/api/risk/ports/22", json={"label": "SSH"},
+                          headers=headers).status_code == 403, f"{user} could add a service"
+        assert client.delete("/api/risk/ports/23",
+                             headers=headers).status_code == 403, f"{user} could remove a service"
+
+    assert client.put("/api/risk/ports/22", json={"label": "SSH"},
+                      headers=auth(client, "adm")).status_code == 200
+    assert client.delete("/api/risk/ports/22", headers=auth(client, "adm")).status_code == 204
+
+
 # ---------- Read-only API tokens --------------------------------------------
 
 def _create_pat(client) -> str:
@@ -142,6 +166,8 @@ def test_api_token_allows_reading(client):
     ("put", "/api/settings", {"require_justification": "no"}),
     ("post", "/api/users", {"username": "y", "role": "admin"}),
     ("delete", "/api/rules/SR00001", None),
+    ("put", "/api/risk/ports/22", {"label": "SSH"}),
+    ("delete", "/api/risk/ports/23", None),
 ])
 def test_api_token_cannot_write(client, method, path, body):
     """Read-only tokens may only read - every write operation yields 403."""

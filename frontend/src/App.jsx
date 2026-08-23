@@ -55,7 +55,7 @@ function Layout({ children }) {
           <Link to="/" className="brand">🛡️ Permitra</Link>
           <div className="userbox">
             {vrfs.length > 1 && (
-              <label className="vrf-select" title="Umgebung/VRF – getrennte Welten mit ggf. überlappenden IP-Bereichen (z.B. IT und OT)">
+              <label className="vrf-select" title={t('Environment/VRF – separate worlds with possibly overlapping IP ranges (e.g. IT and OT)')}>
                 <span className="muted-light">{t('Environment')}:</span>
                 <select value={currentVrf} onChange={(e) => switchVrf(e.target.value)}>
                   {vrfs.map((v) => <option key={v.id} value={v.name}>{v.name}</option>)}

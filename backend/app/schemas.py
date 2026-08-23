@@ -3,6 +3,7 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .domain_values import PAP_LEVELS, PROTECTION_LEVELS
+from .messages import _
 from .models import ComponentType, Role, RuleAction, RuleStatus, ZonePolicyType
 from .validation import validate_ip_entry, validate_service
 
@@ -22,12 +23,13 @@ def parse_iso_date(value: str | None, field: str) -> str | None:
     text = str(value).strip()
     if not text:
         return None
-    label = DATE_LABELS.get(field, field)
+    label = _(DATE_LABELS.get(field, field))
     try:
         return date.fromisoformat(text).isoformat()
     except ValueError as exc:
         raise ValueError(
-            f"{label}: '{text}' is not a valid date – expected YYYY-MM-DD, e.g. 2027-03-31"
+            _("{label}: '{text}' is not a valid date – expected YYYY-MM-DD, e.g. 2027-03-31",
+              label=label, text=text)
         ) from exc
 
 
@@ -144,21 +146,22 @@ class RuleBase(BaseModel):
     @classmethod
     def check_addresses(cls, v, info):
         if not v:
-            raise ValueError(f"{info.field_name}: at least one address entry is required")
+            raise ValueError(_("{field}: at least one address entry is required",
+                               field=info.field_name))
         return v
 
     @field_validator("services")
     @classmethod
     def check_services(cls, v):
         if not v:
-            raise ValueError("At least one service (protocol/port) is required")
+            raise ValueError(_("At least one service (protocol/port) is required"))
         return v
 
     @model_validator(mode="after")
     def check_validity_period(self):
         # Both values are already normalised to an ISO date here (check_dates)
         if self.valid_from and self.valid_until and self.valid_from > self.valid_until:
-            raise ValueError("Valid until is earlier than valid from")
+            raise ValueError(_("Valid until is earlier than valid from"))
         return self
 
 
@@ -229,7 +232,7 @@ class ExtendRequest(BaseModel):
     def check_date(cls, v):
         parsed = parse_iso_date(v, "valid_until")
         if parsed is None:
-            raise ValueError("Valid until: a date is required (YYYY-MM-DD)")
+            raise ValueError(_("Valid until: a date is required (YYYY-MM-DD)"))
         return parsed
 
 
@@ -267,7 +270,8 @@ class ZoneCreate(BaseModel):
     def check_cia(cls, v):
         v = v.strip().lower()
         if v not in CIA_LEVELS:
-            raise ValueError(f"Protection level must be one of {', '.join(CIA_LEVELS)}")
+            raise ValueError(_("Protection level must be one of {levels}",
+                               levels=", ".join(CIA_LEVELS)))
         return v
 
     @field_validator("pap_level")
@@ -275,7 +279,8 @@ class ZoneCreate(BaseModel):
     def check_pap(cls, v):
         v = v.strip().lower()
         if v not in PAP_LEVELS:
-            raise ValueError(f"pap_level must be one of {', '.join(PAP_LEVELS)}")
+            raise ValueError(_("pap_level must be one of {levels}",
+                               levels=", ".join(PAP_LEVELS)))
         return v
 
 
@@ -348,7 +353,8 @@ class AciGatewayCreate(BaseModel):
         try:
             ipaddress.ip_interface(v)
         except ValueError as exc:
-            raise ValueError(f"'{v}' is not a valid gateway address (expected e.g. 10.10.30.1/24)") from exc
+            raise ValueError(_("'{v}' is not a valid gateway address (expected e.g. 10.10.30.1/24)",
+                               v=v)) from exc
         return v
 
     @field_validator("pbr_node_mac")
@@ -358,16 +364,16 @@ class AciGatewayCreate(BaseModel):
 
         v = v.strip()
         if v and not re.fullmatch(r"([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}", v):
-            raise ValueError(f"'{v}' is not a valid MAC address")
+            raise ValueError(_("'{v}' is not a valid MAC address", v=v))
         return v.upper()
 
     @model_validator(mode="after")
     def check_pbr(self):
         if self.pbr_enabled:
             if not self.pbr_component_id:
-                raise ValueError("PBR enabled: a target firewall (component) is required")
+                raise ValueError(_("PBR enabled: a target firewall (component) is required"))
             if not self.pbr_node_ip:
-                raise ValueError("PBR enabled: the PBR node IP is required")
+                raise ValueError(_("PBR enabled: the PBR node IP is required"))
         return self
 
 

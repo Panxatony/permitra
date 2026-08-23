@@ -157,7 +157,7 @@ function ZoneReachability({ overview }) {
 
   // Band 1: external (north)
   const extern = sortByBarycenter(byLevel('external'))
-  bands.push({ key: 'external', label: 'Extern (Nord) — Internet / Partner', y, h: LABEL_H + layoutZoneRowsHeight(extern) + PAD })
+  bands.push({ key: 'external', label: t('External (north) – internet / partners'), y, h: LABEL_H + layoutZoneRowsHeight(extern) + PAD })
   layoutZoneRows(extern, y + LABEL_H)
   y += bands[0].h
 
@@ -170,7 +170,7 @@ function ZoneReachability({ overview }) {
   const southRowH = southFws.length ? ROW_H : 0
   const papZonesH = layoutZoneRowsHeight(pap)
   const papH = LABEL_H + northRowH + papZonesH + southRowH + PAD
-  bands.push({ key: 'pap', label: 'P-A-P-Ebene (BSI): Paketfilter – ALG – Paketfilter', y, h: papH })
+  bands.push({ key: 'pap', label: t('P-A-P layer (BSI): packet filter – ALG – packet filter'), y, h: papH })
   const placeFwRow = (list, rowY) => list.forEach((f, i) => {
     fwPos[f.id] = { x: 110 + (W - 220) * ((i + 0.5) / list.length), y: rowY + ROW_H / 2 }
   })
@@ -230,7 +230,7 @@ function ZoneReachability({ overview }) {
   })
 
   const internH = S_TOP + multiH + Math.max(maxColumn, multiRows.length ? 0 : 1) * S_ROW + 26
-  bands.push({ key: 'internal', label: 'Intern (Süd) — unterhalb der P-A-P-Struktur', y, h: internH })
+  bands.push({ key: 'internal', label: t('Internal (south) – below the P-A-P structure'), y, h: internH })
   y += internH
   const H = y
 
@@ -249,7 +249,7 @@ function ZoneReachability({ overview }) {
         </div>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} id="zone-plan-svg" className="topology-svg" role="img"
-        aria-label="Nord-Süd-Sicht der Sicherheitszonen nach BSI P-A-P (Zonenplan)">
+        aria-label={t('North-south view of the security zones per BSI P-A-P (zone plan)')}>
         {bands.map((b) => (
           <g key={b.key}>
             <rect x={4} y={b.y + 2} width={W - 8} height={b.h - 6} rx={10} className={`pap-band band-${b.key}`} />
@@ -332,11 +332,11 @@ function ZoneReachability({ overview }) {
         })}
       </svg>
       <div className="sb-legend">
-        <span><strong>Schutzbedarf:</strong></span>
-        <span><span className="sb-swatch" style={{ background: 'var(--diagram-fill)', borderColor: 'var(--diagram-stroke)' }} />normal</span>
-        <span><span className="sb-swatch" style={{ background: 'var(--amber-bg)', borderColor: 'var(--amber-border)' }} />hoch</span>
-        <span><span className="sb-swatch" style={{ background: 'var(--red-bg)', borderColor: 'var(--red-border)' }} />sehr hoch</span>
-        <span><span className="sb-swatch" style={{ borderColor: 'var(--red)', borderStyle: 'dashed' }} />keine Firewall-Anbindung</span>
+        <span><strong>{t('Protection level')}:</strong></span>
+        <span><span className="sb-swatch" style={{ background: 'var(--diagram-fill)', borderColor: 'var(--diagram-stroke)' }} />{t('normal')}</span>
+        <span><span className="sb-swatch" style={{ background: 'var(--amber-bg)', borderColor: 'var(--amber-border)' }} />{t('high')}</span>
+        <span><span className="sb-swatch" style={{ background: 'var(--red-bg)', borderColor: 'var(--red-border)' }} />{t('very high')}</span>
+        <span><span className="sb-swatch" style={{ borderColor: 'var(--red)', borderStyle: 'dashed' }} />{t('no firewall connectivity')}</span>
       </div>
     </div>
   )
@@ -421,11 +421,11 @@ export default function ZoneMatrix() {
   useEffect(() => { load() }, [load])
 
   // In edit mode clicks are collected locally and only submitted as ONE batch
-  // request via "Matrixänderungen beantragen".
+  // request via "Request matrix changes".
   const cycle = (from, to) => {
     if (!canEdit || from === to) return
     if (!editMode) {
-      setNotice('Zum Ändern zuerst „Matrix ändern“ klicken.')
+      setNotice(t('To make a change, click “Change matrix” first.'))
       return
     }
     const key = `${from}|${to}`
@@ -462,7 +462,7 @@ export default function ZoneMatrix() {
 
   const submitBatch = async () => {
     if (!draftCount) {
-      setNotice('Keine Änderungen erfasst.')
+      setNotice(t('No changes recorded.'))
       return
     }
     setError('')
@@ -503,7 +503,7 @@ export default function ZoneMatrix() {
     e.preventDefault()
     const name = newZone.trim()
     const code = newZoneCode.trim()
-    if (!name || !code) { setError('Bitte Zonen-ID und Name angeben.'); return }
+    if (!name || !code) { setError(t('Please provide a zone ID and a name.')); return }
     if (!editMode) setEditMode(true)
     if (zones.some((z) => z.name.toUpperCase() === name.toUpperCase() || (z.code || '').toUpperCase() === code.toUpperCase())
       || draftZones.some((z) => z.name.toUpperCase() === name.toUpperCase() || z.code.toUpperCase() === code.toUpperCase())) {
@@ -583,7 +583,7 @@ export default function ZoneMatrix() {
                       </Link>
                     </td>
                     <td>
-                      {{ external: 'extern (Nord)', pap: 'P-A-P-Ebene', internal: 'intern (Süd)' }[z.pap_level || 'internal']}
+                      {t({ external: 'external (north)', pap: 'P-A-P layer', internal: 'internal (south)' }[z.pap_level || 'internal'])}
                     </td>
                     <td>{z.rule_count}</td>
                     <td>
@@ -697,15 +697,15 @@ export default function ZoneMatrix() {
       <div className="matrix-toolbar">
         <h2>{t('Communication matrix')} <span className="muted small">{t('(row = source, column = destination)')}</span></h2>
         {canEdit && !editMode && (
-          <button className="btn btn-primary" onClick={startEdit}>Matrix ändern</button>
+          <button className="btn btn-primary" onClick={startEdit}>{t('Change matrix')}</button>
         )}
         {canEdit && editMode && (
           <>
-            <span className="badge status-in_review">Editier-Modus – {draftCount} Änderung(en) erfasst</span>
+            <span className="badge status-in_review">{t('Edit mode')} – {draftCount} {t('change(s) recorded')}</span>
             <button className="btn btn-approve" onClick={submitBatch} disabled={!draftCount}>
-              Matrixänderungen beantragen{draftCount ? ` (${draftCount})` : ''}
+              {t('Request matrix changes')}{draftCount ? ` (${draftCount})` : ''}
             </button>
-            <button className="btn btn-ghost" onClick={cancelEdit}>Verwerfen</button>
+            <button className="btn btn-ghost" onClick={cancelEdit}>{t('Discard')}</button>
           </>
         )}
       </div>
@@ -753,10 +753,10 @@ export default function ZoneMatrix() {
                         + `${pend ? ' cell-pending' : ''}${draftPolicy ? ' cell-draft' : ''}`}
                       title={`${from.name} → ${to.name}: ${p ? cellLabel(p)
                         : settings.zone_matrix_default === 'deny'
-                          ? 'nicht gepflegt – default-deny: Regeln werden abgelehnt'
-                          : 'nicht gepflegt – erlaubt mit Hinweis'}`
-                        + (draftPolicy ? ` – Entwurf: ${draftPolicy === 'allow_only' ? 'Allow' : 'Block'} (noch nicht beantragt)` : '')
-                        + (pend ? ` – Antrag auf ${pend.new_policy === 'allow_only' ? 'Allow' : 'Block'} wartet auf Freigabe (${pend.requested_by})` : '')}
+                          ? t('not maintained – default-deny: rules are rejected')
+                          : t('not maintained – allowed with a notice')}`
+                        + (draftPolicy ? `${t(' – draft: ')}${draftPolicy === 'allow_only' ? 'Allow' : 'Block'}${t(' (not requested yet)')}` : '')
+                        + (pend ? `${t(' – request for ')}${pend.new_policy === 'allow_only' ? 'Allow' : 'Block'}${t(' is waiting for approval')} (${pend.requested_by})` : '')}
                       onClick={() => cycle(zref(from), zref(to))}
                     >
                       {`${label}${draftPolicy ? ' ✎' : ''}${pend ? ' ⏳' : ''}`}
@@ -774,13 +774,13 @@ export default function ZoneMatrix() {
           {true ? (
             <form className="zone-add" onSubmit={addZone}>
               <input value={newZoneCode} onChange={(e) => setNewZoneCode(e.target.value)}
-                placeholder="Zonen-ID, z.B. Z130" style={{ maxWidth: '120px' }} />
+                placeholder={t('Zone ID, e.g. Z130')} style={{ maxWidth: '120px' }} />
               <input value={newZone} onChange={(e) => setNewZone(e.target.value)}
-                placeholder="Zonen-Name, z.B. T-NEW" />
+                placeholder={t('Zone name, e.g. T-NEW')} />
               <select value={newZoneLevel} onChange={(e) => setNewZoneLevel(e.target.value)}>
-                <option value="external">extern (Nord)</option>
-                <option value="pap">P-A-P-Ebene</option>
-                <option value="internal">intern (Süd)</option>
+                <option value="external">{t('external (north)')}</option>
+                <option value="pap">{t('P-A-P layer')}</option>
+                <option value="internal">{t('internal (south)')}</option>
               </select>
               {[['cia_c', 'C'], ['cia_i', 'I'], ['cia_a', 'V']].map(([f, lbl]) => (
                 <select key={f} title={t('Protection level')} value={newZoneCia[f]}
@@ -805,8 +805,7 @@ export default function ZoneMatrix() {
             </form>
           ) : null}
           <p className="muted small">
-            Neue Zonen landen im Sammelantrag und werden erst nach zweifacher Freigabe durch
-            Change Approver angelegt – „Matrixänderungen beantragen" schließt die Erfassung ab.
+            {t('New zones go into the collective request and are only created after two approvals by change approvers – “Request matrix changes” completes the recording.')}
           </p>
           <div className="zone-chips">
             {zones.map((z) => (
@@ -862,7 +861,7 @@ export default function ZoneMatrix() {
                     }`}>
                       {b.status === 'pending' && b.first_approved_by
                         ? `1/2 Freigaben (${b.first_approved_by})`
-                        : { pending: 'wartet auf Freigabe (0/2)', approved: 'freigegeben', rejected: 'abgelehnt' }[b.status]}
+                        : t({ pending: 'waiting for approval (0/2)', approved: 'approved', rejected: 'rejected' }[b.status])}
                     </span>
                     {b.items.length > 1 && <div className="muted small">{b.items.length} Änderungen</div>}
                   </td>

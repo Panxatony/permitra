@@ -8,6 +8,7 @@ Formats:
 
 Every line carries the SR ID as a comment (traceability/drift).
 """
+from ..messages import _
 from ..models import Rule, RuleAction, RuleStatus
 from ..validation import parse_network
 from .common import service_ports, split_protocols
@@ -79,7 +80,7 @@ def _comment(rule: Rule) -> str:
 def export_debian(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
     lines = [
         "#!/usr/sbin/nft -f",
-        f"# Permitra host firewall for {target_ip} (Debian/nftables)",
+        _("# Permitra host firewall for {target_ip} (Debian/nftables)", target_ip=target_ip),
         f"# Rules: {', '.join(r.rule_id for r, _ in matched)}",
         "flush ruleset",
         "table inet filter {",
@@ -110,7 +111,7 @@ def export_debian(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
 def export_redhat(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
     lines = [
         "#!/bin/bash",
-        f"# Permitra host firewall for {target_ip} (RHEL/firewalld, rich rules)",
+        _("# Permitra host firewall for {target_ip} (RHEL/firewalld, rich rules)", target_ip=target_ip),
         f"# Rules: {', '.join(r.rule_id for r, _ in matched)}",
         "set -e",
     ]
@@ -133,7 +134,7 @@ def export_redhat(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
 def export_sles(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
     lines = [
         "#!/bin/bash",
-        f"# Permitra host firewall for {target_ip} (SLES/iptables)",
+        _("# Permitra host firewall for {target_ip} (SLES/iptables)", target_ip=target_ip),
         "# Note: SLES 15 uses firewalld – use the RedHat export there.",
         f"# Rules: {', '.join(r.rule_id for r, _ in matched)}",
         "set -e",

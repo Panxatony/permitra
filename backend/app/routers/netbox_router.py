@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from .. import audit
 from ..auth import require_roles
 from ..database import get_db
+from ..messages import _
 from ..models import NetboxConfig, NetboxPrefix, Role, User, ZoneNetwork
 
 router = APIRouter(prefix="/api/netbox", tags=["netbox"])
@@ -22,7 +23,7 @@ def _config_out(cfg: NetboxConfig | None) -> dict:
 
 
 @router.get("/config")
-def get_config(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin))):
+def get_config(db: Session = Depends(get_db), _user: User = Depends(require_roles(Role.admin))):
     from ..netbox import get_config as _get
     return _config_out(_get(db))
 
@@ -51,16 +52,17 @@ def set_config(payload: dict, db: Session = Depends(get_db),
 
 
 @router.post("/test")
-def test(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin))):
+def test(db: Session = Depends(get_db), _user: User = Depends(require_roles(Role.admin))):
     from ..netbox import get_config as _get
     from ..netbox import test_connection
     cfg = _get(db)
     if not cfg or not cfg.url or not cfg.token_enc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "NetBox is not configured")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("NetBox is not configured"))
     try:
         return test_connection(cfg)
     except Exception as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"NetBox is not reachable: {exc}") from exc
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            _("NetBox is not reachable: {error}", error=exc)) from exc
 
 
 @router.post("/import")
@@ -70,16 +72,18 @@ def run_import(db: Session = Depends(get_db), admin: User = Depends(require_role
     try:
         result = import_prefixes(db)
         audit.record(db, "admin", "netbox.import", actor=admin.username,
-                     detail=f"{result.get('fetched', 0)} prefixes", source_ip=audit.client_ip(request))
+                     detail=_("{count} prefixes", count=result.get("fetched", 0)),
+                     source_ip=audit.client_ip(request))
         return result
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"NetBox import failed: {exc}") from exc
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            _("NetBox import failed: {error}", error=exc)) from exc
 
 
 @router.get("/prefixes")
-def list_prefixes(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin, Role.architect, Role.operations))):
+def list_prefixes(db: Session = Depends(get_db), _user: User = Depends(require_roles(Role.admin, Role.architect, Role.operations))):
     """Imported prefixes not yet adopted (preview before the zone assignment).
     CIDRs that already exist in the registry are flagged."""
     existing = {n.cidr for n in db.query(ZoneNetwork.cidr).all()}
@@ -112,5 +116,5 @@ def adopt(payload: dict, db: Session = Depends(get_db),
                       "source": "netbox"})
     if not items:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            "No prefixes with a zone selected")
+                            _("No prefixes with a zone selected"))
     return _create_batch(db, user, items, "NetBox import")

@@ -21,6 +21,7 @@ from .routers import (
     export_router,
     netbox_router,
     objects_router,
+    risk_router,
     rules_router,
     settings_router,
     users_router,
@@ -74,6 +75,7 @@ app.include_router(api_tokens_router.router)
 app.include_router(netbox_router.router)
 app.include_router(objects_router.router)
 app.include_router(epgs_router.router)
+app.include_router(risk_router.router)
 app.include_router(vrfs_router.router)
 
 
@@ -190,6 +192,22 @@ async def audit_checkpoint_job():
         await asyncio.sleep(int(os.environ.get("AUDIT_CHECKPOINT_INTERVAL", "3600")))
 
 
+def _load_instance_language() -> None:
+    """Applies the configured interface language to the message catalogue.
+
+    Messages are raised on every request, so the language is cached rather
+    than read from the database each time; settings_router refreshes it when
+    an administrator changes it."""
+    from . import messages
+    from .settings import get_setting
+
+    db = SessionLocal()
+    try:
+        messages.set_language(get_setting(db, "ui_language"))
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Startup and shutdown.
@@ -200,6 +218,7 @@ async def lifespan(_app: FastAPI):
     a reload does not leave orphaned jobs behind."""
     await asyncio.to_thread(run_migrations)
     await asyncio.to_thread(seed_users)
+    await asyncio.to_thread(_load_instance_language)
     tasks = [
         asyncio.create_task(expiry_job()),
         asyncio.create_task(siem_delivery_job()),

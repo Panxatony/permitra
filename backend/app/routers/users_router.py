@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from .. import audit, mailer
 from ..auth import hash_password, require_roles
 from ..database import get_db
+from ..messages import _
 from ..models import AuthToken, Passkey, Role, User, utcnow
 from ..schemas import UserCreate, UserOut, UserUpdate
 
@@ -48,13 +49,13 @@ def consume_token(db: Session, raw: str) -> tuple[User, str]:
             expires = expires.replace(tzinfo=timezone.utc)
     if not token or expires < utcnow():
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "The link is invalid or expired – request a new one")
+                            _("The link is invalid or expired – request a new one"))
     token.used = True
     return token.user, token.purpose
 
 
 @router.get("", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin))):
+def list_users(db: Session = Depends(get_db), _user: User = Depends(require_roles(Role.admin))):
     return db.query(User).order_by(User.username).all()
 
 
@@ -66,7 +67,7 @@ def create_user(
     admin: User = Depends(require_roles(Role.admin)),
 ):
     if db.query(User).filter(User.username == payload.username).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, "Username is already taken")
+        raise HTTPException(status.HTTP_409_CONFLICT, _("Username is already taken"))
     with_password = bool(payload.password)
     user = User(
         username=payload.username,
@@ -81,7 +82,8 @@ def create_user(
     db.commit()
     db.refresh(user)
     audit.record(db, "admin", "user.created", actor=admin.username, object=user.username,
-                 detail=f"Role {user.role.value}", source_ip=audit.client_ip(request))
+                 detail=_("Role {role}", role=user.role.value),
+                 source_ip=audit.client_ip(request))
 
     result = {"user": UserOut.model_validate(user).model_dump()}
     if not with_password:
@@ -90,8 +92,8 @@ def create_user(
         result.update({
             "activation_link": link,
             "mail_sent": mail_sent,
-            "detail": ("Activation mail sent" if mail_sent
-                       else "No mail delivery configured – pass on the activation link manually"),
+            "detail": (_("Activation mail sent") if mail_sent
+                       else _("No mail delivery configured – pass on the activation link manually")),
         })
     return result
 
@@ -106,11 +108,11 @@ def update_user(
 ):
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("User not found"))
     if username == admin.username and payload.role not in (None, Role.admin):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot remove your own admin role")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("You cannot remove your own admin role"))
     if username == admin.username and payload.is_active is False:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot deactivate your own account")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("You cannot deactivate your own account"))
     for field in ("full_name", "email", "role", "is_active"):
         value = getattr(payload, field)
         if value is not None:
@@ -136,19 +138,19 @@ def update_user(
 def send_reset(
     username: str,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.admin)),
+    _user: User = Depends(require_roles(Role.admin)),
 ):
     """An admin triggers a password reset (e.g. when the user has lost access)."""
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("User not found"))
     link = issue_token(db, user, "reset")
     mail_sent = mailer.reset_mail(user, link)
     return {
         "reset_link": link,
         "mail_sent": mail_sent,
-        "detail": ("Reset mail sent" if mail_sent
-                   else "No mail delivery configured – pass on the reset link manually"),
+        "detail": (_("Reset mail sent") if mail_sent
+                   else _("No mail delivery configured – pass on the reset link manually")),
     }
 
 
@@ -160,10 +162,10 @@ def delete_user(
     admin: User = Depends(require_roles(Role.admin)),
 ):
     if username == admin.username:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot delete your own account")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("You cannot delete your own account"))
     user = db.query(User).filter(User.username == username).first()
     if not user:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("User not found"))
     db.query(AuthToken).filter(AuthToken.user_id == user.id).delete()
     db.query(Passkey).filter(Passkey.user_id == user.id).delete()
     db.delete(user)

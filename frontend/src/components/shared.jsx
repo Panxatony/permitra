@@ -4,6 +4,7 @@ import { api } from '../api'
 
 /* Simple overlay: closes on backdrop click or Escape */
 export function Modal({ title, onClose, children }) {
+  const { t } = useLang()
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', onKey)
@@ -14,7 +15,7 @@ export function Modal({ title, onClose, children }) {
       <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="btn btn-ghost" onClick={onClose} aria-label="Schließen">✕</button>
+          <button className="btn btn-ghost" onClick={onClose} aria-label={t('Close')}>✕</button>
         </div>
         {children}
       </div>

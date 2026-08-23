@@ -18,6 +18,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.orm import Session
 
 from .auth import SECRET_KEY
+from .messages import _
 from .models import NetboxConfig, NetboxPrefix, utcnow
 
 DEFAULT_STATUSES = ("active", "reserved")
@@ -84,7 +85,7 @@ def import_prefixes(db: Session) -> dict:
     not adopted yet are removed."""
     cfg = get_config(db)
     if not cfg or not cfg.url or not cfg.token_enc:
-        raise ValueError("NetBox is not configured")
+        raise ValueError(_("NetBox is not configured"))
 
     seen_netbox_ids: set[int] = set()
     fetched = 0

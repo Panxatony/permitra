@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from .. import audit
 from ..auth import get_current_user, require_roles
 from ..database import get_db
+from ..messages import _
 from ..models import Role, User
 from ..settings import KNOWN_SETTINGS, all_settings, get_setting, set_setting
 
@@ -24,7 +25,7 @@ def read_public_settings(db: Session = Depends(get_db)):
 
 
 @router.get("")
-def read_settings(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def read_settings(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return all_settings(db)
 
 
@@ -37,9 +38,15 @@ def update_settings(
 ):
     for key, value in payload.items():
         if key not in KNOWN_SETTINGS:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unknown setting '{key}'")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                _("Unknown setting '{key}'", key=key))
         try:
             set_setting(db, key, str(value))
+            if key == "ui_language":
+                # The catalogue caches the language; refresh it right away so
+                # the very next message is already in the new language.
+                from .. import messages
+                messages.set_language(str(value))
             audit.record(db, "admin", "setting.changed", actor=admin.username, object=key, detail=str(value), source_ip=audit.client_ip(request))
         except ValueError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc

@@ -81,8 +81,8 @@ function PathFlow({ result, t }) {
             {result.components.some((c) => !c.covered)
               ? ` – auf ${result.components.filter((c) => !c.covered).map((c) => c.name).join(', ')} fehlt eine freigegebene Regel`
               : result.components.length
-                ? ' – kein gemeinsamer Dienst über alle Komponenten freigegeben'
-                : ' – keine zu passierenden Komponenten ermittelbar'}
+                ? t(' – no common service is permitted across all components')
+                : t(' – no components to traverse could be determined')}
           </>
         )}
       </div>

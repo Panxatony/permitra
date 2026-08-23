@@ -164,7 +164,7 @@ export default function ObjectCatalog() {
     try {
       if (addrEditId) {
         const res = await api.updateAddressObject(addrEditId, addrForm)
-        if (res.description?.includes('Regel(n) aktualisiert')) {
+        if (res.description?.includes(t('rule(s) updated'))) {
           setNotice(`IP-Änderung übernommen – ${res.description.match(/\[(.*)\]/)?.[1] || ''}.`)
         }
       } else {
@@ -247,7 +247,7 @@ export default function ObjectCatalog() {
                 onChange={(e) => setAddrForm({ ...addrForm, description: e.target.value })} /></label>
             </div>
             <div className="actions">
-              <button className="btn btn-primary" type="submit">{addrEditId ? 'Speichern (IP wird propagiert)' : 'Anlegen'}</button>
+              <button className="btn btn-primary" type="submit">{addrEditId ? t('Save (IP is propagated)') : t('Create')}</button>
               {addrEditId && <button type="button" className="btn btn-ghost"
                 onClick={() => { setAddrEditId(null); setAddrForm(EMPTY_ADDR) }}>Abbrechen</button>}
             </div>

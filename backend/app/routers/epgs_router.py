@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_roles
 from ..component_resolution import normalize_ip
 from ..database import get_db
+from ..messages import _
 from ..models import AddressEpgMap, Epg, Role, User
 from ..validation import validate_ip_entry
 from ..vrf import get_vrf
@@ -54,7 +55,7 @@ def map_out(m: AddressEpgMap) -> EpgMapOut:
 
 
 @router.get("", response_model=list[EpgOut])
-def list_epgs(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_epgs(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return db.query(Epg).order_by(Epg.name).all()
 
 
@@ -62,10 +63,11 @@ def list_epgs(db: Session = Depends(get_db), _: User = Depends(get_current_user)
 def create_epg(
     payload: EpgIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     if db.query(Epg).filter(Epg.name.ilike(payload.name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"EPG '{payload.name}' already exists")
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("EPG '{name}' already exists", name=payload.name))
     epg = Epg(**payload.model_dump())
     db.add(epg)
     db.commit()
@@ -77,20 +79,21 @@ def create_epg(
 def delete_epg(
     epg_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     epg = db.get(Epg, epg_id)
     if not epg:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "EPG not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("EPG not found"))
     used = db.query(AddressEpgMap).filter(AddressEpgMap.epg_id == epg_id).count()
     if used:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"EPG is used by {used} address mapping(s)")
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("EPG is used by {used} address mapping(s)", used=used))
     db.delete(epg)
     db.commit()
 
 
 @router.get("/address-map", response_model=list[EpgMapOut])
-def list_map(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_map(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return [map_out(m) for m in db.query(AddressEpgMap).order_by(AddressEpgMap.ip).all()]
 
 
@@ -101,10 +104,11 @@ def upsert_map(
     user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     if not db.get(Epg, payload.epg_id):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "EPG not found")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("EPG not found"))
     norm = normalize_ip(payload.ip)
     if norm is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Invalid address: '{payload.ip}'")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Invalid address: '{ip}'", ip=payload.ip))
     vrf = get_vrf(db, payload.vrf or None)
     mapping = db.query(AddressEpgMap).filter(AddressEpgMap.ip == norm,
                                              AddressEpgMap.vrf_id == vrf.id).first()
@@ -122,10 +126,10 @@ def upsert_map(
 def delete_map(
     mapping_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     mapping = db.get(AddressEpgMap, mapping_id)
     if not mapping:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mapping not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Mapping not found"))
     db.delete(mapping)
     db.commit()

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_roles
 from ..component_resolution import normalize_ip
 from ..database import get_db
+from ..messages import _
 from ..models import AddressComponentMap, Role, SecurityComponent, User
 from ..schemas import AddressMapCreate, AddressMapOut
 from ..vrf import get_vrf
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/api/address-map", tags=["address-map"])
 
 
 @router.get("", response_model=list[AddressMapOut])
-def list_mappings(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_mappings(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return db.query(AddressComponentMap).order_by(AddressComponentMap.ip).all()
 
 
@@ -30,11 +31,13 @@ def upsert_mapping(
     }
     missing = set(payload.component_ids) - known
     if missing:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unknown component(s): {sorted(missing)}")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Unknown component(s): {components}", components=sorted(missing)))
 
     norm = normalize_ip(payload.ip)
     if norm is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Invalid address: '{payload.ip}'")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Invalid address: '{ip}'", ip=payload.ip))
     vrf = get_vrf(db, getattr(payload, "vrf", "") or None)
     mapping = db.query(AddressComponentMap).filter(
         AddressComponentMap.ip == norm, AddressComponentMap.vrf_id == vrf.id).first()
@@ -52,10 +55,10 @@ def upsert_mapping(
 def delete_mapping(
     mapping_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     mapping = db.get(AddressComponentMap, mapping_id)
     if not mapping:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mapping not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Mapping not found"))
     db.delete(mapping)
     db.commit()

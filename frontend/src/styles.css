@@ -52,10 +52,10 @@
   /* Diagrams (zone plan, topology) */
   --diagram-fill: #eef1f6;
   --diagram-stroke: #9aa7b8;
-  --band-intern-fill: #eef7f0;
-  --band-intern-stroke: #bfdcc8;
-  --band-extern-fill: #fdf0ef;
-  --band-extern-stroke: #edc6c2;
+  --band-internal-fill: #eef7f0;
+  --band-internal-stroke: #bfdcc8;
+  --band-external-fill: #fdf0ef;
+  --band-external-stroke: #edc6c2;
   --band-pap-fill: #fff8e4;
   --band-pap-stroke: #ecd9a2;
 
@@ -118,10 +118,10 @@
 
     --diagram-fill: #222b38;
     --diagram-stroke: #55637a;
-    --band-intern-fill: #16261c;
-    --band-intern-stroke: #2f4a37;
-    --band-extern-fill: #2a1a19;
-    --band-extern-stroke: #513331;
+    --band-internal-fill: #16261c;
+    --band-internal-stroke: #2f4a37;
+    --band-external-fill: #2a1a19;
+    --band-external-stroke: #513331;
     --band-pap-fill: #2b2413;
     --band-pap-stroke: #524526;
   }
@@ -173,10 +173,10 @@
 
   --diagram-fill: #222b38;
   --diagram-stroke: #55637a;
-  --band-intern-fill: #16261c;
-  --band-intern-stroke: #2f4a37;
-  --band-extern-fill: #2a1a19;
-  --band-extern-stroke: #513331;
+  --band-internal-fill: #16261c;
+  --band-internal-stroke: #2f4a37;
+  --band-external-fill: #2a1a19;
+  --band-external-stroke: #513331;
   --band-pap-fill: #2b2413;
   --band-pap-stroke: #524526;
 }
@@ -302,6 +302,17 @@ fieldset > legend + * { margin-top: 0; }
   padding: .6rem .9rem; border-radius: 8px; margin-bottom: 1rem;
 }
 .warnbox ul { margin: .3rem 0 0 1.2rem; }
+
+/* Reference material opened inside an alert (the risk criteria behind a
+   finding). It gets its own neutral surface: inheriting the alert's colour
+   would paint a long reference table in warning red, and the lookup would
+   outweigh the finding it explains. */
+.inset-reference {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: .8rem; margin-top: .6rem;
+  max-height: 22rem; overflow-y: auto;
+}
 
 /* List page */
 .page-head { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 1rem; }
@@ -433,9 +444,9 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .attach-select { display: flex; flex-direction: column; gap: .15rem; }
 .attach-select .checkbox { margin: 0; }
 .pap-band { stroke-width: 1; }
-.band-extern { fill: var(--band-extern-fill); stroke: var(--band-extern-stroke); }
+.band-external { fill: var(--band-external-fill); stroke: var(--band-external-stroke); }
 .band-pap { fill: var(--band-pap-fill); stroke: var(--band-pap-stroke); }
-.band-intern { fill: var(--band-intern-fill); stroke: var(--band-intern-stroke); }
+.band-internal { fill: var(--band-internal-fill); stroke: var(--band-internal-stroke); }
 .pap-band-label { font-size: 12px; font-weight: 700; fill: var(--muted); }
 .zone-overview { margin-bottom: 1rem; }
 .zone-reach { max-width: 1000px; }
@@ -669,8 +680,8 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
     --purple-bg: #f3e3fa; --purple-fg: #8036a8;
     --neutral-bg: #e4e8ee; --neutral-fg: #46505c; --highlight: #fff3bf;
     --diagram-fill: #eef1f6; --diagram-stroke: #9aa7b8;
-    --band-intern-fill: #eef7f0; --band-intern-stroke: #bfdcc8;
-    --band-extern-fill: #fdf0ef; --band-extern-stroke: #edc6c2;
+    --band-internal-fill: #eef7f0; --band-internal-stroke: #bfdcc8;
+    --band-external-fill: #fdf0ef; --band-external-stroke: #edc6c2;
     --band-pap-fill: #fff8e4; --band-pap-stroke: #ecd9a2;
   }
   body { background: #ffffff; }

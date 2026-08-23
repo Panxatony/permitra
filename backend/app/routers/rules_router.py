@@ -12,6 +12,7 @@ from ..database import get_db
 from ..domain_values import IMPL_STATUSES
 from ..expiry import expiring_rules, invalid_validity_rules
 from ..exporters.generic import rule_to_dict
+from ..messages import _
 from ..models import (
     AddressComponentMap,
     Comment,
@@ -73,7 +74,7 @@ def get_rule_or_404(db: Session, rule_id: str, include_deleted: bool = False) ->
     q = db.query(Rule) if include_deleted else active_rules(db)
     rule = q.filter(Rule.rule_id == rule_id).first()
     if not rule:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Rule {rule_id} not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Rule {rule_id} not found", rule_id=rule_id))
     return rule
 
 
@@ -92,7 +93,7 @@ def resolve_components(db: Session, component_ids: list[int]) -> list[SecurityCo
     if missing:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"Unknown component(s): {sorted(missing)}",
+            _("Unknown component(s): {components}", components=sorted(missing)),
         )
     return components
 
@@ -108,16 +109,18 @@ def derive_zones(db: Session, payload, vrf_id: int):
 
     problems = []
     zones = {}
-    for label, field in (("Source", "source"), ("Destination", "destination")):
+    for label, field in ((_("Source"), "source"), (_("Destination"), "destination")):
         zone, unassigned, hits = resolve_zone_for_entries(db, entries_of(getattr(payload, field)), vrf_id)
         if unassigned:
             problems.append(
-                f"{label}: network(s) not assigned to any security zone: {', '.join(unassigned)} "
-                "– create the network on the Networks page first and assign it to a "
-                "security zone"
+                _("{label}: network(s) not assigned to any security zone: {networks} "
+                  "– create the network on the Networks page first and assign it to a "
+                  "security zone",
+                  label=label, networks=", ".join(unassigned))
             )
         elif len(hits) > 1:
-            problems.append(f"{label} spans several zones ({', '.join(sorted(hits))}) – split the rule")
+            problems.append(_("{label} spans several zones ({zones}) – split the rule",
+                              label=label, zones=", ".join(sorted(hits))))
         zones[field] = zone
     if problems:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "; ".join(problems))
@@ -142,14 +145,14 @@ def determine_components(db: Session, payload, vrf_id: int) -> list[SecurityComp
     if unknown:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "No component mapping is defined yet for these addresses: "
+            _("No component mapping is defined yet for these addresses: ")
             + ", ".join(u["ip"] for u in unknown)
-            + ". Define it once via the address mapping.",
+            + _(". Define it once via the address mapping."),
         )
     if not components:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "No enforcing components could be determined",
+            _("No enforcing components could be determined"),
         )
     return components
 
@@ -165,8 +168,9 @@ def enforce_bsi_firewall(source_zone: str, destination_zone: str, components: li
     if components and not any(c.type.value != "aci" for c in components):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "A zone transition requires a firewall (BSI definition): Cisco ACI alone is not "
-            f"sufficient for {src} → {dst}. Assign a firewall cluster.",
+            _("A zone transition requires a firewall (BSI definition): Cisco ACI alone is not "
+              "sufficient for {src} → {dst}. Assign a firewall cluster.",
+              src=src, dst=dst),
         )
 
 
@@ -176,7 +180,7 @@ def enforce_zone_matrix(db: Session, source_zone: str, destination_zone: str, pl
     if not result.allowed:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Zone matrix: " + "; ".join(result.messages),
+            _("Zone matrix: ") + "; ".join(result.messages),
         )
 
 
@@ -186,15 +190,15 @@ def enforce_required_fields(db: Session, payload):
 
     missing = []
     if get_setting(db, "require_justification") == "yes" and not (payload.justification or "").strip():
-        missing.append("Justification")
+        missing.append(_("Justification"))
     if get_setting(db, "require_requestor") == "yes" and not (payload.requestor or "").strip():
-        missing.append("Requestor (responsible person)")
+        missing.append(_("Requestor (responsible person)"))
     if get_setting(db, "require_valid_until") == "yes" and not (payload.valid_until or "").strip():
-        missing.append("Valid until (expiry date)")
+        missing.append(_("Valid until (expiry date)"))
     if missing:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "Mandatory fields are missing: " + ", ".join(missing),
+            _("Mandatory fields are missing: ") + ", ".join(missing),
         )
 
 
@@ -229,7 +233,7 @@ def list_rules(
     vrf: str | None = Query(None, description="Environment/VRF (name); empty = all"),
     updated_since: str | None = Query(None, description="ISO timestamp; only rules changed since then (polling)"),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     query = db.query(Rule).filter(Rule.deleted_at.is_(None))
     if vrf:
@@ -253,7 +257,7 @@ def list_rules(
             query = query.filter(Rule.updated_at >= _dt.fromisoformat(updated_since))
         except ValueError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                "updated_since must be an ISO timestamp") from exc
+                                _("updated_since must be an ISO timestamp")) from exc
     if application:
         query = query.filter(Rule.application.ilike(f"%{application}%"))
     if app_id:
@@ -347,7 +351,7 @@ def ip_search(
     q: str = Query(..., min_length=1, description="IP, network (CIDR) or hostname fragment"),
     vrf: str | None = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     """Every rule in which the IP/network appears as source (outbound) or destination (inbound)."""
     net = parse_network(q.strip())
@@ -416,7 +420,7 @@ def path_search(
     dst: str = Query(..., min_length=1, description="Destination IP/network/hostname"),
     vrf: str | None = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     """Every rule covering traffic from src to dst (source AND destination must match)."""
     src_net, dst_net = parse_network(src.strip()), parse_network(dst.strip())
@@ -456,7 +460,7 @@ def path_search(
 
 
 @router.get("/next-id")
-def get_next_id(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_next_id(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return {"rule_id": next_rule_id(db)}
 
 
@@ -466,13 +470,14 @@ def path_analysis(
     dst: str = Query(..., description="Destination IP or network"),
     vrf: str | None = Query(None),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     """Visual path analysis: is communication src -> dst possible, which components
     does it traverse, which rule permits it there, and for which services?"""
     src_net, dst_net = parse_network(src.strip()), parse_network(dst.strip())
     if (src_net is None and src.strip().lower() != "any") or (dst_net is None and dst.strip().lower() != "any"):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Source and destination must be an IP/network or 'any'")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Source and destination must be an IP/network or 'any'"))
 
     # Components to be traversed, taken from the address mapping (in the VRF context)
     vrf_obj = get_vrf(db, vrf) if vrf else get_vrf(db)
@@ -611,7 +616,7 @@ def path_analysis(
 def get_expiring(
     days: int = Query(30, ge=0, le=365),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     """Expired and soon-to-expire approved rules (recertification)."""
     expired, expiring = expiring_rules(db, days)
@@ -623,7 +628,7 @@ def get_expiring(
 def resolve_components_endpoint(
     payload: ResolveRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     """Determine the components from source/destination; report addresses without a mapping."""
     src_entries = [e.model_dump() for e in payload.source]
@@ -632,9 +637,10 @@ def resolve_components_endpoint(
     zone_issues = []
     src_zone, src_un, src_hits = resolve_zone_for_entries(db, src_entries, vrf_obj.id)
     dst_zone, dst_un, dst_hits = resolve_zone_for_entries(db, dst_entries, vrf_obj.id)
-    for label, un, hits in (("Source", src_un, src_hits), ("Destination", dst_un, dst_hits)):
+    for label, un, hits in ((_("Source"), src_un, src_hits), (_("Destination"), dst_un, dst_hits)):
         if not un and len(hits) > 1:
-            zone_issues.append(f"{label} spans several zones: {', '.join(sorted(hits))}")
+            zone_issues.append(_("{label} spans several zones: {zones}",
+                                 label=label, zones=", ".join(sorted(hits))))
     # Addresses from unknown networks: create the network and assign its zone first –
     # the component mapping is not yet requested for them
     unassigned = list(dict.fromkeys(src_un + dst_un))
@@ -657,7 +663,7 @@ def create_rule(
     # On concurrent creation the unique constraint protects us; then try a new number.
     vrf = get_vrf(db, payload.vrf or None)
     enforce_required_fields(db, payload)
-    for _ in range(5):
+    for _attempt in range(5):
         derive_zones(db, payload, vrf.id)
         components = determine_components(db, payload, vrf.id)
         enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
@@ -674,15 +680,15 @@ def create_rule(
         except IntegrityError:
             db.rollback()
             continue
-        add_version(db, rule, user, "Rule created")
+        add_version(db, rule, user, _("Rule created"))
         db.commit()
         db.refresh(rule)
         return rule
-    raise HTTPException(status.HTTP_409_CONFLICT, "Assigning a rule ID failed, try again")
+    raise HTTPException(status.HTTP_409_CONFLICT, _("Assigning a rule ID failed, try again"))
 
 
 @router.get("/{rule_id}", response_model=RuleDetail)
-def get_rule(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def get_rule(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return get_rule_or_404(db, rule_id)
 
 
@@ -717,7 +723,7 @@ def update_rule(
     # A substantive change to an approved rule resets the review
     if rule.status in (RuleStatus.approved, RuleStatus.rejected):
         rule.status = RuleStatus.draft
-    add_version(db, rule, user, payload.change_note or "Rule changed")
+    add_version(db, rule, user, payload.change_note or _("Rule changed"))
     db.commit()
     db.refresh(rule)
     return rule
@@ -742,7 +748,7 @@ def delete_rule(
     rule.deleted_at = _now()
     db.commit()
     audit.record(db, "rule", "rule.deleted", actor=user.username, object=rule.rule_id,
-                 detail=f"Rule deleted (soft delete): {rule.name}",
+                 detail=_("Rule deleted (soft delete): {name}", name=rule.name),
                  source_ip=(request.client.host if request and request.client else ""))
 
 
@@ -767,7 +773,7 @@ def restore_version(
     )
     if not entry or not isinstance(entry.snapshot, dict) or "source" not in entry.snapshot:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
-                            f"Version {version} has no restorable snapshot")
+                            _("Version {version} has no restorable snapshot", version=version))
     snap = entry.snapshot
 
     # Validate the restored content just like a normal change
@@ -800,7 +806,7 @@ def restore_version(
     rule.status = RuleStatus.draft  # a rollback goes through the normal review
     rule.removal_reason = ""        # checks above passed – removal proposal is moot
     rule.version += 1
-    add_version(db, rule, user, f"Rolled back to version {version}")
+    add_version(db, rule, user, _("Rolled back to version {version}", version=version))
     db.commit()
     db.refresh(rule)
     return rule
@@ -814,10 +820,11 @@ def submit_for_review(
 ):
     rule = get_rule_or_404(db, rule_id)
     if rule.status not in (RuleStatus.draft, RuleStatus.rejected):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"The rule is in status '{rule.status.value}'")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            _("The rule is in status '{status}'", status=_(rule.status.value)))
     rule.status = RuleStatus.in_review
     rule.version += 1
-    add_version(db, rule, user, "Submitted for review")
+    add_version(db, rule, user, _("Submitted for review"))
     db.commit()
     db.refresh(rule)
     from .. import change_management, notifications
@@ -833,7 +840,7 @@ def submit_for_review(
 def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus, note: str):
     rule = get_rule_or_404(db, rule_id)
     if new_status in (RuleStatus.approved, RuleStatus.rejected) and rule.status != RuleStatus.in_review:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The rule is not in review")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("The rule is not in review"))
     # Four-eyes principle: whoever submitted or created the rule must not approve it
     # themselves (admins included) – BSI separation of duties
     if new_status == RuleStatus.approved:
@@ -842,8 +849,8 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
         if user.username in {submitter, rule.created_by}:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                "Separation of duties: you cannot approve a rule you created or "
-                "submitted yourself",
+                _("Separation of duties: you cannot approve a rule you created or "
+                  "submitted yourself"),
             )
     # If the rule's zone relation is set to block (e.g. after a change to the zone
     # matrix), "approve" means approving its removal: the rule is deactivated and
@@ -864,10 +871,12 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
                    if (rule.impl_status or {}).get(c.name) != "deactivated"},
             }
             rule.version += 1
-            reason = rule.removal_reason or (
-                f"The zone relation {rule.source_zone} → {rule.destination_zone} is Block")
-            removal_note = (f"Removal approved: {reason} – "
-                            f"remove the rule on the components ('to remove')")
+            reason = rule.removal_reason or _(
+                "The zone relation {from_zone} → {to_zone} is Block",
+                from_zone=rule.source_zone, to_zone=rule.destination_zone)
+            removal_note = _("Removal approved: {reason} – "
+                             "remove the rule on the components ('to remove')",
+                             reason=reason)
             rule.removal_reason = ""   # the proposal has been decided
             add_version(db, rule, user, removal_note)
             db.add(Comment(rule_pk=rule.id, author=user.username,
@@ -883,7 +892,7 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
             )
             notifications.rule_decided(db, rule, True, user.username, decision.comment)
             notifications.rule_implementation_pending(
-                db, rule, "Removal approved – remove the rule on the components")
+                db, rule, _("Removal approved – remove the rule on the components"))
             return rule
     rule.status = new_status
     if new_status == RuleStatus.approved:
@@ -915,7 +924,7 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
                                    user.username, decision.comment)
     if new_status == RuleStatus.approved and impl_pending(rule):
         notifications.rule_implementation_pending(
-            db, rule, "Rule approved – it has to be implemented on the components")
+            db, rule, _("Rule approved – it has to be implemented on the components"))
     return rule
 
 
@@ -926,7 +935,7 @@ def approve(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.change_approver)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.approved, "Rule approved")
+    return _decide(db, rule_id, user, decision, RuleStatus.approved, _("Rule approved"))
 
 
 @router.post("/{rule_id}/reject", response_model=RuleOut)
@@ -936,7 +945,7 @@ def reject(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.change_approver)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.rejected, "Rule rejected")
+    return _decide(db, rule_id, user, decision, RuleStatus.rejected, _("Rule rejected"))
 
 
 @router.post("/{rule_id}/deactivate", response_model=RuleOut)
@@ -946,7 +955,7 @@ def deactivate(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.operations, Role.architect)),
 ):
-    return _decide(db, rule_id, user, decision, RuleStatus.deactivated, "Rule deactivated")
+    return _decide(db, rule_id, user, decision, RuleStatus.deactivated, _("Rule deactivated"))
 
 
 @router.post("/{rule_id}/extend", response_model=RuleOut)
@@ -963,17 +972,20 @@ def extend_validity(
     if rule.status != RuleStatus.approved:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Only approved rules can be recertified – submit expired or deactivated ones again",
+            _("Only approved rules can be recertified – submit expired or deactivated ones again"),
         )
     try:
         new_date = date.fromisoformat(payload.valid_until)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Invalid date (expected YYYY-MM-DD)") from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Invalid date (expected YYYY-MM-DD)")) from exc
     if new_date <= date.today():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The new valid-until date must be in the future")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("The new valid-until date must be in the future"))
     rule.valid_until = new_date.isoformat()
     rule.version += 1
-    add_version(db, rule, user, f"Recertified: validity extended until {rule.valid_until}")
+    add_version(db, rule, user, _("Recertified: validity extended until {valid_until}",
+                                  valid_until=rule.valid_until))
     if payload.comment:
         db.add(Comment(rule_pk=rule.id, author=user.username, text=payload.comment))
     db.commit()
@@ -996,14 +1008,16 @@ def set_impl_status(
     for name, value in impl_status.items():
         if name not in component_names:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                f"Component '{name}' does not belong to rule {rule_id}")
+                                _("Component '{name}' does not belong to rule {rule_id}",
+                                  name=name, rule_id=rule_id))
         if value not in allowed_status:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                f"Invalid implementation status '{value}' "
-                                f"(allowed: {', '.join(sorted(allowed_status))})")
+                                _("Invalid implementation status '{value}' "
+                                  "(allowed: {allowed})",
+                                  value=value, allowed=", ".join(sorted(allowed_status))))
     rule.impl_status = {**(rule.impl_status or {}), **impl_status}
     rule.version += 1
-    add_version(db, rule, user, f"Implementation status: {impl_status}")
+    add_version(db, rule, user, _("Implementation status: {impl_status}", impl_status=impl_status))
     db.commit()
     db.refresh(rule)
     return rule
@@ -1012,7 +1026,7 @@ def set_impl_status(
 # --- Versions, comments, conflicts -------------------------------------------
 
 @router.get("/{rule_id}/implementation")
-def implementation(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def implementation(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     """Show, for each assigned component, how the rule is implemented there:
     Juniper set commands, Check Point mgmt_cli, or an ACI contract (with EPG resolution)."""
     from ..exporters import aci, checkpoint, juniper
@@ -1051,7 +1065,7 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _: User = Depend
                 }
             else:
                 entry["aci"] = None
-                entry["warning"] = (
+                entry["warning"] = _(
                     "No EPG mapping maintained for source/destination – the export falls back "
                     "to a single contract. Maintain it on the Objects page under ACI EPGs."
                 )
@@ -1059,13 +1073,14 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _: User = Depend
     if rule.status.value != "approved":
         for entry in results:
             entry.setdefault(
-                "note", f"The rule is in status '{rule.status.value}' – the preview shows the future implementation"
+                "note", _("The rule is in status '{status}' – the preview shows the future implementation",
+                          status=_(rule.status.value))
             )
     return {"rule_id": rule.rule_id, "implementations": results}
 
 
 @router.get("/{rule_id}/versions", response_model=list[RuleVersionOut])
-def versions(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def versions(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return get_rule_or_404(db, rule_id).versions
 
 
@@ -1085,7 +1100,7 @@ def add_comment(
 
 
 @router.get("/{rule_id}/conflicts", response_model=list[ConflictOut])
-def conflicts(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def conflicts(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     rule = get_rule_or_404(db, rule_id)
     others = active_rules(db).filter(Rule.status != RuleStatus.deactivated,
                                      Rule.vrf_id == rule.vrf_id).all()
@@ -1107,7 +1122,7 @@ def conflicts(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get
 
 
 @router.get("/{rule_id}/risk")
-def rule_risk(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def rule_risk(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     """Risk analysis of a rule (any-to-any, overly broad networks, risky services;
     severity weighted by the protection level of the destination zone)."""
     from ..risk import assess_rule
@@ -1117,7 +1132,7 @@ def rule_risk(rule_id: str, db: Session = Depends(get_db), _: User = Depends(get
 
 @router.post("/risk/assess")
 def risk_assess(payload: ResolveRequest, db: Session = Depends(get_db),
-                _: User = Depends(get_current_user)):
+                _user: User = Depends(get_current_user)):
     """Live risk assessment for the rule form (without a stored rule)."""
     from types import SimpleNamespace
 

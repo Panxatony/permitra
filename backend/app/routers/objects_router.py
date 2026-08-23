@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_roles
 from ..database import get_db
+from ..messages import _
 from ..models import AddressObject, Role, RuleVersion, ServiceObject, User, active_rules
 from ..validation import validate_ip_entry, validate_service
 
@@ -73,7 +74,8 @@ def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: 
                 RuleVersion(
                     rule_pk=rule.id, version=rule.version,
                     snapshot={"auto": "address-object-update"},
-                    change_note=f"Address object '{obj.name}': IP {old_ip} → {obj.ip}",
+                    change_note=_("Address object '{name}': IP {old_ip} → {new_ip}",
+                                  name=obj.name, old_ip=old_ip, new_ip=obj.ip),
                     changed_by=username,
                 )
             )
@@ -84,7 +86,7 @@ def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: 
 # --- Address objects ---------------------------------------------------------
 
 @router.get("/addresses", response_model=list[AddressObjectOut])
-def list_addresses(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_addresses(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return db.query(AddressObject).order_by(AddressObject.name).all()
 
 
@@ -92,10 +94,11 @@ def list_addresses(db: Session = Depends(get_db), _: User = Depends(get_current_
 def create_address(
     payload: AddressObjectIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     if db.query(AddressObject).filter(AddressObject.name.ilike(payload.name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Address object '{payload.name}' already exists")
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("Address object '{name}' already exists", name=payload.name))
     obj = AddressObject(**payload.model_dump())
     db.add(obj)
     db.commit()
@@ -112,7 +115,7 @@ def update_address(
 ):
     obj = db.get(AddressObject, object_id)
     if not obj:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Address object not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Address object not found"))
     old_ip = obj.ip
     obj.name = payload.name
     obj.ip = payload.ip
@@ -123,7 +126,8 @@ def update_address(
     # Report the number of updated rules in the description line, standing in for a header
     out = AddressObjectOut.model_validate(obj)
     if changed:
-        out.description = f"{obj.description} [{changed} rule(s) updated]".strip()
+        out.description = _("{description} [{changed} rule(s) updated]",
+                            description=obj.description, changed=changed).strip()
     return out
 
 
@@ -131,11 +135,11 @@ def update_address(
 def delete_address(
     object_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     obj = db.get(AddressObject, object_id)
     if not obj:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Address object not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Address object not found"))
     db.delete(obj)
     db.commit()
 
@@ -143,7 +147,7 @@ def delete_address(
 # --- Service objects ---------------------------------------------------------
 
 @router.get("/services", response_model=list[ServiceObjectOut])
-def list_services(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_services(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return db.query(ServiceObject).order_by(ServiceObject.name).all()
 
 
@@ -151,14 +155,15 @@ def list_services(db: Session = Depends(get_db), _: User = Depends(get_current_u
 def create_service(
     payload: ServiceObjectIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     try:
         validate_service(payload.protocol, payload.port)
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     if db.query(ServiceObject).filter(ServiceObject.name.ilike(payload.name)).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Service object '{payload.name}' already exists")
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("Service object '{name}' already exists", name=payload.name))
     obj = ServiceObject(**payload.model_dump())
     db.add(obj)
     db.commit()
@@ -170,10 +175,10 @@ def create_service(
 def delete_service(
     object_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect, Role.operations)),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
 ):
     obj = db.get(ServiceObject, object_id)
     if not obj:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Service object not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Service object not found"))
     db.delete(obj)
     db.commit()

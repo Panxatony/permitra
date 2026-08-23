@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, getUser } from '../api'
+import RiskCriteria from '../components/RiskCriteria'
 import { useLang } from '../i18n'
 
 const ROLES = ['architect', 'operations', 'change_approver', 'admin']
@@ -245,6 +246,13 @@ export default function Admin() {
         <p className="muted small" style={{ marginTop: '.4rem' }}>
           {t('Imported prefixes are assigned to a zone on the Networks page (approval by two change approvers).')}
         </p>
+      </section>
+
+      {/* The yardstick behind every risk hint: the criteria live in their own
+          component because an approver has to be able to look them up too. */}
+      <section className="card" style={{ marginTop: '1rem' }}>
+        <h3>{t('Risk criteria')} <span className="muted small">{t('(basis of the automatic assessment)')}</span></h3>
+        <RiskCriteria editable={me?.role === 'admin'} />
       </section>
 
       <section className="card" style={{ marginTop: '1rem' }}>

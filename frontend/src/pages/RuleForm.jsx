@@ -174,7 +174,7 @@ export default function RuleForm() {
       <span className="addr-label">{label}</span>
       {form[field].map((e, i) => (
         <div key={i} className="service-row">
-          <input placeholder='IP oder Netz, z.B. 10.10.30.5 oder 10.10.20.0/24 oder "any"'
+          <input placeholder={t('IP or network, e.g. 10.10.30.5 or 10.10.20.0/24 or "any"')}
             value={e.ip} onChange={(ev) => setEntry(field, i, 'ip', ev.target.value)} />
           <input placeholder="Alias (Hostname / Netzwerkname, optional)"
             value={e.alias} onChange={(ev) => setEntry(field, i, 'alias', ev.target.value)} />
@@ -267,7 +267,7 @@ export default function RuleForm() {
           {resolved.components.length
             ? resolved.components.map((c) => (
                 <span key={c.id} className={`badge platform-${c.type}`}
-                  title={{ juniper: 'Firewall-Regel (Juniper)', checkpoint: 'Firewall-Regel (Check Point)', aci: 'ACI Contract' }[c.type]}>
+                  title={t({ juniper: 'Firewall rule (Juniper)', checkpoint: 'Firewall rule (Check Point)', aci: 'ACI Contract' }[c.type])}>
                   {c.name}
                 </span>
               ))
@@ -333,8 +333,8 @@ export default function RuleForm() {
               ? zoneCheck.policy === 'allow_only'
                 ? `✓ Zonen-Matrix: Regeln ${form.source_zone} → ${form.destination_zone} erlaubt (Firewall)`
                 : zoneCheck.policy === 'intra'
-                  ? '✓ Intra-Zonen-Verkehr (gleiche Zone, typischerweise ACI)'
-                  : '· Zonen-Beziehung nicht in der Matrix gepflegt'
+                  ? t('✓ Intra-zone traffic (same zone, typically ACI)')
+                  : t('· Zone relationship not maintained in the matrix')
               : `✕ Zonen-Matrix verbietet Regeln ${form.source_zone} → ${form.destination_zone} (Block)`}
             {zoneCheck.messages.map((m, i) => <div key={i} className="small">{m}</div>)}
           </div>
@@ -347,7 +347,7 @@ export default function RuleForm() {
                 <option>TCP</option><option>UDP</option><option>TCP/UDP</option>
                 <option>ICMP</option><option>ANY</option>
               </select>
-              <input placeholder='Port, z.B. 443 oder 8000-8080' value={s.port}
+              <input placeholder={t('Port, e.g. 443 or 8000-8080')} value={s.port}
                 onChange={(e) => setService(i, 'port', e.target.value)} />
               {form.services.length > 1 && (
                 <button type="button" className="btn btn-ghost" onClick={() => removeService(i)}>✕</button>
@@ -402,7 +402,7 @@ export default function RuleForm() {
         <label>Info<textarea rows={2} value={form.info} onChange={set('info')} /></label>
         {isEdit && (
           <label>Änderungsnotiz (für die Versionshistorie)
-            <input value={changeNote} onChange={(e) => setChangeNote(e.target.value)} placeholder="Was wurde geändert und warum?" />
+            <input value={changeNote} onChange={(e) => setChangeNote(e.target.value)} placeholder={t('What was changed and why?')} />
           </label>
         )}
       </fieldset>

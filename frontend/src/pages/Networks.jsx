@@ -257,7 +257,7 @@ export default function Networks() {
           <div className="grid-3">
             <label>{t('Network (CIDR)')}
               <input value={form.cidr} onChange={(e) => setForm({ ...form, cidr: e.target.value })}
-                placeholder='z.B. 10.10.35.0/24 oder "any"' required />
+                placeholder={t('e.g. 10.10.35.0/24 or "any"')} required />
             </label>
             <label>{t('Zone')}
               <select value={form.zone} required

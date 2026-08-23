@@ -6,6 +6,7 @@ from .. import audit
 from ..auth import get_current_user
 from ..database import get_db
 from ..exporters import aci, aerleon_export, checkpoint, generic, hostfw, juniper
+from ..messages import _
 from ..models import Rule, RuleStatus, User
 from ..validation import parse_network
 
@@ -23,7 +24,7 @@ FORMATS = {
 
 
 @router.get("/formats")
-def formats(_: User = Depends(get_current_user)):
+def formats(_user: User = Depends(get_current_user)):
     return [
         {"key": key, "filename": filename, "media_type": media}
         for key, (media, _fn, filename) in FORMATS.items()
@@ -31,7 +32,7 @@ def formats(_: User = Depends(get_current_user)):
 
 
 @router.get("/aerleon-targets")
-def aerleon_targets(_: User = Depends(get_current_user)):
+def aerleon_targets(_user: User = Depends(get_current_user)):
     """Available Capirca/Aerleon target platforms."""
     return [
         {"key": key, "label": label, "zone_based": key in aerleon_export.ZONE_BASED}
@@ -54,7 +55,8 @@ def aerleon(
     if target != "policy" and target not in aerleon_export.TARGETS:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"Unknown target '{target}'. Allowed: policy, {', '.join(aerleon_export.TARGETS)}",
+            _("Unknown target '{target}'. Allowed: policy, {allowed}",
+              target=target, allowed=", ".join(aerleon_export.TARGETS)),
         )
     query = db.query(Rule).filter(Rule.deleted_at.is_(None))
     if only_approved:
@@ -63,7 +65,7 @@ def aerleon(
     if component_id:
         rules = [r for r in rules if any(c.id == component_id for c in r.components)]
     if not rules:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No matching rules")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("No matching rules"))
     try:
         if target == "policy":
             content = aerleon_export.export_policy_yaml(rules)
@@ -73,14 +75,15 @@ def aerleon(
             filename = f"permitra-{target}.acl"
     except Exception as exc:  # Aerleon reports detailed failures as ACLGeneratorError
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            f"Aerleon generation failed: {exc}") from exc
+                            _("Aerleon generation failed: {error}", error=exc)) from exc
     headers = {}
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     not_approved = [r.rule_id for r in rules if r.status != RuleStatus.approved]
     audit.record(db, "export", "export.rules", actor=user.username,
-                 object=f"aerleon/{target}", detail=f"{len(rules)} rule(s)"
-                 + (f", NOT approved: {', '.join(not_approved)}"
+                 object=f"aerleon/{target}",
+                 detail=_("{count} rule(s)", count=len(rules))
+                 + (_(", NOT approved: {rule_ids}", rule_ids=", ".join(not_approved))
                     if not_approved else ""),
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type="text/plain", headers=headers)
@@ -101,10 +104,12 @@ def host_export(
     if os_name not in hostfw.HOST_OS:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"Unknown host OS '{os_name}'. Allowed: {', '.join(hostfw.HOST_OS)}",
+            _("Unknown host OS '{os_name}'. Allowed: {allowed}",
+              os_name=os_name, allowed=", ".join(hostfw.HOST_OS)),
         )
     if parse_network(ip.strip()) is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"'{ip}' is not a valid IP address")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("'{ip}' is not a valid IP address", ip=ip))
     from ..vrf import get_vrf
 
     vrf_obj = get_vrf(db, vrf)
@@ -113,14 +118,15 @@ def host_export(
     if not used:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"No approved permit rule has {ip} as its destination",
+            _("No approved permit rule has {ip} as its destination", ip=ip),
         )
     filename, _label = hostfw.HOST_OS[os_name]
     headers = {}
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{ip.replace("/", "_")}-{filename}"'
     audit.record(db, "export", "export.rules", actor=user.username,
-                 object=f"host/{os_name}", detail=f"destination {ip}, {len(used)} rule(s)",
+                 object=f"host/{os_name}",
+                 detail=_("destination {ip}, {count} rule(s)", ip=ip, count=len(used)),
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type="text/plain", headers=headers)
 
@@ -139,7 +145,7 @@ def export(
     user: User = Depends(get_current_user),
 ):
     if fmt not in FORMATS:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Unknown format '{fmt}'")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Unknown format '{fmt}'", fmt=fmt))
     media_type, export_fn, filename = FORMATS[fmt]
 
     query = db.query(Rule).filter(Rule.deleted_at.is_(None))
@@ -167,7 +173,7 @@ def export(
         rules = [r for r in rules if platform_of_fmt[fmt] in (r.platforms or [])]
 
     if not rules:
-        detail = "No matching rules (filters: approved only, matching platform)"
+        detail = _("No matching rules (filters: approved only, matching platform)")
         if wanted and only_approved:
             # Most common case: the named rule exists but is not (yet) approved.
             # Say so, otherwise the user goes looking in entirely the wrong place.
@@ -175,9 +181,10 @@ def export(
                          .filter(Rule.rule_id.in_(wanted), Rule.deleted_at.is_(None))
                          .filter(Rule.status != RuleStatus.approved).all())
             if existing:
-                listed = ", ".join(f"{r.rule_id} ({r.status.value})" for r in existing)
-                detail = (f"Not approved and therefore not exported: {listed}. "
-                          "For a preview, turn off 'approved only' (only_approved=false).")
+                listed = ", ".join(f"{r.rule_id} ({_(r.status.value)})" for r in existing)
+                detail = _("Not approved and therefore not exported: {listed}. "
+                           "For a preview, turn off 'approved only' (only_approved=false).",
+                           listed=listed)
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail)
 
     headers = {}
@@ -190,9 +197,9 @@ def export(
         content = export_fn(rules)
     not_approved = [r.rule_id for r in rules if r.status != RuleStatus.approved]
     audit.record(db, "export", "export.rules", actor=user.username,
-                 object=fmt, detail=f"{len(rules)} rule(s)"
+                 object=fmt, detail=_("{count} rule(s)", count=len(rules))
                  + (f", app_id={app_id}" if app_id else "")
-                 + (f", NOT approved: {', '.join(not_approved)}"
+                 + (_(", NOT approved: {rule_ids}", rule_ids=", ".join(not_approved))
                     if not_approved else ""),
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type=media_type, headers=headers)

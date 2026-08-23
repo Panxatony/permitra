@@ -9,6 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from .database import get_db
+from .messages import _
 from .models import Role, User
 
 # Fail-secure: startup is refused unless SECRET_KEY is set. Only in explicit
@@ -21,8 +22,8 @@ if not SECRET_KEY:
         SECRET_KEY = secrets.token_hex(32)
     else:
         raise RuntimeError(
-            "SECRET_KEY is not set – startup refused (fail-secure). "
-            "Set SECRET_KEY (e.g. `openssl rand -hex 32`) or PERMITRA_DEV=1 for local development."
+            _("SECRET_KEY is not set – startup refused (fail-secure). "
+              "Set SECRET_KEY (e.g. `openssl rand -hex 32`) or PERMITRA_DEV=1 for local development.")
         )
 ALGORITHM = "HS256"
 TOKEN_LIFETIME_HOURS = int(os.environ.get("TOKEN_LIFETIME_HOURS", "8"))
@@ -62,17 +63,17 @@ def _service_principal_from_pat(request, token: str, db: Session) -> User:
 
     if request is not None and request.method not in ("GET", "HEAD", "OPTIONS"):
         raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            "API tokens are read-only – only read access is permitted")
+                            _("API tokens are read-only – only read access is permitted"))
     digest = hashlib.sha256(token.encode()).hexdigest()
     pat = db.query(ApiToken).filter(ApiToken.token_hash == digest).first()
     if not pat or pat.revoked:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API token is invalid or revoked")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("API token is invalid or revoked"))
     if pat.expires_at is not None:
         exp = pat.expires_at
         if exp.tzinfo is None:
             exp = exp.replace(tzinfo=timezone.utc)
         if exp < datetime.now(timezone.utc):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "API token has expired")
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("API token has expired"))
     # Update last usage sparingly (avoid a write on every request)
     now = datetime.now(timezone.utc)
     if pat.last_used_at is None or (now - (pat.last_used_at if pat.last_used_at.tzinfo
@@ -93,13 +94,13 @@ def get_current_user(request: Request = None, token: str = Depends(oauth2_scheme
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
     except jwt.PyJWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token is invalid or expired") from exc
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Token is invalid or expired")) from exc
     user = db.query(User).filter(User.username == payload.get("sub")).first()
     if not user:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("User not found"))
     # Fail-secure: disabled accounts get no access (even with a valid token)
     if not user.is_active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "The account is deactivated")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("The account is deactivated"))
     # Immediate revocation: tokens issued before the last invalidation (deactivation,
     # password change/reset) are no longer valid
     if user.token_valid_from is not None:
@@ -108,7 +109,7 @@ def get_current_user(request: Request = None, token: str = Depends(oauth2_scheme
         if valid_from.tzinfo is None:
             valid_from = valid_from.replace(tzinfo=timezone.utc)
         if iat is None or iat < int(valid_from.timestamp()):
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session is no longer valid")
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Session is no longer valid"))
     return user
 
 
@@ -117,7 +118,8 @@ def require_roles(*roles: Role):
         if user.role not in roles and user.role != Role.admin:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                f"Role '{user.role.value}' is not permitted to perform this action",
+                _("Role '{role}' is not permitted to perform this action",
+                  role=user.role.value),
             )
         return user
 

@@ -16,6 +16,8 @@ import smtplib
 import threading
 from email.message import EmailMessage
 
+from .messages import _
+
 log = logging.getLogger("permitra.mailer")
 
 
@@ -63,22 +65,24 @@ def send(to: str, subject: str, body: str) -> bool:
 def activation_mail(user, link: str) -> bool:
     return send(
         user.email,
-        "Permitra: activate your account",
-        f"Hello {user.full_name or user.username},\n\n"
-        f"a Permitra account has been created for you (username: {user.username}).\n"
-        f"Use the following link to set your password and activate the account:\n\n"
-        f"  {link}\n\n"
-        f"The link is valid for 72 hours.\n\nPermitra",
+        _("Permitra: activate your account"),
+        _("Hello {name},\n\n"
+          "a Permitra account has been created for you (username: {username}).\n"
+          "Use the following link to set your password and activate the account:\n\n"
+          "  {link}\n\n"
+          "The link is valid for 72 hours.\n\nPermitra",
+          name=user.full_name or user.username, username=user.username, link=link),
     )
 
 
 def reset_mail(user, link: str) -> bool:
     return send(
         user.email,
-        "Permitra: reset your password",
-        f"Hello {user.full_name or user.username},\n\n"
-        f"use the following link to set a new password:\n\n"
-        f"  {link}\n\n"
-        f"The link is valid for 2 hours. If you did not request this, "
-        f"ignore this mail.\n\nPermitra",
+        _("Permitra: reset your password"),
+        _("Hello {name},\n\n"
+          "use the following link to set a new password:\n\n"
+          "  {link}\n\n"
+          "The link is valid for 2 hours. If you did not request this, "
+          "ignore this mail.\n\nPermitra",
+          name=user.full_name or user.username, link=link),
     )

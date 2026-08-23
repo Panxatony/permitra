@@ -17,6 +17,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from . import mailer
+from .messages import _
 from .models import Role, User
 
 log = logging.getLogger("permitra.notifications")
@@ -60,9 +61,10 @@ def rule_submitted(db: Session, rule) -> None:
     link = f"{mailer.base_url()}/rules/{rule.rule_id}"
     _send_each(
         _recipients_by_role(db, Role.change_approver, Role.admin),
-        f"Permitra: rule {rule.rule_id} is waiting for approval",
-        lambda g: (f"Hello {g},\n\n{_rule_line(rule)} has been submitted for review "
-                   f"and is waiting for your approval.\n\n  {link}\n\nPermitra"),
+        _("Permitra: rule {rule_id} is waiting for approval", rule_id=rule.rule_id),
+        lambda g: _("Hello {g},\n\n{rule_line} has been submitted for review "
+                    "and is waiting for your approval.\n\n  {link}\n\nPermitra",
+                    g=g, rule_line=_rule_line(rule), link=link),
     )
 
 
@@ -71,13 +73,17 @@ def rule_decided(db: Session, rule, approved: bool, decided_by: str, comment: st
     if not mailer.enabled():
         return
     link = f"{mailer.base_url()}/rules/{rule.rule_id}"
-    status = "approved" if approved else "rejected"
-    extra = f"\n\nComment: {comment}" if comment else ""
+    # The status is an enum value; translated only here, where it is inserted
+    # into a sentence – what is stored and served stays "approved"/"rejected".
+    status = _("approved") if approved else _("rejected")
+    extra = _("\n\nComment: {comment}", comment=comment) if comment else ""
     _send_each(
         _recipients_by_name(db, rule.created_by, rule.requestor),
-        f"Permitra: rule {rule.rule_id} {status}",
-        lambda g: (f"Hello {g},\n\n{_rule_line(rule)} was {status} by {decided_by}."
-                   f"{extra}\n\n  {link}\n\nPermitra"),
+        _("Permitra: rule {rule_id} {status}", rule_id=rule.rule_id, status=status),
+        lambda g: _("Hello {g},\n\n{rule_line} was {status} by {decided_by}."
+                    "{extra}\n\n  {link}\n\nPermitra",
+                    g=g, rule_line=_rule_line(rule), status=status,
+                    decided_by=decided_by, extra=extra, link=link),
     )
 
 
@@ -88,10 +94,11 @@ def rule_implementation_pending(db: Session, rule, reason: str) -> None:
     link = f"{mailer.base_url()}/rules/{rule.rule_id}"
     _send_each(
         _recipients_by_role(db, Role.operations, Role.admin),
-        f"Permitra: rule {rule.rule_id} needs to be implemented",
-        lambda g: (f"Hello {g},\n\n{_rule_line(rule)}: {reason}\n"
-                   f"Roll the rule out on the components or remove it, and update the "
-                   f"implementation status.\n\n  {link}\n\nPermitra"),
+        _("Permitra: rule {rule_id} needs to be implemented", rule_id=rule.rule_id),
+        lambda g: _("Hello {g},\n\n{rule_line}: {reason}\n"
+                    "Roll the rule out on the components or remove it, and update the "
+                    "implementation status.\n\n  {link}\n\nPermitra",
+                    g=g, rule_line=_rule_line(rule), reason=reason, link=link),
     )
 
 
@@ -101,15 +108,18 @@ def recertification_due(db: Session, expired: list, expiring: list) -> None:
         return
     lines = []
     if expired:
-        lines.append("Expired (automatically disabled):")
-        lines += [f"  - {_rule_line(r)} (until {r.valid_until})" for r in expired]
+        lines.append(_("Expired (automatically disabled):"))
+        lines += [_("  - {rule_line} (until {valid_until})",
+                    rule_line=_rule_line(r), valid_until=r.valid_until) for r in expired]
     if expiring:
-        lines.append("\nExpiring soon:")
-        lines += [f"  - {_rule_line(r)} (until {r.valid_until})" for r in expiring]
+        lines.append(_("\nExpiring soon:"))
+        lines += [_("  - {rule_line} (until {valid_until})",
+                    rule_line=_rule_line(r), valid_until=r.valid_until) for r in expiring]
     body = "\n".join(lines)
     link = f"{mailer.base_url()}/recertification"
     _send_each(
         _recipients_by_role(db, Role.operations, Role.admin),
-        "Permitra: recertification – expired/expiring rules",
-        lambda g: f"Hello {g},\n\n{body}\n\nRecertification:\n  {link}\n\nPermitra",
+        _("Permitra: recertification – expired/expiring rules"),
+        lambda g: _("Hello {g},\n\n{body}\n\nRecertification:\n  {link}\n\nPermitra",
+                    g=g, body=body, link=link),
     )

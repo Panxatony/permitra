@@ -10,6 +10,7 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from .messages import _
 from .models import Comment, Rule, RuleStatus, RuleVersion
 
 log = logging.getLogger("permitra.expiry")
@@ -70,7 +71,7 @@ def expiring_rules(db: Session, days: int = 30) -> tuple[list[Rule], list[Rule]]
 
 def expire_rules(db: Session) -> int:
     """Deactivates expired approved rules. Returns the number of rules affected."""
-    expired, _ = expiring_rules(db, days=0)
+    expired, _expiring = expiring_rules(db, days=0)
     for rule in expired:
         rule.status = RuleStatus.deactivated
         rule.version += 1
@@ -79,7 +80,8 @@ def expire_rules(db: Session) -> int:
                 rule_pk=rule.id,
                 version=rule.version,
                 snapshot={"auto": "expiry"},
-                change_note=f"Automatically deactivated: validity until {rule.valid_until} has expired",
+                change_note=_("Automatically deactivated: validity until {valid_until} has expired",
+                              valid_until=rule.valid_until),
                 changed_by="system",
             )
         )
@@ -87,8 +89,9 @@ def expire_rules(db: Session) -> int:
             Comment(
                 rule_pk=rule.id,
                 author="system",
-                text=f"Rule automatically deactivated – validity until {rule.valid_until} has expired. "
-                     "If it is still needed, recertify it (submit it again).",
+                text=_("Rule automatically deactivated – validity until {valid_until} has expired. "
+                       "If it is still needed, recertify it (submit it again).",
+                       valid_until=rule.valid_until),
             )
         )
     if expired:

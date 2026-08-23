@@ -21,6 +21,7 @@ const LINK_TYPE_SUGGESTIONS = [
 ]
 
 function TopologySection({ components }) {
+  const { t } = useLang()
   const [links, setLinks] = useState([])
   const [form, setForm] = useState({ component_a_id: '', component_b_id: '', link_type: '', description: '' })
   const [error, setError] = useState('')
@@ -78,7 +79,7 @@ function TopologySection({ components }) {
 
       <div className="topology-wrap">
         <svg viewBox={`0 0 ${W} ${H}`} className="topology-svg" role="img"
-          aria-label="Topologie der Sicherheitskomponenten (Nord oben, Süd unten)">
+          aria-label={t('Topology of the security components (north at the top, south at the bottom)')}>
           <text x="14" y="26" className="topo-compass">Nord ▲</text>
           <text x="14" y={H - 12} className="topo-compass">Süd ▼</text>
           <line x1="30" y1="34" x2="30" y2={H - 26} className="topo-axis" />
@@ -202,6 +203,7 @@ function TopologySection({ components }) {
 }
 
 function DriftPanel({ components }) {
+  const { t } = useLang()
   const [selected, setSelected] = useState('')
   const [report, setReport] = useState(null)
   const [config, setConfig] = useState('')
@@ -288,7 +290,7 @@ function DriftPanel({ components }) {
       {selected && (
         <form onSubmit={upload} className="drift-upload">
           <textarea rows={6} value={config} onChange={(e) => setConfig(e.target.value)}
-            placeholder={'Ist-Konfiguration hier einfügen…\nset security policies from-zone ... policy SR0101 ...'} />
+            placeholder={t('Paste the actual configuration here…\nset security policies from-zone ... policy SR0101 ...')} />
           <button className="btn btn-primary" type="submit" disabled={!config.trim()}>
             Ist-Konfiguration speichern & abgleichen
           </button>
@@ -409,7 +411,7 @@ export default function Components() {
                 </select>
               </label>
               <label>Standort/Zone<input value={form.location} onChange={set('location')}
-                placeholder="z.B. Zone FFM" /></label>
+                placeholder={t('e.g. Zone FFM')} /></label>
               <label>Nord-Süd-Ebene
                 <input type="number" min="0" max="1000" value={form.ns_tier} onChange={set('ns_tier')} />
                 <span className="muted small">0 = nördlich (Internet-nah), größer = südlicher</span>

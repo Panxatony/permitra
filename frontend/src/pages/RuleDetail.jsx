@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, getUser } from '../api'
+import RiskCriteria from '../components/RiskCriteria'
 import { AddressList, ComponentBadges, Highlighted, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
 import { useLang } from '../i18n'
 
@@ -85,6 +86,13 @@ export default function RuleDetail() {
               <li key={i}><span className={`badge risk-${f.severity}`}>{f.severity}</span> {f.detail}</li>
             ))}
           </ul>
+          {/* Whoever has to decide on this rule must be able to check the
+              yardstick it was measured by - collapsed, so it does not compete
+              with the finding itself. */}
+          <details className="small">
+            <summary style={{ cursor: 'pointer' }}>{t('By which criteria?')}</summary>
+            <div className="inset-reference"><RiskCriteria /></div>
+          </details>
         </div>
       )}
       {conflicts.length > 0 && (

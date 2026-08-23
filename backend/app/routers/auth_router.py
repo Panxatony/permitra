@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from .. import audit, mailer, totp
 from ..auth import create_token, get_current_user, hash_password, verify_password
 from ..database import get_db
+from ..messages import _
 from ..models import Passkey, User, utcnow
 from ..schemas import Token, UserOut
 from .users_router import consume_token, issue_token
@@ -55,19 +56,19 @@ async def login(
             audit.record(db, "auth", "auth.login_locked", actor=form.username,
                          source_ip=audit.client_ip(request))
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
-                                "Account temporarily locked – try again later")
+                                _("Account temporarily locked – try again later"))
     if not user or not verify_password(form.password, user.password_hash):
         if user:
             _register_failure(db, user)
         audit.record(db, "auth", "auth.login_failed", actor=form.username,
                      source_ip=audit.client_ip(request),
-                     detail="account locked" if (user and user.locked_until) else "")
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Wrong username or password")
+                     detail=_("account locked") if (user and user.locked_until) else "")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Wrong username or password"))
     if not user.is_active:
         audit.record(db, "auth", "auth.login_denied", actor=user.username,
-                     source_ip=audit.client_ip(request), detail="account deactivated")
+                     source_ip=audit.client_ip(request), detail=_("account deactivated"))
         raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            "The account is deactivated or not activated yet")
+                            _("The account is deactivated or not activated yet"))
     if user.totp_enabled:
         # Second factor: optional form field "otp"
         otp = ((await request.form()).get("otp") or "").strip()
@@ -76,7 +77,7 @@ async def login(
         if not totp.verify(user.totp_secret, otp):
             _register_failure(db, user)
             audit.record(db, "auth", "auth.login_failed", actor=user.username,
-                         source_ip=audit.client_ip(request), detail="wrong 2FA code")
+                         source_ip=audit.client_ip(request), detail=_("wrong 2FA code"))
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_invalid")
     # Success: reset the failure counter and the lock
     if user.failed_logins or user.locked_until:
@@ -119,8 +120,8 @@ def forgot_password(payload: dict, db: Session = Depends(get_db)):
         ).first()
     if user and user.email:
         mailer.reset_mail(user, issue_token(db, user, "reset"))
-    return {"detail": "If the account exists and has an e-mail address on file, "
-                      "a reset link has been sent."}
+    return {"detail": _("If the account exists and has an e-mail address on file, "
+                        "a reset link has been sent.")}
 
 
 @router.post("/set-password")
@@ -129,7 +130,7 @@ def set_password(request: Request, payload: dict, db: Session = Depends(get_db))
     password = payload.get("password") or ""
     if len(password) < 8:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            "Password must be at least 8 characters long")
+                            _("Password must be at least 8 characters long"))
     user, purpose = consume_token(db, payload.get("token") or "")
     user.password_hash = hash_password(password)
     user.is_active = True
@@ -139,8 +140,8 @@ def set_password(request: Request, payload: dict, db: Session = Depends(get_db))
     db.commit()
     audit.record(db, "auth", "auth.activated" if purpose == "activate" else "auth.password_reset",
                  actor=user.username, source_ip=audit.client_ip(request))
-    return {"detail": ("Account activated – you can sign in now"
-                       if purpose == "activate" else "Password changed"),
+    return {"detail": (_("Account activated – you can sign in now")
+                       if purpose == "activate" else _("Password changed")),
             "username": user.username}
 
 
@@ -152,18 +153,18 @@ def change_password(
     user: User = Depends(get_current_user),
 ):
     if not verify_password(payload.get("current") or "", user.password_hash):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "The current password is wrong")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, _("The current password is wrong"))
     new = payload.get("new") or ""
     if len(new) < 8:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            "Password must be at least 8 characters long")
+                            _("Password must be at least 8 characters long"))
     user.password_hash = hash_password(new)
     user.token_valid_from = utcnow()  # revokes other existing sessions
     db.commit()
     audit.record(db, "auth", "auth.password_changed", actor=user.username,
                  source_ip=audit.client_ip(request))
     # Fresh token for the current session so it does not expire itself
-    return {"detail": "Password changed", "access_token": create_token(user)}
+    return {"detail": _("Password changed"), "access_token": create_token(user)}
 
 
 # ---------- Two-factor (TOTP) ----------
@@ -172,7 +173,8 @@ def change_password(
 def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     """Generate a new secret (only becomes active once confirmed with a valid code)."""
     if user.totp_enabled:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Two-factor authentication is already enabled")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            _("Two-factor authentication is already enabled"))
     user.totp_secret = totp.new_secret()
     db.commit()
     return {"secret": user.totp_secret,
@@ -182,24 +184,24 @@ def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_u
 @router.post("/totp/enable")
 def totp_enable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not user.totp_secret:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Start the setup first")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("Start the setup first"))
     if not totp.verify(user.totp_secret, payload.get("code") or ""):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The code is invalid")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("The code is invalid"))
     user.totp_enabled = True
     db.commit()
     audit.record(db, "auth", "auth.totp_enabled", actor=user.username)
-    return {"detail": "Two-factor authentication enabled"}
+    return {"detail": _("Two-factor authentication enabled")}
 
 
 @router.post("/totp/disable")
 def totp_disable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not verify_password(payload.get("password") or "", user.password_hash):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "The password is wrong")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, _("The password is wrong"))
     user.totp_enabled = False
     user.totp_secret = None
     db.commit()
     audit.record(db, "auth", "auth.totp_disabled", actor=user.username)
-    return {"detail": "Two-factor authentication disabled"}
+    return {"detail": _("Two-factor authentication disabled")}
 
 
 # ---------- Passkeys (WebAuthn) ----------
@@ -224,7 +226,7 @@ def _origins() -> list[str]:
 
 def _store_challenge(key: str, challenge: bytes) -> None:
     now = time.time()
-    for k in [k for k, (_, exp) in _challenges.items() if exp < now]:
+    for k in [k for k, (_challenge, exp) in _challenges.items() if exp < now]:
         _challenges.pop(k, None)
     _challenges[key] = (challenge, now + 300)
 
@@ -233,7 +235,7 @@ def _take_challenge(key: str) -> bytes:
     entry = _challenges.pop(key, None)
     if not entry or entry[1] < time.time():
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "The request has expired – try again")
+                            _("The request has expired – try again"))
     return entry[0]
 
 
@@ -270,7 +272,8 @@ def passkey_register(payload: dict, db: Session = Depends(get_db), user: User = 
             expected_origin=_origins(),
         )
     except Exception as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Passkey registration failed: {exc}") from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            _("Passkey registration failed: {error}", error=exc)) from exc
     db.add(Passkey(
         user_id=user.id,
         credential_id=bytes_to_base64url(verification.credential_id),
@@ -279,7 +282,7 @@ def passkey_register(payload: dict, db: Session = Depends(get_db), user: User = 
         name=(payload.get("name") or "Passkey")[:64],
     ))
     db.commit()
-    return {"detail": "Passkey registered"}
+    return {"detail": _("Passkey registered")}
 
 
 @router.get("/passkeys")
@@ -295,7 +298,7 @@ def list_passkeys(user: User = Depends(get_current_user)):
 def delete_passkey(passkey_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     passkey = db.query(Passkey).filter(Passkey.id == passkey_id, Passkey.user_id == user.id).first()
     if not passkey:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Passkey not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Passkey not found"))
     db.delete(passkey)
     db.commit()
 
@@ -310,7 +313,7 @@ def passkey_login_options(payload: dict, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.passkeys or not user.is_active:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "No passkey is registered for this account")
+                            _("No passkey is registered for this account"))
     options = generate_authentication_options(
         rp_id=_rp_id(),
         allow_credentials=[
@@ -330,10 +333,10 @@ def passkey_login(payload: dict, db: Session = Depends(get_db)):
     credential = payload.get("credential") or {}
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.is_active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign-in failed")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Sign-in failed"))
     passkey = next((p for p in user.passkeys if p.credential_id == credential.get("id")), None)
     if not passkey:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign-in failed")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Sign-in failed"))
     challenge = _take_challenge(f"auth:{username}")
     try:
         verification = verify_authentication_response(
@@ -345,7 +348,7 @@ def passkey_login(payload: dict, db: Session = Depends(get_db)):
             credential_current_sign_count=passkey.sign_count,
         )
     except Exception as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Sign-in failed") from exc
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Sign-in failed")) from exc
     passkey.sign_count = verification.new_sign_count
     db.commit()
     # A passkey counts as a strong factor – no additional TOTP required

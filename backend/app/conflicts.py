@@ -1,4 +1,5 @@
 """Conflict detection: warns about rules with overlapping networks, protocols and ports."""
+from .messages import _
 from .models import Rule
 from .validation import parse_network, parse_ports
 
@@ -79,14 +80,15 @@ def find_conflicts(rule: Rule, others: list[Rule]) -> list[dict]:
         )
         if rule.action != other.action:
             kind = "shadowing"
-            detail = (
-                f"Overlapping networks/ports with opposite action "
-                f"({rule.action.value} vs. {other.action.value})"
+            detail = _(
+                "Overlapping networks/ports with opposite action "
+                "({action} vs. {other_action})",
+                action=rule.action.value, other_action=other.action.value,
             )
         elif same:
-            kind, detail = "duplicate", "Identical source, destination and services"
+            kind, detail = "duplicate", _("Identical source, destination and services")
         else:
-            kind, detail = "overlap", "Overlapping source/destination networks with the same protocol and overlapping ports"
+            kind, detail = "overlap", _("Overlapping source/destination networks with the same protocol and overlapping ports")
         warnings.append(
             {"rule_id": rule.rule_id, "other_rule_id": other.rule_id, "kind": kind, "detail": detail}
         )

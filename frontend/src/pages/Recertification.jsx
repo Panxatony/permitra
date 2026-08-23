@@ -85,7 +85,7 @@ export default function Recertification() {
     if (!window.confirm(`Regel ${ruleId} deaktivieren?`)) return
     setError('')
     try {
-      await api.deactivate(ruleId, 'Im Rahmen der Rezertifizierung deaktiviert')
+      await api.deactivate(ruleId, t('Deactivated as part of the recertification'))
       setNotice(`${ruleId} deaktiviert.`)
       load()
     } catch (err) {

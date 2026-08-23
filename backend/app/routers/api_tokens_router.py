@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from .. import audit
 from ..auth import API_TOKEN_PREFIX, require_roles
 from ..database import get_db
+from ..messages import _
 from ..models import ApiToken, Role, User, utcnow
 
 router = APIRouter(prefix="/api/api-tokens", tags=["api-tokens"])
@@ -30,7 +31,7 @@ def _out(t: ApiToken) -> dict:
 
 
 @router.get("")
-def list_tokens(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.admin))):
+def list_tokens(db: Session = Depends(get_db), _user: User = Depends(require_roles(Role.admin))):
     return [_out(t) for t in db.query(ApiToken).order_by(ApiToken.created_at.desc()).all()]
 
 
@@ -44,14 +45,15 @@ def create_token(
     """Create a read-only token. The plaintext is returned ONLY here."""
     name = (payload.get("name") or "").strip()
     if not name:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Name is required")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("Name is required"))
     expires_at = None
     days = payload.get("expires_days")
     if days:
         try:
             expires_at = utcnow() + timedelta(days=int(days))
         except (TypeError, ValueError) as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "expires_days must be a number") from exc
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                _("expires_days must be a number")) from exc
 
     raw = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
     token = ApiToken(
@@ -65,7 +67,7 @@ def create_token(
     audit.record(db, "admin", "apitoken.created", actor=admin.username, object=token.name,
                  source_ip=audit.client_ip(request))
     return {**_out(token), "token": raw,
-            "detail": "The token is shown only now – store it somewhere safe."}
+            "detail": _("The token is shown only now – store it somewhere safe.")}
 
 
 @router.delete("/{token_id}", status_code=204)
@@ -77,7 +79,7 @@ def revoke_token(
 ):
     token = db.get(ApiToken, token_id)
     if not token:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Token not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Token not found"))
     token.revoked = True
     db.commit()
     audit.record(db, "admin", "apitoken.revoked", actor=admin.username, object=token.name,

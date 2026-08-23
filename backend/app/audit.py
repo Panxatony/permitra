@@ -50,6 +50,7 @@ from datetime import timezone
 
 from sqlalchemy.orm import Session
 
+from .messages import _
 from .models import AuditCheckpoint, AuditEvent, Rule, RuleVersion, ZonePolicyChange, utcnow
 
 log = logging.getLogger("permitra.audit")
@@ -184,16 +185,18 @@ def _check_against_checkpoint(db: Session, checked: int) -> dict | None:
     anchor = db.get(AuditEvent, cp.last_event_id)
     if anchor is None:
         return {"ok": False, "checked": checked, "broken_at_id": cp.last_event_id,
-                "reason": f"Anchored entry {cp.last_event_id} is missing – the chain was "
-                          f"truncated after the checkpoint of {cp.ts:%Y-%m-%d %H:%M}"}
+                "reason": _("Anchored entry {event_id} is missing – the chain was "
+                            "truncated after the checkpoint of {ts:%Y-%m-%d %H:%M}",
+                            event_id=cp.last_event_id, ts=cp.ts)}
     if (anchor.hash or "") != cp.head_hash:
         return {"ok": False, "checked": checked, "broken_at_id": cp.last_event_id,
-                "reason": "Anchored entry no longer matches the checkpoint "
-                          "(the chain was recalculated afterwards)"}
+                "reason": _("Anchored entry no longer matches the checkpoint "
+                            "(the chain was recalculated afterwards)")}
     if checked < cp.event_count:
         return {"ok": False, "checked": checked, "broken_at_id": None,
-                "reason": f"Only {checked} entries present, the checkpoint records "
-                          f"{cp.event_count} – entries have been removed"}
+                "reason": _("Only {checked} entries present, the checkpoint records "
+                            "{count} – entries have been removed",
+                            checked=checked, count=cp.event_count)}
     return None
 
 
@@ -207,11 +210,11 @@ def verify_chain(db: Session) -> dict:
         checked += 1
         if (ev.prev_hash or GENESIS) != prev:
             return {"ok": False, "checked": checked, "broken_at_id": ev.id,
-                    "reason": "prev_hash does not match the predecessor "
-                              "(order changed or entry removed)"}
+                    "reason": _("prev_hash does not match the predecessor "
+                                "(order changed or entry removed)")}
         if _row_hash(ev) != (ev.hash or ""):
             return {"ok": False, "checked": checked, "broken_at_id": ev.id,
-                    "reason": "Hash does not match the content (entry modified)"}
+                    "reason": _("Hash does not match the content (entry modified)")}
         prev = ev.hash
 
     broken = _check_against_checkpoint(db, checked)

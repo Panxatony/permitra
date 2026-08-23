@@ -480,6 +480,23 @@ class AuditCheckpoint(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class RiskyPort(Base):
+    """A service the risk analysis flags, maintained by administrators.
+
+    The criteria behind a risk hint are themselves subject to review: an
+    approver sees the hint before deciding, and an auditor asks by which
+    standard it was raised. A list buried in the source can neither be shown
+    nor adapted, so it lives here - seeded from the defaults in
+    risk.DEFAULT_RISKY_PORTS on first start, and every change is recorded in
+    the audit log."""
+
+    __tablename__ = "risky_ports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    port: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    label: Mapped[str] = mapped_column(String(128))
+
+
 class NetboxPrefix(Base):
     """Prefix imported from NetBox (staging). It is adopted into the zone registry
     as soon as a zone is assigned to it (adopted=True)."""

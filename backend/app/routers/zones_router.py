@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_roles
 from ..database import get_db
 from ..domain_values import PAP_LEVELS, PROTECTION_LEVELS
+from ..messages import _
 from ..models import (
     Comment,
     Role,
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/api/zones", tags=["zones"])
 
 
 @router.get("", response_model=list[ZoneOut])
-def list_zones(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_zones(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     return db.query(Zone).order_by(Zone.sort_order, Zone.name).all()
 
 
@@ -49,7 +50,7 @@ def next_zone_code(db: Session) -> str:
 
 
 @router.get("/next-code")
-def get_next_code(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.architect))):
+def get_next_code(db: Session = Depends(get_db), _user: User = Depends(require_roles(Role.architect))):
     return {"code": next_zone_code(db)}
 
 
@@ -57,15 +58,16 @@ def get_next_code(db: Session = Depends(get_db), _: User = Depends(require_roles
 def create_zone(
     payload: ZoneCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect)),
+    _user: User = Depends(require_roles(Role.architect)),
 ):
     code = (payload.code or "").strip()
     if not code:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            "Zone ID (code) is required")
+                            _("Zone ID (code) is required"))
     if find_zone(db, code) or find_zone(db, payload.name):
         raise HTTPException(status.HTTP_409_CONFLICT,
-                            f"A zone with ID '{code}' or name '{payload.name}' already exists")
+                            _("A zone with ID '{code}' or name '{name}' already exists",
+                              code=code, name=payload.name))
     data = payload.model_dump()
     data["code"] = code
     zone = Zone(**data)
@@ -77,7 +79,7 @@ def create_zone(
 
 
 @router.get("/networks")
-def list_networks(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def list_networks(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     """All network assignments (basis of the networks page and of future imports)."""
     return [
         {
@@ -100,13 +102,14 @@ def update_network(
     workflow as a request (two change approvers)."""
     network = db.get(ZoneNetwork, network_id)
     if not network:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Network assignment not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Network assignment not found"))
     from ..component_resolution import normalize_ip
 
     new_cidr = normalize_ip(payload["cidr"]) if payload.get("cidr") else network.cidr
     if new_cidr is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            f"'{payload['cidr']}' is not a valid network (CIDR) and not 'any'")
+                            _("'{cidr}' is not a valid network (CIDR) and not 'any'",
+                              cidr=payload["cidr"]))
     new_zone = (payload.get("zone") or network.zone.name).strip()
     needs_approval = (new_cidr != network.cidr
                       or new_zone.upper() != network.zone.name.upper())
@@ -122,9 +125,9 @@ def update_network(
         db.commit()
         if not result:
             result = {"status": "applied", "id": network.id,
-                      "detail": "Description updated"}
+                      "detail": _("Description updated")}
     if not result:
-        result = {"status": "unchanged", "id": network.id, "detail": "No change"}
+        result = {"status": "unchanged", "id": network.id, "detail": _("No change")}
     return result
 
 
@@ -138,7 +141,7 @@ def add_zone_network(
     """Assign a network to a zone – submitted as a request through the approval
     workflow (two change approvers), like every zone change."""
     if not find_zone(db, name):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Zone not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Zone not found"))
     return _create_batch(db, user, [{
         "type": "net_add", "zone": name, "cidr": payload.get("cidr", ""),
         "description": payload.get("description", ""), "vrf": payload.get("vrf") or None,
@@ -160,24 +163,26 @@ def set_zone_components(
     name: str,
     payload: dict,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect)),
+    _user: User = Depends(require_roles(Role.architect)),
 ):
     """Define which firewall cluster(s) the zone is attached to."""
     zone = find_zone(db, name)
     if not zone:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Zone not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Zone not found"))
     ids = payload.get("component_ids") or []
     components = (
         db.query(SecurityComponent).filter(SecurityComponent.id.in_(ids)).all() if ids else []
     )
     missing = set(ids) - {c.id for c in components}
     if missing:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Unknown component(s): {sorted(missing)}")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Unknown component(s): {components}", components=sorted(missing)))
     non_fw = [c.name for c in components if c.type.value == "aci"]
     if non_fw:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"Zones attach to firewall clusters – ACI is not a zone transition: {', '.join(non_fw)}",
+            _("Zones attach to firewall clusters – ACI is not a zone transition: {components}",
+              components=", ".join(non_fw)),
         )
     zone.components = components
     db.commit()
@@ -189,13 +194,13 @@ def set_zone_meta(
     name: str,
     payload: dict,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect)),
+    _user: User = Depends(require_roles(Role.architect)),
 ):
     """Maintain the zone's BSI documentation: owner, description and the protection
     level per security objective (CIA, each normal | high | very high)."""
     zone = find_zone(db, name)
     if not zone:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Zone not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Zone not found"))
     for field in ("owner", "description", "code"):
         if field in payload:
             setattr(zone, field, str(payload[field] or "").strip())
@@ -204,7 +209,8 @@ def set_zone_meta(
             value = str(payload[field] or "").strip().lower()
             if value not in PROTECTION_LEVELS:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                    f"Protection level must be one of {', '.join(PROTECTION_LEVELS)}")
+                                    _("Protection level must be one of {levels}",
+                                      levels=", ".join(PROTECTION_LEVELS)))
             setattr(zone, field, value)
     db.commit()
     db.refresh(zone)
@@ -216,16 +222,16 @@ def set_pap_level(
     name: str,
     payload: dict,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(Role.architect)),
+    _user: User = Depends(require_roles(Role.architect)),
 ):
     """Change a zone's BSI P-A-P classification (external | pap | internal)."""
     zone = find_zone(db, name)
     if not zone:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Zone not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Zone not found"))
     level = (payload.get("pap_level") or "").strip().lower()
     if level not in PAP_LEVELS:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            f"pap_level must be one of {', '.join(PAP_LEVELS)}")
+                            _("pap_level must be one of {levels}", levels=", ".join(PAP_LEVELS)))
     zone.pap_level = level
     db.commit()
     db.refresh(zone)
@@ -245,7 +251,7 @@ def delete_zone(
 
 
 @router.get("/overview")
-def overview(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     """Zone overview: per zone, the firewall clusters through which it is reachable
     (derived from the zone's active rules). ACI components are reported separately –
     they are not a zone transition in the sense of the BSI definition."""
@@ -307,7 +313,7 @@ def overview(db: Session = Depends(get_db), _: User = Depends(get_current_user))
 def zone_plan_mermaid(
     download: bool = Query(False),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     """BSI-conformant zone plan as a Mermaid flowchart (NET.1.1/NET.3.2) – for
     audits, wikis and operations documentation; built entirely from live data."""
@@ -323,7 +329,7 @@ def zone_plan_mermaid(
 
 
 @router.get("/matrix", response_model=ZoneMatrixOut)
-def matrix(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def matrix(db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     zones = db.query(Zone).order_by(Zone.sort_order, Zone.name).all()
     policies = db.query(ZonePolicy).all()
     return ZoneMatrixOut(
@@ -368,7 +374,7 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
     from ..vrf import get_vrf
 
     if not items:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No changes included")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("No changes included"))
     new_zone_names = {
         (i.get("name") or "").strip().upper() for i in items if i.get("type") == "zone_create"
     }
@@ -379,16 +385,18 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             name = (item.get("name") or "").strip()
             code = (item.get("code") or "").strip()
             if not name:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Zone name is missing")
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("Zone name is missing"))
             if not code:
-                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Zone ID (code) is missing")
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("Zone ID (code) is missing"))
             if find_zone(db, name) or find_zone(db, code):
                 raise HTTPException(status.HTTP_409_CONFLICT,
-                                    f"A zone with ID '{code}' or name '{name}' already exists")
+                                    _("A zone with ID '{code}' or name '{name}' already exists",
+                                      code=code, name=name))
             level = (item.get("pap_level") or "internal").lower()
             if level not in PAP_LEVELS:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                    f"pap_level must be one of {', '.join(PAP_LEVELS)}")
+                                    _("pap_level must be one of {levels}",
+                                      levels=", ".join(PAP_LEVELS)))
             # to_zone carries the zone ID (otherwise unused for zone_create);
             # the protection level (CIA) goes into extra
             cia = {}
@@ -396,7 +404,8 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                 v = (item.get(f) or "normal").strip().lower()
                 if v not in PROTECTION_LEVELS:
                     raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                        f"Protection level must be one of {', '.join(PROTECTION_LEVELS)}")
+                                        _("Protection level must be one of {levels}",
+                                          levels=", ".join(PROTECTION_LEVELS)))
                 cia[f] = v
             rows.append(ZonePolicyChange(
                 batch_id=batch_id, change_type="zone_create",
@@ -409,7 +418,7 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             name = (item.get("name") or "").strip()
             zone = find_zone(db, name)
             if not zone:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{name}' not found")
+                raise HTTPException(status.HTTP_404_NOT_FOUND, _("Zone '{name}' not found", name=name))
             # Deliberately including soft-deleted rules: they still reference this
             # zone, and their history would otherwise lose its point of reference.
             used = db.query(Rule).filter(
@@ -417,12 +426,14 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             ).count()
             if used:
                 raise HTTPException(status.HTTP_409_CONFLICT,
-                                    f"Zone '{zone.name}' is used by {used} rule(s)")
+                                    _("Zone '{name}' is used by {used} rule(s)",
+                                      name=zone.name, used=used))
             nets = db.query(ZoneNetwork).filter(ZoneNetwork.zone_id == zone.id).count()
             if nets:
                 raise HTTPException(status.HTTP_409_CONFLICT,
-                                    f"Zone '{zone.name}' still has {nets} network assignment(s) – "
-                                    "move or remove them first")
+                                    _("Zone '{name}' still has {nets} network assignment(s) – "
+                                      "move or remove them first",
+                                      name=zone.name, nets=nets))
             rows.append(ZonePolicyChange(
                 batch_id=batch_id, change_type="zone_delete",
                 from_zone=zone_ref(zone), to_zone="", old_policy=None, new_policy="delete",
@@ -433,20 +444,24 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             norm = normalize_ip(item.get("cidr") or "")
             if norm is None:
                 raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                    f"'{item.get('cidr')}' is not a valid network (CIDR) and not 'any'")
+                                    _("'{cidr}' is not a valid network (CIDR) and not 'any'",
+                                      cidr=item.get("cidr")))
             zone_name = (item.get("zone") or "").strip()
             if not find_zone(db, zone_name) and zone_name.upper() not in new_zone_names:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{zone_name}' not found")
+                raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                    _("Zone '{name}' not found", name=zone_name))
             vrf = get_vrf(db, item.get("vrf") or None)
             existing = db.query(ZoneNetwork).filter(ZoneNetwork.cidr == norm,
                                                     ZoneNetwork.vrf_id == vrf.id).first()
             if existing:
                 raise HTTPException(status.HTTP_409_CONFLICT,
-                                    f"{norm} is already assigned to zone '{existing.zone.name}' "
-                                    f"in environment '{vrf.name}'")
+                                    _("{cidr} is already assigned to zone '{zone}' "
+                                      "in environment '{vrf}'",
+                                      cidr=norm, zone=existing.zone.name, vrf=vrf.name))
             if _pending_net_conflict(db, norm):
                 raise HTTPException(status.HTTP_409_CONFLICT,
-                                    f"A request for {norm} is already waiting for approval")
+                                    _("A request for {cidr} is already waiting for approval",
+                                      cidr=norm))
             rows.append(ZonePolicyChange(
                 batch_id=batch_id, change_type="net_add",
                 from_zone=zone_name, to_zone=norm, old_policy=None, new_policy="add",
@@ -458,10 +473,11 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
         if item.get("type") in ("net_update", "net_delete"):
             network = db.get(ZoneNetwork, item.get("network_id") or 0)
             if not network:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "Network assignment not found")
+                raise HTTPException(status.HTTP_404_NOT_FOUND, _("Network assignment not found"))
             if _pending_net_conflict(db, network.cidr, network.id):
                 raise HTTPException(status.HTTP_409_CONFLICT,
-                                    f"A request for {network.cidr} is already waiting for approval")
+                                    _("A request for {cidr} is already waiting for approval",
+                                      cidr=network.cidr))
             if item["type"] == "net_delete":
                 rows.append(ZonePolicyChange(
                     batch_id=batch_id, change_type="net_delete",
@@ -476,17 +492,20 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                 norm = normalize_ip(item["cidr"])
                 if norm is None:
                     raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                                        f"'{item['cidr']}' is not a valid network (CIDR) and not 'any'")
+                                        _("'{cidr}' is not a valid network (CIDR) and not 'any'",
+                                          cidr=item["cidr"]))
                 duplicate = db.query(ZoneNetwork).filter(
                     ZoneNetwork.cidr == norm, ZoneNetwork.vrf_id == network.vrf_id,
                     ZoneNetwork.id != network.id).first()
                 if duplicate:
                     raise HTTPException(status.HTTP_409_CONFLICT,
-                                        f"{norm} is already assigned to zone '{duplicate.zone.name}'")
+                                        _("{cidr} is already assigned to zone '{zone}'",
+                                          cidr=norm, zone=duplicate.zone.name))
                 new_cidr = norm
             new_zone_name = (item.get("zone") or network.zone.name).strip()
             if not find_zone(db, new_zone_name) and new_zone_name.upper() not in new_zone_names:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{new_zone_name}' not found")
+                raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                    _("Zone '{name}' not found", name=new_zone_name))
             if new_cidr == network.cidr and new_zone_name.upper() == network.zone.name.upper():
                 continue  # no security-relevant change
             rows.append(ZonePolicyChange(
@@ -502,13 +521,15 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
         zone_a, zone_b = find_zone(db, from_name), find_zone(db, to_name)
         for name, zone in ((from_name, zone_a), (to_name, zone_b)):
             if not zone and name.strip().upper() not in new_zone_names:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, f"Zone '{name}' not found")
+                raise HTTPException(status.HTTP_404_NOT_FOUND, _("Zone '{name}' not found", name=name))
         if from_name.strip().upper() == to_name.strip().upper():
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "An intra-zone relation is not maintained")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                _("An intra-zone relation is not maintained"))
         current = get_policy(db, zone_a, zone_b) if zone_a and zone_b else None
         new_policy = item.get("policy")
         if new_policy not in ("allow_only", "block_all"):
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"Invalid policy '{new_policy}'")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                _("Invalid policy '{new_policy}'", new_policy=new_policy))
         if current and current.policy.value == new_policy and current.temporary == bool(item.get("temporary")):
             continue  # no change -> skip
         pending = (
@@ -522,7 +543,8 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
         if pending:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                f"A request for {from_name} → {to_name} is already waiting for approval",
+                _("A request for {from_zone} → {to_zone} is already waiting for approval",
+                  from_zone=from_name, to_zone=to_name),
             )
         rows.append(ZonePolicyChange(
             batch_id=batch_id, change_type="policy",
@@ -535,11 +557,12 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
             requested_by=user.username, comment=comment,
         ))
     if not rows:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No change compared to the current state")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("No change compared to the current state"))
     db.add_all(rows)
     db.commit()
     return {"status": "pending", "batch_id": batch_id, "items": len(rows),
-            "detail": f"{len(rows)} change(s) requested – waiting for approval by two change approvers"}
+            "detail": _("{count} change(s) requested – waiting for approval by two change approvers",
+                        count=len(rows))}
 
 
 @router.post("/matrix/changes")
@@ -663,16 +686,16 @@ def _assess_rules(db: Session, rules, resolve) -> list[dict]:
         admissible = assessment.allowed and not ambiguous
         reason = ""
         if ambiguous:
-            reason = "One side of the rule spans several zones – the rule has to be split"
+            reason = _("One side of the rule spans several zones – the rule has to be split")
             messages.insert(0, reason)
         elif not assessment.allowed:
-            reason = next((m for m in assessment.messages), "not permitted by the matrix")
+            reason = next((m for m in assessment.messages), _("not permitted by the matrix"))
         # SIM102 rationale: kept nested - the outer test scopes this to cross-zone rules,
         # the inner one is the separate BSI firewall requirement.
         if admissible and (src or "").upper() != (dst or "").upper():  # noqa: SIM102
             if rule.components and not any(c.type.value != "aci" for c in rule.components):
                 admissible = False
-                reason = "A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)"
+                reason = _("A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)")
                 messages.append(reason)
 
         results.append({
@@ -732,9 +755,11 @@ def _apply_reassessment(db: Session, network: ZoneNetwork, user, batch_id: str) 
             rule.removal_reason = (
                 f"{new_src} → {new_dst}: {entry['reason']}")[:255]
             # … the full rationale belongs in the history and the comment.
-            note = (f"Network {network.cidr} moved to {zone_ref(network.zone)} "
-                    f"(request {short_id}): {old_src} → {old_dst} is now "
-                    f"{new_src} → {new_dst} and no longer permitted – "
+            note = (_("Network {cidr} moved to {zone} "
+                      "(request {short_id}): {old_src} → {old_dst} is now "
+                      "{new_src} → {new_dst} and no longer permitted – ",
+                      cidr=network.cidr, zone=zone_ref(network.zone), short_id=short_id,
+                      old_src=old_src, old_dst=old_dst, new_src=new_src, new_dst=new_dst)
                     + "; ".join(entry["messages"][:3]))
             if rule.status != RuleStatus.in_review:
                 rule.status = RuleStatus.in_review
@@ -742,9 +767,11 @@ def _apply_reassessment(db: Session, network: ZoneNetwork, user, batch_id: str) 
             add_version(db, rule, user, note)
             db.add(Comment(rule_pk=rule.id, author=user.username, text=note))
         elif entry["zones_changed"]:
-            note = (f"Network {network.cidr} moved to {zone_ref(network.zone)} "
-                    f"(request {short_id}): zones re-derived, {old_src} → {old_dst} "
-                    f"becomes {new_src} → {new_dst}; still permitted")
+            note = _("Network {cidr} moved to {zone} "
+                     "(request {short_id}): zones re-derived, {old_src} → {old_dst} "
+                     "becomes {new_src} → {new_dst}; still permitted",
+                     cidr=network.cidr, zone=zone_ref(network.zone), short_id=short_id,
+                     old_src=old_src, old_dst=old_dst, new_src=new_src, new_dst=new_dst)
             rule.version += 1
             add_version(db, rule, user, note)
             rule.removal_reason = ""   # an earlier removal proposal is now moot
@@ -838,7 +865,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
     as the 'first approval' (avoiding a TOCTOU race)."""
     change = db.get(ZonePolicyChange, change_id)
     if not change:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Request not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Request not found"))
     if change.batch_id:
         batch = (
             db.query(ZonePolicyChange)
@@ -858,13 +885,13 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
     # and the lock)
     if not batch or change.status != "pending":
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            f"The request is already '{change.status}'")
+                            _("The request is already '{status}'", status=_(change.status)))
     # Four-eyes principle without exception – not even admins may approve their own
     # requests (BSI: separation of duties)
     if any(c.requested_by == user.username for c in batch):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Separation of duties: you cannot approve your own request",
+            _("Separation of duties: you cannot approve your own request"),
         )
     # Zone and matrix changes need TWO approvals by two different change approvers
     if approve and not change.first_approved_by:
@@ -876,12 +903,12 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
         db.commit()
         return {"status": "pending", "batch_id": change.batch_id, "items": len(batch),
                 "approvals": "1/2",
-                "detail": "First approval granted – a second approval by a different "
-                          "change approver is required"}
+                "detail": _("First approval granted – a second approval by a different "
+                            "change approver is required")}
     if approve and change.first_approved_by == user.username:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "The second approval must come from a different change approver",
+            _("The second approval must come from a different change approver"),
         )
     reviews_reset = []
     reassessed: list[dict] = []
@@ -906,8 +933,9 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                     if used or nets:
                         raise HTTPException(
                             status.HTTP_409_CONFLICT,
-                            f"Zone '{zone.name}' is still in use ({used} rule(s), "
-                            f"{nets} network assignment(s)) – deletion aborted")
+                            _("Zone '{name}' is still in use ({used} rule(s), "
+                              "{nets} network assignment(s)) – deletion aborted",
+                              name=zone.name, used=used, nets=nets))
                     db.query(ZonePolicy).filter(
                         (ZonePolicy.from_zone_id == zone.id) | (ZonePolicy.to_zone_id == zone.id)
                     ).delete(synchronize_session=False)
@@ -922,7 +950,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                 zone = find_zone(db, item.from_zone)
                 if not zone:
                     raise HTTPException(status.HTTP_409_CONFLICT,
-                                        f"Zone '{item.from_zone}' no longer exists")
+                                        _("Zone '{name}' no longer exists", name=item.from_zone))
                 vrf = get_vrf(db, extra.get("vrf") or None)
                 if not db.query(ZoneNetwork).filter(ZoneNetwork.cidr == item.to_zone,
                                                     ZoneNetwork.vrf_id == vrf.id).first():
@@ -939,7 +967,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                     zone = find_zone(db, item.from_zone)
                     if not zone:
                         raise HTTPException(status.HTTP_409_CONFLICT,
-                                            f"Zone '{item.from_zone}' no longer exists")
+                                            _("Zone '{name}' no longer exists", name=item.from_zone))
                     network.cidr = item.to_zone
                     network.zone_id = zone.id
                     db.flush()   # so the reassessment sees the new assignment
@@ -952,7 +980,8 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
             zone_a, zone_b = find_zone(db, item.from_zone), find_zone(db, item.to_zone)
             if not zone_a or not zone_b:
                 raise HTTPException(status.HTTP_409_CONFLICT,
-                                    f"The zone for {item.from_zone} → {item.to_zone} no longer exists")
+                                    _("The zone for {from_zone} → {to_zone} no longer exists",
+                                      from_zone=item.from_zone, to_zone=item.to_zone))
             policy = get_policy(db, zone_a, zone_b)
             if not policy:
                 policy = ZonePolicy(from_zone_id=zone_a.id, to_zone_id=zone_b.id)
@@ -964,8 +993,10 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
             if item.new_policy == "block_all":
                 from .rules_router import add_version
 
-                note = (f"Matrix change {zone_a.name} → {zone_b.name} to Block "
-                        f"(request {change.batch_id[:8]}): the rule has to be reassessed")
+                note = _("Matrix change {from_zone} → {to_zone} to Block "
+                         "(request {request}): the rule has to be reassessed",
+                         from_zone=zone_a.name, to_zone=zone_b.name,
+                         request=change.batch_id[:8])
                 for rule in _affected_rules(db, zone_a.name, zone_b.name,
                                             statuses=(RuleStatus.approved,)):
                     rule.status = RuleStatus.in_review
@@ -1000,8 +1031,10 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
     result = {"status": batch[0].status, "batch_id": change.batch_id, "items": len(batch)}
     if reviews_reset:
         result["reviews_reset"] = reviews_reset
-        result["detail"] = (f"{len(reviews_reset)} approved rule(s) of this relation were "
-                            f"sent back into review: {', '.join(reviews_reset[:10])}"
+        result["detail"] = (_("{count} approved rule(s) of this relation were "
+                              "sent back into review: {rule_ids}",
+                              count=len(reviews_reset),
+                              rule_ids=", ".join(reviews_reset[:10]))
                             + (" …" if len(reviews_reset) > 10 else ""))
     if reassessed:
         result["reassessed"] = reassessed
@@ -1009,12 +1042,14 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
         carried_over = len(reassessed) - len(for_removal)
         parts = []
         if for_removal:
-            parts.append(f"{len(for_removal)} rule(s) became inadmissible through the move "
-                         f"and are in review for removal: "
-                         f"{', '.join(for_removal[:10])}"
+            parts.append(_("{count} rule(s) became inadmissible through the move "
+                           "and are in review for removal: {rule_ids}",
+                           count=len(for_removal),
+                           rule_ids=", ".join(for_removal[:10]))
                          + (" …" if len(for_removal) > 10 else ""))
         if carried_over:
-            parts.append(f"{carried_over} further rule(s) were carried over to the new zones")
+            parts.append(_("{count} further rule(s) were carried over to the new zones",
+                           count=carried_over))
         if parts:
             result["detail"] = (result.get("detail", "") + " " if result.get("detail") else "") \
                 + ". ".join(parts) + "."
@@ -1047,7 +1082,7 @@ def check(
     destination: str = Query(...),
     platforms: str = Query("", description="Comma-separated, e.g. juniper,aci"),
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _user: User = Depends(get_current_user),
 ):
     plist = [p.strip().lower() for p in platforms.split(",") if p.strip()]
     result = check_zone_pair(db, source, destination, plist)

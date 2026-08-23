@@ -4,6 +4,7 @@ Known keys and their allowed values live in KNOWN_SETTINGS; the first value of
 each entry is the default used when the key is not set."""
 from sqlalchemy.orm import Session
 
+from .messages import _
 from .models import Setting
 
 # zone_matrix_default: behaviour for zone relations WITHOUT a matrix entry.
@@ -33,10 +34,11 @@ def get_setting(db: Session, key: str) -> str:
 
 def set_setting(db: Session, key: str, value: str) -> None:
     if key not in KNOWN_SETTINGS:
-        raise ValueError(f"Unknown setting '{key}'")
+        raise ValueError(_("Unknown setting '{key}'", key=key))
     if value not in KNOWN_SETTINGS[key]:
-        raise ValueError(f"Invalid value '{value}' for '{key}' "
-                        f"(allowed: {', '.join(KNOWN_SETTINGS[key])})")
+        raise ValueError(_("Invalid value '{value}' for '{key}' (allowed: {allowed})",
+                           value=value, key=key,
+                           allowed=", ".join(KNOWN_SETTINGS[key])))
     row = db.get(Setting, key)
     if row:
         row.value = value
