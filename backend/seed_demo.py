@@ -167,6 +167,32 @@ def make_services(dst_zone: str) -> list[dict]:
     return [{"protocol": p, "port": port} for p, port in random.choice(options)]
 
 
+def _promote_implemented_rules(db):
+    """Moves rules the seed left approved-but-implemented to `active`.
+
+    The seed writes impl_status straight onto the rule; the application never
+    does. Going through the endpoint, confirming the last component promotes the
+    rule to `active` - so the demo showed 63 approved rules of which 30 were
+    implemented everywhere, and none active. The dashboard read "Approved 63 /
+    Active 0" beside "To implement 33", which does not add up and should not,
+    because it was a state the application itself cannot produce.
+
+    Same condition and same version note as _sync_active_status, so the history
+    reads like the workflow it is standing in for.
+    """
+    from app.routers.rules_router import fully_implemented
+
+    for rule in db.query(Rule).filter(Rule.status == RuleStatus.approved).all():
+        if not fully_implemented(rule):
+            continue
+        rule.status = RuleStatus.active
+        rule.version += 1
+        db.add(RuleVersion(
+            rule_pk=rule.id, version=rule.version, snapshot={"seed": "demo"},
+            change_note="Implemented on every component – the rule is active",
+            changed_by="betrieb"))
+
+
 def _seed_device_configs(db):
     """Gives the drift comparison something real to look at.
 
@@ -623,6 +649,7 @@ def seed(wipe: bool):
     # screenshots and the audience it is shown to are German.
     set_setting(db, "ui_language", "de")
 
+    _promote_implemented_rules(db)
     _seed_device_configs(db)
     _seed_emergency_change(db)
 
