@@ -48,6 +48,8 @@ jobs:
       # Blocking on purpose: the tree is clean, so a new finding is a real one.
       - run: ruff check . --output-format=concise
         working-directory: backend
+      # The browser checks are Python too, and just as able to rot.
+      - run: ruff check e2e --output-format=concise --config backend/ruff.toml
 
   backend-tests:
     name: backend tests (SQLite)
@@ -249,6 +251,63 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+
+  e2e:
+    name: end-to-end (browser)
+    runs-on: ubuntu-latest
+    # The slowest job here, because a whole stack has to come up. It buys the
+    # one thing nothing else in this pipeline can say: the interface runs. A
+    # component calling t() without useLang() builds cleanly and fails when it
+    # mounts; a React major bundles fine and then behaves differently. Both
+    # happened, and neither was caught by a build.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          # Keep in step with backend/Dockerfile. If they drift, CI proves the
+          # tests pass on a runtime that is not the one being shipped.
+          python-version: '3.14'
+
+      - name: Start the stack with demo data
+        env:
+          # Throwaway values for a stack that lives for two minutes.
+          DB_PASSWORD: ci-only-not-secret
+          SECRET_KEY: ci-only-not-secret-key-0123456789abcdef
+          PERMITRA_DEMO: '1'
+          FRONTEND_PORT: '8090'
+        run: |
+          docker compose up -d --build
+          # Wait for the API rather than sleeping: the backend runs migrations
+          # and seeding at startup, and how long that takes is not fixed.
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8090/api/settings/public >/dev/null; then
+              echo "up after ${i}s" && break
+            fi
+            sleep 1
+          done
+          curl -sf http://localhost:8090/api/settings/public
+          docker compose exec -T backend python seed_demo.py --wipe
+
+      - name: Install the browser
+        run: |
+          pip install --quiet -r e2e/requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run the checks
+        run: pytest e2e/ -q --junitxml=e2e-report.xml
+
+      - name: What the containers said, if it failed
+        if: failure()
+        run: docker compose logs --tail 80
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-report
+          path: e2e-report.xml
+          retention-days: 7
 
   dependency-audit:
     name: dependency audit
