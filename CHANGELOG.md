@@ -13,9 +13,6 @@ production communication matrix in it yet.
 
 Known gaps, stated plainly rather than left to be discovered:
 
-- Backups (`scripts/backup.sh`) are unencrypted and local, and the restore path
-  is neither documented nor tested. The dump contains password hashes and API
-  tokens.
 - List queries load all rules and paginate in memory; with the risk filter on,
   each rule additionally triggers two zone scans. Fine for thousands of rules,
   not for hundreds of thousands.
@@ -48,6 +45,16 @@ Known gaps, stated plainly rather than left to be discovered:
 ### Security
 
 Findings from the internal code audit, closed before this release:
+
+- **Backups are encrypted and the restore path is tested.** The dump holds
+  password hashes, TOTP seeds, API token hashes and the whole audit chain, and
+  was written as plain SQL — reading the backup directory was as good as reading
+  the database. `scripts/backup.sh` now refuses to write an unencrypted dump, and
+  refuses a passphrase stored inside the backup directory it protects.
+  `scripts/restore.sh` plays one back, refuses to overwrite a populated database
+  without `--force`, and re-verifies the audit hash chain afterwards. CI runs the
+  whole round trip on every pull request, including a check that the encrypted
+  file holds no readable SQL.
 
 - **Audit chain anchored externally**: a hash chain is still intact after its
   newest entries are cut off, so checkpoints record the chain end and are

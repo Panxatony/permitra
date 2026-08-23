@@ -17,11 +17,81 @@ docker compose exec backend python seed_demo.py --wipe   # optional demo data
 
 - UI/API reachable on port **8080** (nginx proxies `/api` to the backend; backend and DB are not exposed directly). Override with `FRONTEND_PORT`.
 - Data is stored in the `pgdata` volume.
-- **Backup:** `scripts/backup.sh` (pg_dump, 14 generations) via cron, or `docker compose exec db pg_dump -U permitra permitra > backup.sql`.
+- **Backup and restore:** see [Backups](#backups) below. Short version: `scripts/backup.sh` writes an encrypted dump, `scripts/restore.sh` plays one back — and you should run the second one on purpose, at least once, before you need it.
 - **Update:** `git pull && docker compose up --build -d` — schema changes run automatically via Alembic migrations at startup.
 - **Optional environment variables** (see README for details): `SMTP_*` + `PERMITRA_BASE_URL` (email delivery and links), `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (passkeys/WebAuthn), `CHANGE_WEBHOOK_URL`/`CHANGE_WEBHOOK_TOKEN` (change management webhook), `AUDIT_WEBHOOK_URL` and/or `AUDIT_SYSLOG_HOST`/`AUDIT_SYSLOG_PORT`/`AUDIT_SYSLOG_PROTO` (SIEM delivery of the audit log).
 
 > **Single instance by design.** The backend runs background jobs in-process — SIEM delivery, audit-chain anchoring and the daily expiry/recertification run. They carry no cross-instance locking, so a second backend instance would deliver audit events to the SIEM twice, send recertification mails twice, and race on the Alembic migrations at startup. Scale the frontend freely (it is stateless); keep the backend at one replica unless those jobs are reworked.
+
+## Backups
+
+The dump holds everything Permitra is trusted with: password hashes, the
+encrypted NetBox token, TOTP seeds, API token hashes and the whole audit chain.
+Left as plain SQL on a filesystem, reading the backup directory is as good as
+reading the database — and backup directories travel: to a share, to off-site
+storage, onto somebody's laptop. So `scripts/backup.sh` encrypts, and refuses to
+run if it cannot.
+
+### Setting it up
+
+```bash
+# A passphrase, kept where the backups are NOT.
+sudo mkdir -p /etc/permitra
+openssl rand -base64 32 | sudo tee /etc/permitra/backup.key >/dev/null
+sudo chmod 600 /etc/permitra/backup.key
+
+# Daily at 02:30
+30 2 * * * cd /opt/permitra && PERMITRA_BACKUP_PASSPHRASE_FILE=/etc/permitra/backup.key ./scripts/backup.sh /var/backups/permitra
+```
+
+**Keep the passphrase somewhere the backups are not.** The script checks this and
+refuses if the key file sits inside the backup directory — a key that is copied
+along with what it protects protects nothing. Back the passphrase up separately,
+in a password manager or a sealed envelope: **without it the dumps are lost**,
+and that is the point of them being encrypted.
+
+| Variable | Meaning |
+|---|---|
+| `PERMITRA_BACKUP_PASSPHRASE_FILE` | file holding the passphrase (preferred) |
+| `PERMITRA_BACKUP_PASSPHRASE` | the passphrase itself, if a file is impractical |
+| `PERMITRA_BACKUP_KEEP` | generations to keep (default 14) |
+| `PERMITRA_BACKUP_PLAINTEXT=1` | skip encryption deliberately — only when the storage is encrypted at another layer; it warns on every run |
+| `PERMITRA_PG_URL` | connect directly instead of through `docker compose` (Kubernetes, managed database) |
+
+### Restoring
+
+```bash
+# Into a fresh, empty database — the normal rehearsal
+PERMITRA_BACKUP_PASSPHRASE_FILE=/etc/permitra/backup.key \
+  ./scripts/restore.sh /var/backups/permitra/permitra-20260823-023000.sql.gz.gpg
+```
+
+The script refuses a database that already holds data unless you repeat the
+command with `--force`. The most expensive mistake available here is restoring
+last night's dump over a healthy production database, and it is one keystroke
+away from a legitimate one.
+
+Afterwards it re-verifies the **audit hash chain**. That check is the interesting
+part: "the SQL applied without error" is a weak claim, while a chain that still
+verifies proves the dump preserved the property the audit log exists for. If it
+had been truncated, or rows had come back in a different order, this is where you
+find out — in a rehearsal rather than in an incident.
+
+### Version mismatch
+
+A `pg_dump` newer than the server writes statements the server does not know —
+PostgreSQL 17 emits `SET transaction_timeout = 0`, which a 16 server rejects, and
+the restore stops on the first line. The dump looks perfectly fine until the day
+it is needed. The script warns when it notices; through `docker compose` it uses
+the server's own client and the question does not arise.
+
+### What is checked automatically
+
+CI runs the whole round trip on every pull request: dump a migrated database,
+encrypt, refuse to overwrite a populated target, restore into a fresh one, and
+verify the audit chain. It also greps the encrypted file for readable SQL, so
+encryption silently ceasing to happen fails the build rather than being
+discovered later.
 
 ## Option B: Kubernetes
 

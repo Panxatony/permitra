@@ -130,6 +130,108 @@ jobs:
           db.close()
           PY
 
+  backup-restore:
+    name: backup & restore round trip
+    runs-on: ubuntu-latest
+    # The point of this job: a backup that has never been restored is a guess.
+    # It dumps a migrated database, encrypts it, restores it into a second one
+    # and then asks the question that matters - does the audit chain still
+    # verify? If the dump had been truncated, or rows had come back in a
+    # different order, that check fails and the backup is worthless for exactly
+    # the purpose it is kept for.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: permitra_ci
+          POSTGRES_USER: permitra
+          POSTGRES_PASSWORD: ci-only-not-secret
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U permitra"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SRC_URL: postgresql://permitra:ci-only-not-secret@localhost:5432/permitra_ci
+      DST_URL: postgresql://permitra:ci-only-not-secret@localhost:5432/permitra_restored
+      PERMITRA_DEV: '1'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          # Keep in step with backend/Dockerfile. If they drift, CI proves the
+          # tests pass on a runtime that is not the one being shipped.
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - run: pip install --quiet -r backend/requirements-dev.txt
+
+      - name: Client version must match the server
+        # A pg_dump newer than the server emits statements the server rejects,
+        # and the restore stops on the first one. The scripts warn about it;
+        # here it simply must not happen.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16 >/dev/null
+          pg_dump --version
+
+      - name: Seed a database with audit events
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg2://permitra:ci-only-not-secret@localhost:5432/permitra_ci
+        run: |
+          python - <<'PY'
+          from app.migrations import run_migrations
+          run_migrations()
+          from app.database import SessionLocal
+          from app import audit
+          db = SessionLocal()
+          for i in range(40):
+              audit.record(db, "admin", "ci.backup", actor="ci", object=f"o{i}", detail="x")
+          db.close()
+          print("seeded")
+          PY
+
+      - name: Back up, encrypted
+        run: |
+          mkdir -p "$RUNNER_TEMP/keys" "$RUNNER_TEMP/backups"
+          echo "ci-only-passphrase" > "$RUNNER_TEMP/keys/backup.key"
+          PERMITRA_PG_URL="$SRC_URL" \
+          PERMITRA_BACKUP_PASSPHRASE_FILE="$RUNNER_TEMP/keys/backup.key" \
+            ./scripts/backup.sh "$RUNNER_TEMP/backups"
+
+      - name: The dump must not be readable
+        # Guards the whole point of the change: if encryption silently stopped
+        # happening, the file would still be a valid backup and nobody would
+        # notice until it was copied somewhere it should not have been.
+        run: |
+          FILE=$(ls -1 "$RUNNER_TEMP"/backups/permitra-*.sql.gz.gpg)
+          echo "encrypted file: $FILE"
+          if zgrep -q "CREATE TABLE" "$FILE" 2>/dev/null || grep -qa "CREATE TABLE" "$FILE"; then
+            echo "::error::the backup contains readable SQL" && exit 1
+          fi
+
+      - name: Refuse to overwrite a populated database
+        run: |
+          FILE=$(ls -1 "$RUNNER_TEMP"/backups/permitra-*.sql.gz.gpg)
+          if PERMITRA_PG_URL="$SRC_URL" \
+             PERMITRA_BACKUP_PASSPHRASE_FILE="$RUNNER_TEMP/keys/backup.key" \
+             ./scripts/restore.sh "$FILE" >/dev/null 2>&1; then
+            echo "::error::restore overwrote a populated database without --force" && exit 1
+          fi
+          echo "refused, as it should"
+
+      - name: Restore into a fresh database and verify the audit chain
+        run: |
+          PGPASSWORD=ci-only-not-secret createdb -h localhost -U permitra permitra_restored
+          FILE=$(ls -1 "$RUNNER_TEMP"/backups/permitra-*.sql.gz.gpg)
+          PERMITRA_PG_URL="$DST_URL" \
+          PERMITRA_BACKUP_PASSPHRASE_FILE="$RUNNER_TEMP/keys/backup.key" \
+            ./scripts/restore.sh "$FILE"
+
   frontend-build:
     name: frontend build
     runs-on: ubuntu-latest
