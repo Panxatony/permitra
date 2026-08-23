@@ -62,6 +62,12 @@ def export_rule(rule: Rule) -> str:
         lines.append(f"{base} match destination-address {'any' if obj.is_any or not obj.cidr else obj.name}")
     for app in apps:
         lines.append(f"{base} match application {app}")
+    # The rule ID as a policy description, because it has to survive onto the
+    # device. The "# SR00042" comment above is part of the export file and is
+    # never applied - so without this line the drift comparison finds no link
+    # between a Juniper policy and the security rule that justifies it. Check
+    # Point and ACI already carry the ID in device-visible fields.
+    lines.append(f'{base} description "{rule.rule_id}"')
     lines.append(f"{base} then {'permit' if rule.action.value == 'permit' else 'deny'}")
     lines.append(f"{base} then log session-init session-close")
     return "\n".join(lines)

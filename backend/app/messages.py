@@ -60,6 +60,39 @@ def _(template: str, **values) -> str:
             return template
 
 
+def render(template: str, values: dict | None = None) -> str:
+    """Translates a message that was *stored* earlier, at the moment it is read.
+
+    The history and the audit log keep the English template and its values, not
+    a finished sentence, so that an entry is shown in the language the instance
+    is set to now rather than the one it happened to be set to on the day it was
+    written. Switching the instance to German has to translate the past too -
+    otherwise the log reads half English forever.
+
+    Text with no values stored alongside it is a person's own words (a change
+    note somebody typed). It is looked up all the same, so that entries written
+    before this existed still translate, and otherwise passed through unchanged.
+    """
+    if not isinstance(values, dict) or not values:
+        return CATALOG.get(_language, {}).get(template, template)
+    return _(template, **{k: _value(v) for k, v in values.items()})
+
+
+def _value(value):
+    """A stored value, made readable.
+
+    A mapping arrives where a message reports something per component - the
+    implementation status is the one. Rendering it here rather than at the call
+    site keeps the component names untranslated and the status words
+    translated, and it keeps a Python dict repr out of the interface.
+    """
+    if isinstance(value, dict):
+        return ", ".join(f"{name} → {_(str(term))}" for name, term in value.items())
+    if isinstance(value, list):
+        return ", ".join(_(str(term)) for term in value)
+    return value
+
+
 CATALOG: dict[str, dict[str, str]] = {
     "de": {
         "'{port}' is not a valid port (1-65535)": "'{port}' ist kein gültiger Port (1-65535)",
@@ -191,6 +224,7 @@ CATALOG: dict[str, dict[str, str]] = {
         "Rule created": "Regel angelegt",
         "Rule deactivated": "Regel deaktiviert",
         "Rule rejected": "Regel abgelehnt",
+        "Rule set to deleted": "Regel auf gelöscht gesetzt",
         "SECRET_KEY is not set – startup refused (fail-secure). Set SECRET_KEY (e.g. `openssl rand -hex 32`) or PERMITRA_DEV=1 for local development.":
             "SECRET_KEY ist nicht gesetzt – Start verweigert (fail-secure). Setze SECRET_KEY (z.B. `openssl rand -hex 32`) oder PERMITRA_DEV=1 für lokale Entwicklung.",
         "Separation of duties: you cannot approve a rule you created or submitted yourself":
@@ -273,6 +307,11 @@ CATALOG: dict[str, dict[str, str]] = {
         "in_review": "im Review",
         "pending": "offen",
         "rejected": "abgelehnt",
+        # The rollout status per component (domain_values.IMPL_STATUSES);
+        # "to change" and "to remove" sit further up in this catalogue.
+        "implemented": "umgesetzt",
+        "new": "neu",
+        "open": "offen",
         # --- messages with placeholders ------------------------------
         # Added together with their call sites; the placeholder names
         # must match so a translation can reorder them.
@@ -324,6 +363,10 @@ CATALOG: dict[str, dict[str, str]] = {
         "Hello {name},\n\nuse the following link to set a new password:\n\n  {link}\n\nThe link is valid for 2 hours. If you did not request this, ignore this mail.\n\nPermitra":
             "Hallo {name},\n\nüber folgenden Link kannst du ein neues Passwort setzen:\n\n  {link}\n\nDer Link ist 2 Stunden gültig. Falls du das nicht angefordert hast, ignoriere diese Mail.\n\nPermitra",
         "Implementation status: {impl_status}": "Umsetzungsstatus: {impl_status}",
+        "Implemented on every component – the rule is active":
+            "Auf allen Komponenten umgesetzt – die Regel ist aktiv",
+        "No longer implemented on every component – the rule is approved again":
+            "Nicht mehr auf allen Komponenten umgesetzt – die Regel ist wieder freigegeben",
         "Invalid address: '{ip}'": "Ungültige Adresse: '{ip}'",
         "Invalid implementation status '{value}' (allowed: {allowed})":
             "Ungültiger Umsetzungsstatus '{value}' (erlaubt: {allowed})",
@@ -340,13 +383,12 @@ CATALOG: dict[str, dict[str, str]] = {
         "NetBox is not reachable: {error}": "NetBox nicht erreichbar: {error}",
         "Network {cidr} moved to {zone} (request {short_id}): zones re-derived, {old_src} → {old_dst} becomes {new_src} → {new_dst}; still permitted":
             "Netz {cidr} nach {zone} umgehängt (Antrag {short_id}): Zonen neu abgeleitet, {old_src} → {old_dst} wird {new_src} → {new_dst}; weiterhin zulässig",
-        "Network {cidr} moved to {zone} (request {short_id}): {old_src} → {old_dst} is now {new_src} → {new_dst} and no longer permitted – ":
-            "Netz {cidr} nach {zone} umgehängt (Antrag {short_id}): {old_src} → {old_dst} ist jetzt {new_src} → {new_dst} und nicht mehr zulässig – ",
+        "Network {cidr} moved to {zone} (request {short_id}): {old_src} → {old_dst} is now {new_src} → {new_dst} and no longer permitted – {reasons}":
+            "Netz {cidr} nach {zone} umgehängt (Antrag {short_id}): {old_src} → {old_dst} ist jetzt {new_src} → {new_dst} und nicht mehr zulässig – {reasons}",
         "No approved permit rule has {ip} as its destination":
             "Keine freigegebene permit-Regel hat {ip} als Ziel",
         "Not approved and therefore not exported: {listed}. For a preview, turn off 'approved only' (only_approved=false).":
             "Nicht freigegeben und deshalb nicht exportiert: {listed}. Für eine Vorschau 'nur freigegebene' abwählen (only_approved=false).",
-        ", NOT approved: {rule_ids}": ", NICHT freigegeben: {rule_ids}",
         "Only {checked} entries present, the checkpoint records {count} – entries have been removed":
             "Nur {checked} Einträge vorhanden, der Prüfpunkt belegt {count} – es wurden Einträge entfernt",
         "Overlapping networks/ports with opposite action ({action} vs. {other_action})":
@@ -377,6 +419,8 @@ CATALOG: dict[str, dict[str, str]] = {
             "Beziehung {from_zone} → {to_zone} ist in der Matrix nicht gepflegt",
         "Removal approved: {reason} – remove the rule on the components ('to remove')":
             "Löschung freigegeben: {reason} – Regel auf den Komponenten entfernen ('zu löschen')",
+        "Removal approved: the zone relation {from_zone} → {to_zone} is Block – remove the rule on the components ('to remove')":
+            "Löschung freigegeben: die Zonenbeziehung {from_zone} → {to_zone} ist Block – Regel auf den Komponenten entfernen ('zu löschen')",
         "Risky service {label} ({where})": "Riskanter Dienst {label} ({where})",
         "Role '{role}' is not permitted to perform this action":
             "Rolle '{role}' ist für diese Aktion nicht berechtigt",
@@ -395,8 +439,6 @@ CATALOG: dict[str, dict[str, str]] = {
             "Regel ist im Status '{status}' – Vorschau zeigt die künftige Umsetzung",
         "The zone for {from_zone} → {to_zone} no longer exists":
             "Zone für {from_zone} → {to_zone} existiert nicht mehr",
-        "The zone relation {from_zone} → {to_zone} is Block":
-            "Zonen-Beziehung {from_zone} → {to_zone} ist Block",
         "Unknown component(s): {components}": "Unbekannte Komponente(n): {components}",
         "Unknown format '{fmt}'": "Unbekanntes Format '{fmt}'",
         "Unknown host OS '{os_name}'. Allowed: {allowed}":
@@ -432,6 +474,11 @@ CATALOG: dict[str, dict[str, str]] = {
             "{count} weitere Regel(n) wurden auf die neuen Zonen nachgezogen",
         "{count} prefixes": "{count} Prefixe",
         "{count} rule(s)": "{count} Regel(n)",
+        "{count} rule(s), app_id={app_id}": "{count} Regel(n), app_id={app_id}",
+        "{count} rule(s), app_id={app_id}, NOT approved: {rule_ids}":
+            "{count} Regel(n), app_id={app_id}, NICHT freigegeben: {rule_ids}",
+        "{count} rule(s), NOT approved: {rule_ids}":
+            "{count} Regel(n), NICHT freigegeben: {rule_ids}",
         "{count} rule(s) became inadmissible through the move and are in review for removal: {rule_ids}":
             "{count} Regel(n) sind durch die Umhängung unzulässig geworden und stehen zur Löschung im Review: {rule_ids}",
         "{description} [{changed} rule(s) updated]": "{description} [{changed} Regel(n) aktualisiert]",

@@ -61,7 +61,7 @@ async def login(
             _register_failure(db, user)
         audit.record(db, "auth", "auth.login_failed", actor=form.username,
                      source_ip=audit.client_ip(request),
-                     detail=_("account locked") if (user and user.locked_until) else "")
+                     detail="account locked" if (user and user.locked_until) else "")
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Wrong username or password"))
 
     # The lock is only reported once the password has been proven correct.
@@ -80,7 +80,7 @@ async def login(
                                 _("Account temporarily locked – try again later"))
     if not user.is_active:
         audit.record(db, "auth", "auth.login_denied", actor=user.username,
-                     source_ip=audit.client_ip(request), detail=_("account deactivated"))
+                     source_ip=audit.client_ip(request), detail="account deactivated")
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             _("The account is deactivated or not activated yet"))
     if user.totp_enabled:
@@ -93,7 +93,7 @@ async def login(
         if counter is None:
             _register_failure(db, user)
             audit.record(db, "auth", "auth.login_failed", actor=user.username,
-                         source_ip=audit.client_ip(request), detail=_("wrong 2FA code"))
+                         source_ip=audit.client_ip(request), detail="wrong 2FA code")
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_invalid")
         # Burn the code before the session is handed out, so a replay in the
         # same time window finds it already used.

@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user, require_roles
 from ..database import get_db
 from ..domain_values import PAP_LEVELS, PROTECTION_LEVELS
-from ..messages import _
+from ..messages import _, render
 from ..models import (
     IN_FORCE,
     Comment,
@@ -756,25 +756,30 @@ def _apply_reassessment(db: Session, network: ZoneNetwork, user, batch_id: str) 
             rule.removal_reason = (
                 f"{new_src} → {new_dst}: {entry['reason']}")[:255]
             # … the full rationale belongs in the history and the comment.
-            note = (_("Network {cidr} moved to {zone} "
-                      "(request {short_id}): {old_src} → {old_dst} is now "
-                      "{new_src} → {new_dst} and no longer permitted – ",
-                      cidr=network.cidr, zone=zone_ref(network.zone), short_id=short_id,
-                      old_src=old_src, old_dst=old_dst, new_src=new_src, new_dst=new_dst)
-                    + "; ".join(entry["messages"][:3]))
+            # The reasons used to be appended after the sentence was already
+            # translated, which left the note untranslatable as a whole. They
+            # are a value now, so the template stays one catalogue entry.
+            template = ("Network {cidr} moved to {zone} "
+                        "(request {short_id}): {old_src} → {old_dst} is now "
+                        "{new_src} → {new_dst} and no longer permitted – {reasons}")
+            values = {"cidr": network.cidr, "zone": zone_ref(network.zone),
+                      "short_id": short_id, "old_src": old_src, "old_dst": old_dst,
+                      "new_src": new_src, "new_dst": new_dst,
+                      "reasons": "; ".join(entry["messages"][:3])}
             if rule.status != RuleStatus.in_review:
                 rule.status = RuleStatus.in_review
             rule.version += 1
-            add_version(db, rule, user, note)
-            db.add(Comment(rule_pk=rule.id, author=user.username, text=note))
+            add_version(db, rule, user, template, **values)
+            db.add(Comment(rule_pk=rule.id, author=user.username,
+                           text=render(template, values)))
         elif entry["zones_changed"]:
-            note = _("Network {cidr} moved to {zone} "
-                     "(request {short_id}): zones re-derived, {old_src} → {old_dst} "
-                     "becomes {new_src} → {new_dst}; still permitted",
-                     cidr=network.cidr, zone=zone_ref(network.zone), short_id=short_id,
-                     old_src=old_src, old_dst=old_dst, new_src=new_src, new_dst=new_dst)
             rule.version += 1
-            add_version(db, rule, user, note)
+            add_version(db, rule, user,
+                        "Network {cidr} moved to {zone} "
+                        "(request {short_id}): zones re-derived, {old_src} → {old_dst} "
+                        "becomes {new_src} → {new_dst}; still permitted",
+                        cidr=network.cidr, zone=zone_ref(network.zone), short_id=short_id,
+                        old_src=old_src, old_dst=old_dst, new_src=new_src, new_dst=new_dst)
             rule.removal_reason = ""   # an earlier removal proposal is now moot
 
         if entry["zones_changed"] or not entry["admissible"]:
@@ -994,15 +999,16 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
             if item.new_policy == "block_all":
                 from .rules_router import add_version
 
-                note = _("Matrix change {from_zone} → {to_zone} to Block "
-                         "(request {request}): the rule has to be reassessed",
-                         from_zone=zone_a.name, to_zone=zone_b.name,
-                         request=change.batch_id[:8])
+                template = ("Matrix change {from_zone} → {to_zone} to Block "
+                            "(request {request}): the rule has to be reassessed")
+                values = {"from_zone": zone_a.name, "to_zone": zone_b.name,
+                          "request": change.batch_id[:8]}
+                note = render(template, values)
                 for rule in _affected_rules(db, zone_a.name, zone_b.name,
                                             statuses=IN_FORCE):
                     rule.status = RuleStatus.in_review
                     rule.version += 1
-                    add_version(db, rule, user, note)
+                    add_version(db, rule, user, template, **values)
                     db.add(Comment(rule_pk=rule.id, author=user.username, text=note))
                     reviews_reset.append(rule.rule_id)
     for item in batch:

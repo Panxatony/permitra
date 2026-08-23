@@ -458,6 +458,17 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .topo-axis { stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 4 4; }
 .topo-tier-label { font-size: 11px; fill: var(--muted); }
 
+/* Drift: how much of the device is covered by an approved rule. The bar is the
+   headline of the report - a number that should be climbing during onboarding
+   and staying at 100 afterwards. */
+.coverage { display: flex; align-items: center; gap: .8rem; margin-bottom: .8rem; flex-wrap: wrap; }
+.coverage-bar {
+  flex: 1 1 12rem; height: .55rem; border-radius: 999px;
+  background: var(--neutral-bg); overflow: hidden; min-width: 8rem;
+}
+.coverage-bar span { display: block; height: 100%; background: var(--green); border-radius: 999px; }
+.coverage-text { font-size: .9rem; color: var(--muted); }
+
 /* Security zone overview */
 .attach-select { display: flex; flex-direction: column; gap: .15rem; }
 .attach-select .checkbox { margin: 0; }

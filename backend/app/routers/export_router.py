@@ -80,11 +80,14 @@ def aerleon(
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     not_approved = [r.rule_id for r in rules if r.status not in IN_FORCE]
+    values = {"count": len(rules)}
+    if not_approved:
+        detail = "{count} rule(s), NOT approved: {rule_ids}"
+        values["rule_ids"] = ", ".join(not_approved)
+    else:
+        detail = "{count} rule(s)"
     audit.record(db, "export", "export.rules", actor=user.username,
-                 object=f"aerleon/{target}",
-                 detail=_("{count} rule(s)", count=len(rules))
-                 + (_(", NOT approved: {rule_ids}", rule_ids=", ".join(not_approved))
-                    if not_approved else ""),
+                 object=f"aerleon/{target}", detail=detail, detail_values=values,
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type="text/plain", headers=headers)
 
@@ -126,7 +129,8 @@ def host_export(
         headers["Content-Disposition"] = f'attachment; filename="{ip.replace("/", "_")}-{filename}"'
     audit.record(db, "export", "export.rules", actor=user.username,
                  object=f"host/{os_name}",
-                 detail=_("destination {ip}, {count} rule(s)", ip=ip, count=len(used)),
+                 detail="destination {ip}, {count} rule(s)",
+                 detail_values={"ip": ip, "count": len(used)},
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type="text/plain", headers=headers)
 
@@ -196,10 +200,24 @@ def export(
     else:
         content = export_fn(rules)
     not_approved = [r.rule_id for r in rules if r.status not in IN_FORCE]
+    # Four spellings written out rather than one assembled from fragments: an
+    # audit entry is stored as a template and translated when it is read, so a
+    # template has to be a whole sentence. Assembling one at runtime also hides
+    # it from the catalogue guard in the tests.
+    values = {"count": len(rules)}
+    if app_id:
+        values["app_id"] = app_id
+    if not_approved:
+        values["rule_ids"] = ", ".join(not_approved)
+    if app_id and not_approved:
+        detail = "{count} rule(s), app_id={app_id}, NOT approved: {rule_ids}"
+    elif app_id:
+        detail = "{count} rule(s), app_id={app_id}"
+    elif not_approved:
+        detail = "{count} rule(s), NOT approved: {rule_ids}"
+    else:
+        detail = "{count} rule(s)"
     audit.record(db, "export", "export.rules", actor=user.username,
-                 object=fmt, detail=_("{count} rule(s)", count=len(rules))
-                 + (f", app_id={app_id}" if app_id else "")
-                 + (_(", NOT approved: {rule_ids}", rule_ids=", ".join(not_approved))
-                    if not_approved else ""),
+                 object=fmt, detail=detail, detail_values=values,
                  source_ip=audit.client_ip(request))
     return PlainTextResponse(content, media_type=media_type, headers=headers)

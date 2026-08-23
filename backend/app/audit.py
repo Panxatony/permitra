@@ -50,7 +50,7 @@ from datetime import timezone
 
 from sqlalchemy.orm import Session
 
-from .messages import _
+from .messages import _, render
 from .models import AuditCheckpoint, AuditEvent, Rule, RuleVersion, ZonePolicyChange, utcnow
 
 log = logging.getLogger("permitra.audit")
@@ -123,11 +123,26 @@ def _advisory_lock(db: Session) -> None:
         log.debug("Advisory lock not available", exc_info=True)
 
 
+DETAIL_VALUES = "detail_values"   # reserved key in `extra`, see record()
+
+
 def record(db: Session, category: str, event: str, actor: str = "", object: str = "",
-           detail: str = "", source_ip: str = "", extra: dict | None = None) -> None:
+           detail: str = "", source_ip: str = "", extra: dict | None = None,
+           detail_values: dict | None = None) -> None:
     """Writes ONE audit entry into the append-only store in a tamper-evident
     (chained) way and marks it for SIEM delivery. Errors must never block the
-    business operation."""
+    business operation.
+
+    `detail` is the English message *template*, untranslated, and its values go
+    beside it in `extra`. The store is language-neutral on purpose: an entry is
+    a record, it is read long after it was written and possibly by a SIEM that
+    has no language at all, so the sentence is put together when somebody reads
+    it - see collect(). Translating on the way in froze each entry in whatever
+    language the instance was set to that day, which is how an instance running
+    in German ends up with an audit log half in English.
+    """
+    if detail_values:
+        extra = {**(extra or {}), DETAIL_VALUES: detail_values}
     ts = utcnow()
     with _write_lock:
         try:
@@ -256,7 +271,8 @@ def collect(db: Session, since: str | None = None, limit: int = 500,
             "event": a.event,
             "object": a.object,
             "actor": a.actor,
-            "detail": a.detail,
+            # Stored language-neutral, put into words here - see record()
+            "detail": render(a.detail, (a.extra or {}).get(DETAIL_VALUES)),
             "source_ip": a.source_ip,
             "hash": a.hash,
             "timestamp": _iso(a.ts),
@@ -276,7 +292,7 @@ def collect(db: Session, since: str | None = None, limit: int = 500,
                 "object": rid,
                 "version": v.version,
                 "actor": v.changed_by,
-                "detail": v.change_note,
+                "detail": render(v.change_note, v.change_values),
                 "timestamp": _iso(v.changed_at),
             })
 

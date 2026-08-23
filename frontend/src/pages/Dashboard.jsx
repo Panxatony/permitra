@@ -64,8 +64,7 @@ export default function Dashboard() {
             „Soll"). Die <strong>Umsetzung</strong> erfolgt weiterhin in den Management-Tools der
             Hersteller (Check Point SmartConsole, Juniper CLI/Security Director, Cisco APIC):
             Permitra erzeugt dafür die passenden Konfigurationen zum Übernehmen, schreibt aber
-            <strong> nicht selbst auf die Geräte</strong>. Der Soll-Ist-Abgleich (Drift) macht
-            sichtbar, wo Dokumentation und tatsächliche Konfiguration auseinanderlaufen.
+            <strong> nicht selbst auf die Geräte</strong>.
           </span>
         ) : (
           <span>
@@ -75,8 +74,7 @@ export default function Dashboard() {
             state). <strong>Implementation</strong> still happens in the vendors' management
             tools (Check Point SmartConsole, Juniper CLI/Security Director, Cisco APIC):
             Permitra generates the matching configurations to apply, but
-            <strong> never writes to the devices itself</strong>. The drift comparison shows
-            where documentation and actual configuration diverge.
+            <strong> never writes to the devices itself</strong>.
           </span>
         )}
       </div>

@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app import audit
 from app.database import Base
 from app.models import (
     ComponentType,
@@ -131,7 +132,10 @@ def test_unapproved_export_is_marked_in_the_audit_trail(db):
     make_rule(db, "SR00020", status=RuleStatus.draft)
     _export(db, ids="SR00020", only_approved=False)
     entry = db.query(AuditEvent).filter(AuditEvent.event == "export.rules").one()
-    assert "NOT approved" in entry.detail and "SR00020" in entry.detail
+    # The entry is stored as a template plus its values and put into words when
+    # the trail is read, so the rule ID is asserted where it actually appears.
+    assert "NOT approved" in entry.detail
+    assert entry.extra[audit.DETAIL_VALUES]["rule_ids"] == "SR00020"
 
 
 def test_normal_export_trail_stays_clean(db):
@@ -140,7 +144,11 @@ def test_normal_export_trail_stays_clean(db):
     make_rule(db, "SR00021")
     _export(db, ids="SR00021")
     entry = db.query(AuditEvent).filter(AuditEvent.event == "export.rules").one()
-    assert "NICHT freigegeben" not in entry.detail
+    # Asserted against the stored English, which is what the entry now holds -
+    # against a German phrase this would pass no matter what was written.
+    assert "NOT approved" not in entry.detail
+    assert audit.DETAIL_VALUES not in (entry.extra or {}) or \
+        "rule_ids" not in entry.extra[audit.DETAIL_VALUES]
 
 
 # ---------- M3: port ranges and port lists ----------

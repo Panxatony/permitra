@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
+from app.messages import render
 from app.models import (
     AddressComponentMap,
     ComponentType,
@@ -79,7 +80,10 @@ def test_restore_previous_version(db):
     assert restored.services == [{"protocol": "TCP", "port": "443"}]
     assert restored.status == RuleStatus.draft          # rollback -> normal review
     assert restored.version == 3
-    assert any("Rolled back to version 1" in v.change_note for v in restored.versions)
+    # The entry is stored as a template and its values; what a reader sees is
+    # the rendered sentence, so that is what is asserted here.
+    assert any("Rolled back to version 1" in render(v.change_note, v.change_values)
+               for v in restored.versions)
     assert [c.name for c in restored.components] == ["FW-Test"]
 
 
