@@ -92,6 +92,8 @@ CATALOG: dict[str, dict[str, str]] = {
         "Audit checkpoint failed": "Audit-Prüfpunkt fehlgeschlagen",
         "Central management of security rules for firewalls (Juniper SRX, Check Point) and ACI contracts":
             "Zentrale Verwaltung von Sicherheitsregeln für Firewalls (Juniper SRX, Check Point) und ACI Contracts",
+        "Cannot write the initial admin password to {path} ({error}) – startup refused (fail-secure). Set PERMITRA_INITIAL_ADMIN_PASSWORD, or point PERMITRA_INITIAL_ADMIN_PASSWORD_FILE at a writable path.":
+            "Das initiale Admin-Passwort kann nicht nach {path} geschrieben werden ({error}) – Start verweigert (fail-secure). Setze PERMITRA_INITIAL_ADMIN_PASSWORD oder richte PERMITRA_INITIAL_ADMIN_PASSWORD_FILE auf einen beschreibbaren Pfad.",
         "Component not found": "Komponente nicht gefunden",
         ". Define it once via the address mapping.": ". Bitte einmalig über die Adress-Zuordnung festlegen.",
         "Description updated": "Beschreibung aktualisiert",
