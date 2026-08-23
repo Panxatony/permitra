@@ -523,6 +523,12 @@ def seed(wipe: bool):
 
     set_setting(db, "zone_matrix_default", "deny")
 
+    # The wipe clears the settings table, so anything not set here reverts to the
+    # application default on every reset. The interface language is one: the demo
+    # would come back up in English each night, while permitra.de, the
+    # screenshots and the audience it is shown to are German.
+    set_setting(db, "ui_language", "de")
+
     db.commit()
     rules_count = db.query(Rule).count()
     zone_count = db.query(Zone).count()
