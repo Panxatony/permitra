@@ -173,6 +173,26 @@ class RuleUpdate(RuleBase):
     change_note: str = ""
 
 
+class EmergencyRuleCreate(RuleBase):
+    """A rule that was already opened on the firewall, documented afterwards.
+
+    The reason is mandatory and free text on purpose. A dropdown would collect
+    a category; what an auditor needs a year later is what actually happened,
+    and only the person who was there at three in the morning can write that.
+    """
+
+    emergency_reason: str = Field(min_length=10)
+
+    @field_validator("emergency_reason")
+    @classmethod
+    def _substantial(cls, value: str) -> str:
+        text = value.strip()
+        if len(text) < 10:
+            raise ValueError(_("Describe what happened - this is the evidence, "
+                               "and a year from now it is all there will be"))
+        return text
+
+
 class CommentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -216,6 +236,13 @@ class RuleOut(RuleFields):
     # Non-empty when the rule is proposed for removal (e.g. after a network was
     # moved to another zone and the relation has become inadmissible)
     removal_reason: str = ""
+    # Emergency change (#36). declared_at is permanent - it is what keeps "how
+    # often do we do this?" answerable. approval_due is non-null only while the
+    # after-the-fact approval is still outstanding.
+    emergency_declared_at: datetime | None = None
+    emergency_declared_by: str = ""
+    emergency_reason: str = ""
+    emergency_approval_due: datetime | None = None
 
 
 class RuleDetail(RuleOut):

@@ -480,6 +480,27 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .coverage-facts p { margin: 0; font-size: .92rem; }
 .coverage-worse { color: var(--red); }
 .coverage-better { color: var(--green); }
+/* Emergency change (#36). Loud where it matters - on the dashboard while an
+   approval is outstanding - and deliberately quiet as a navigation entry, so it
+   stays available without being inviting. */
+.nav-emergency { opacity: .75; }
+.nav-emergency::before { content: "! "; font-weight: 700; }
+.emergency-box {
+  margin-bottom: 1rem; padding: .8rem 1rem;
+  border: 1px solid var(--red-border); background: var(--red-bg); border-radius: 6px;
+}
+.emergency-box p { margin: 0 0 .6rem; font-size: .92rem; }
+.emergency-box textarea { width: 100%; }
+.emergency-banner {
+  margin-bottom: 1rem; padding: .8rem 1rem; border-radius: 6px;
+  border-left: 4px solid var(--amber); background: var(--panel);
+}
+.emergency-banner.overdue { border-left-color: var(--red); }
+.emergency-banner h2 { font-size: 1rem; margin: 0 0 .4rem; }
+.emergency-banner ul { margin: 0; padding-left: 1.1rem; font-size: .9rem; }
+.emergency-banner li { margin-bottom: .2rem; }
+.emergency-overdue { color: var(--red); font-weight: 600; }
+
 .coverage-gap {
   margin: 0 0 .9rem; padding: .55rem .75rem; font-size: .9rem;
   border-left: 3px solid var(--amber); background: var(--panel-alt-2); border-radius: 4px;

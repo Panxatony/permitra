@@ -105,6 +105,36 @@ def _expiry_once() -> int:
         db.close()
 
 
+EMERGENCY_CHECK_INTERVAL = 15 * 60
+
+
+async def emergency_job():
+    """Checks every quarter hour whether an emergency change ran out of time.
+
+    Not folded into the daily validity job: the emergency window is measured in
+    hours, so a once-a-day pass would let a rule stand most of another day past
+    it. A window that is not enforced promptly is a reminder, and a reminder is
+    what the fast path must not degrade into.
+    """
+    from .expiry import expire_emergency_rules
+
+    def once() -> int:
+        db = SessionLocal()
+        try:
+            return expire_emergency_rules(db)
+        finally:
+            db.close()
+
+    while True:
+        try:
+            count = await asyncio.to_thread(once)
+            if count:
+                logger.warning("Emergency changes not approved in time: %d deactivated", count)
+        except Exception:  # the job must never take the app down with it
+            logger.exception("Emergency window job failed")
+        await asyncio.sleep(EMERGENCY_CHECK_INTERVAL)
+
+
 async def expiry_job():
     """Daily job: automatically deactivate expired approved rules."""
     while True:
@@ -221,6 +251,7 @@ async def lifespan(_app: FastAPI):
     await asyncio.to_thread(_load_instance_language)
     tasks = [
         asyncio.create_task(expiry_job()),
+        asyncio.create_task(emergency_job()),
         asyncio.create_task(siem_delivery_job()),
         asyncio.create_task(audit_checkpoint_job()),
     ]

@@ -23,6 +23,10 @@ KNOWN_SETTINGS = {
     # setting is binding for everyone - there is no per-user override, so
     # screenshots, training material and support all speak one language.
     "ui_language": ("en", "de"),
+    # How long an emergency change may stand before somebody has to approve it
+    # after the fact. Short on purpose: the window is what keeps the fast path
+    # from becoming an ordinary Tuesday. First value is the default.
+    "emergency_window_hours": ("24", "8", "48", "72"),
 }
 
 

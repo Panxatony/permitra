@@ -70,6 +70,25 @@ export default function RuleDetail() {
         <StatusBadge status={rule.status} />
       </div>
 
+      {rule.emergency_declared_at && (
+        <div className={rule.emergency_approval_due ? 'error' : 'infobox'}>
+          <strong>
+            {rule.emergency_approval_due
+              ? t('Emergency change – approval after the fact is outstanding')
+              : t('Was declared as an emergency change')}
+          </strong>
+          <p style={{ margin: '.3rem 0 0' }}>{rule.emergency_reason}</p>
+          <p className="small" style={{ margin: '.4rem 0 0' }}>
+            {t('Declared by')} {rule.emergency_declared_by},{' '}
+            {new Date(rule.emergency_declared_at).toLocaleString(dateLocale(lang))}
+            {rule.emergency_approval_due && (
+              <> – {t('without an approval it is deactivated on')}{' '}
+                {new Date(rule.emergency_approval_due).toLocaleString(dateLocale(lang))}</>
+            )}
+          </p>
+        </div>
+      )}
+
       {rule.removal_reason && (
         <div className="error">
           <strong>🗑️ {t('Proposed for removal')}</strong>

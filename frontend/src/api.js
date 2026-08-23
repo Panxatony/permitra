@@ -183,6 +183,7 @@ export const api = {
   rule: (id) => request(`/api/rules/${id}`),
   nextId: () => request('/api/rules/next-id'),
   createRule: (payload) => request('/api/rules', { method: 'POST', body: { vrf: getVrfName(), ...payload } }),
+  declareEmergencyRule: (payload) => request('/api/rules/emergency', { method: 'POST', body: { vrf: getVrfName(), ...payload } }),
   updateRule: (id, payload) => request(`/api/rules/${id}`, { method: 'PUT', body: { vrf: getVrfName(), ...payload } }),
   deleteRule: (id) => request(`/api/rules/${id}`, { method: 'DELETE' }),
   restoreRule: (id, version) =>

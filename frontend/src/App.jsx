@@ -97,6 +97,15 @@ function Layout({ children }) {
               <Link to="/">{t('Dashboard')}</Link>
               <Link to="/rules">{t('Rules')}</Link>
               {user.role === 'architect' && <Link to="/rules/new">{t('New rule')}</Link>}
+              {/* Reachable by operations too - they are the ones at the firewall at
+                  three in the morning, and a fast path they cannot find is none.
+                  Deliberately not styled as a primary action: it should be
+                  available, not inviting. */}
+              {['architect', 'operations'].includes(user.role) && (
+                <Link to="/rules/new?emergency=1" className="nav-emergency">
+                  {t('Emergency change')}
+                </Link>
+              )}
               <Link to="/search">{t('Analysis')}</Link>
               <Link to="/recertification">{t('Recertification')}</Link>
               <Link to="/zones">{t('Security zones')}</Link>

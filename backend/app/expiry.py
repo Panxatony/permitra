@@ -6,12 +6,12 @@
   validity has expired (adding a version and a comment entry).
 """
 import logging
-from datetime import date, timedelta
+from datetime import date, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
 from .messages import _
-from .models import IN_FORCE, Comment, Rule, RuleStatus, RuleVersion
+from .models import IN_FORCE, Comment, Rule, RuleStatus, RuleVersion, utcnow
 
 log = logging.getLogger("permitra.expiry")
 
@@ -80,8 +80,8 @@ def expire_rules(db: Session) -> int:
                 rule_pk=rule.id,
                 version=rule.version,
                 snapshot={"auto": "expiry"},
-                change_note=_("Automatically deactivated: validity until {valid_until} has expired",
-                              valid_until=rule.valid_until),
+                change_note="Automatically deactivated: validity until {valid_until} has expired",
+                change_values={"valid_until": rule.valid_until},
                 changed_by="system",
             )
         )
@@ -97,3 +97,55 @@ def expire_rules(db: Session) -> int:
     if expired:
         db.commit()
     return len(expired)
+
+
+def expire_emergency_rules(db: Session) -> int:
+    """Deactivates emergency changes nobody approved within the window.
+
+    This is what keeps the fast path from becoming an ordinary Tuesday. The
+    window is not a reminder: if the after-the-fact approval does not arrive, the
+    rule loses its standing in Permitra and operations is told to remove it.
+
+    Deliberately not a silent deletion. The rule stays, its declaration stays,
+    and the comment says what has to happen on the device - Permitra never
+    writes there, so the only thing it can do is be unambiguous about it.
+    """
+    now = utcnow()
+    overdue = (
+        db.query(Rule)
+        .filter(Rule.emergency_approval_due.isnot(None),
+                Rule.deleted_at.is_(None),
+                Rule.status == RuleStatus.in_review)
+        .all()
+    )
+    overdue = [r for r in overdue if _aware(r.emergency_approval_due) <= now]
+
+    for rule in overdue:
+        rule.status = RuleStatus.deactivated
+        rule.emergency_approval_due = None   # decided, by the clock
+        rule.impl_status = {
+            **(rule.impl_status or {}),
+            **{c.name: "to remove" for c in rule.components},
+        }
+        rule.version += 1
+        db.add(RuleVersion(
+            rule_pk=rule.id, version=rule.version, snapshot={"auto": "emergency-expiry"},
+            change_note="Emergency change not approved in time – deactivated",
+            changed_by="system",
+        ))
+        db.add(Comment(
+            rule_pk=rule.id, author="system",
+            text=_("The emergency change was not approved within the window. Remove the "
+                   "rule on the components, or submit it again for a proper review."),
+        ))
+        log.warning("Emergency rule %s was not approved within the window and is deactivated",
+                    rule.rule_id)
+    if overdue:
+        db.commit()
+    return len(overdue)
+
+
+def _aware(dt):
+    """A stored timestamp as UTC-aware - PostgreSQL returns these with a
+    timezone and SQLite without one."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
