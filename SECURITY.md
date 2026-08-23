@@ -39,8 +39,15 @@ An alpha invites deployment, so the limits belong here rather than in a footnote
 **Held:** role-based access control including separation of duties; append-only,
 hash-chained audit events with external anchoring and at-least-once SIEM
 delivery; soft deletion so nothing is destroyed; encrypted secrets at rest
-(NetBox token, TOTP seed); no forgeable source IPs; single-use TOTP codes; a
-sign-in that does not confirm whether an account exists.
+(NetBox token, TOTP seed); **encrypted backups** — the dump holds password
+hashes, TOTP seeds, API token hashes and the whole audit chain, so as plain SQL
+it would be as good as the database itself, and `scripts/backup.sh` also refuses
+a passphrase stored inside the directory it protects; no forgeable source IPs;
+single-use TOTP codes; a sign-in that does not confirm whether an account exists.
+
+Encryption of a backup can be waived with `PERMITRA_BACKUP_PLAINTEXT=1`, for
+storage that is encrypted at another layer. The script then warns on every run
+rather than letting the decision be made once and forgotten.
 
 **Not held, deliberately or not yet:**
 
@@ -55,7 +62,6 @@ sign-in that does not confirm whether an account exists.
   token crosses the network in the clear.
 - The session token lives in **localStorage**, so it is reachable by script
   injection. The Content-Security-Policy is the mitigation, not a guarantee.
-- **Backups are unencrypted** and contain password hashes and API tokens.
 - The containers **run as root** and without a read-only root filesystem.
 - Permitra **never writes to network devices**. It produces configuration to
   apply; a compromise cannot change a firewall directly, but it can change what
