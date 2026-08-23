@@ -2,7 +2,28 @@
 
 Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
-## Unreleased — 2026-08
+## 0.7.4-alpha — 2026-08-23
+
+First public release. **Alpha**: the feature set is complete enough to work with
+end to end, and the security audit's critical and high findings are closed — but
+it has not been run in production anywhere, the API may still change without a
+deprecation path, and no upgrade is supported except forward through the
+migrations. Try it, deploy it in a lab, report what breaks. Do not put your
+production communication matrix in it yet.
+
+Known gaps, stated plainly rather than left to be discovered:
+
+- Backups (`scripts/backup.sh`) are unencrypted and local, and the restore path
+  is neither documented nor tested. The dump contains password hashes and API
+  tokens.
+- List queries load all rules and paginate in memory; with the risk filter on,
+  each rule additionally triggers two zone scans. Fine for thousands of rules,
+  not for hundreds of thousands.
+- Downloads (CSV/JSON export) bypass the central error handling: with an expired
+  session the browser saves the error message as if it were the file.
+- The containers run as root and without a read-only root filesystem.
+- Single instance only: background jobs (expiry, SIEM delivery, checkpoints) are
+  not coordinated across replicas, so `replicas: 1` is deliberate.
 
 ### Added
 - **Core prototype**: rule management with server-assigned `SR#####` IDs (5 digits, up to 99999 rules), structured addresses (IP/CIDR + optional alias), multiple services per rule, review workflow (draft → in review → approved → active, with rejected/deactivated/deleted as the ways out), version history with snapshots, comments, conflict detection (overlap, duplicate, shadowing).
@@ -23,6 +44,41 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 - **Integrations**: optional change-management webhook (ServiceNow-ready), full REST API with OpenAPI docs.
 - **UI**: German or English interface, set by the administrator for the whole instance (setting `ui_language`) so every user sees the same wording; server-side messages follow the same setting. Light and dark theme, mobile-optimized layout, dashboard, focused approvals page for change approvers.
 - **Infrastructure**: Docker Compose stack, Kubernetes manifests, Alembic migrations (auto-run at startup), deterministic fictional demo dataset, public demo with nightly reset, static project website (permitra.de, bilingual).
+
+### Security
+
+Findings from the internal code audit, closed before this release:
+
+- **Audit chain anchored externally**: a hash chain is still intact after its
+  newest entries are cut off, so checkpoints record the chain end and are
+  delivered to the SIEM. What the chain does *not* protect against — an attacker
+  with database write access — is stated in the README rather than glossed over.
+- **Deleted rules stopped taking effect**: a soft-deleted rule kept its
+  `approved` status and still counted as a permitting match in the path analysis
+  and as "missing" in the drift report, which would have undone its rollback.
+- **Source IP no longer forgeable**: `X-Forwarded-For` is evaluated only for
+  proxies listed in `PERMITRA_TRUSTED_PROXIES`; the default ignores it entirely.
+- **TOTP codes are single use** and the seed is encrypted at rest. A code used to
+  be valid for the whole ±90 s tolerance window, and the seed sat in the database
+  in plaintext — read access was enough to mint valid second factors.
+- **Sign-in no longer confirms that an account exists**: the password is always
+  verified (against a decoy hash for unknown names, so the timing matches), the
+  account lockout is only reported once the password proved correct, and the
+  passkey endpoint answers identically for unknown, deactivated and
+  passkey-less accounts.
+- **SSRF through the NetBox address closed**: the URL is validated on save
+  (http/https only, no loopback, link-local or metadata targets), redirects are
+  no longer followed (urllib carried the Authorization header along), and the
+  paginating `next` field must stay on the configured host.
+- **Reverse proxy hardened**: Content-Security-Policy, `nosniff`,
+  `X-Frame-Options: DENY`, Referrer-Policy and Permissions-Policy, plus a
+  configurable rate limit on the sign-in (`PERMITRA_LOGIN_RATE`). HSTS is
+  deliberately left to the TLS-terminating proxy in front.
+- **Bounded inputs**: the actual-configuration upload is capped (4 MB in the
+  application, 8 MB at the proxy) instead of being unbounded.
+- **Background jobs off the event loop**: an unreachable SIEM used to stall the
+  whole API; delivery, anchoring and expiry now run in worker threads with a
+  backoff.
 
 ### License
 - Apache License 2.0.

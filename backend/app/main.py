@@ -39,7 +39,7 @@ app = FastAPI(
     lifespan=_lifespan,
     title="Permitra",
     description="Central management of security rules for firewalls (Juniper SRX, Check Point) and ACI contracts",
-    version="0.1.0",
+    version="0.7.4-alpha",
 )
 
 # CORS origins are configurable (PERMITRA_CORS_ORIGINS, comma-separated).

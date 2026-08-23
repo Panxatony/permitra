@@ -12,7 +12,9 @@ import urllib.request
 from playwright.sync_api import sync_playwright
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8090"
-OUT = sys.argv[2] if len(sys.argv) > 2 else "website/img"
+# The website lives in its own repository; pass its img/ directory as the
+# second argument. The default assumes it sits next to this one.
+OUT = sys.argv[2] if len(sys.argv) > 2 else "../permitra-website/img"
 CHROME = "/usr/bin/chromium"
 
 

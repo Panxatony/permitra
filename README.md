@@ -4,6 +4,13 @@ Central web application for managing network security rules for **Juniper SRX**,
 
 Project website: https://permitra.de · Live demo: https://demo.permitra.de
 
+> **0.7.4-alpha** — the first public release. The feature set is complete enough
+> to work with end to end and the audit's critical and high findings are closed,
+> but nothing has run in production yet and the API may still change without a
+> deprecation path. Good for a lab, not yet for your production communication
+> matrix. [What is missing](CHANGELOG.md#074-alpha--2026-08-23) ·
+> [Security policy](SECURITY.md)
+
 ## Architecture
 
 ```
@@ -259,7 +266,6 @@ frontend/
   src/i18n.jsx         bilingual UI (German/English, toggle in the top bar)
 deploy/k8s/            Kubernetes manifests
 docs/DEPLOYMENT.md     deployment guide (Docker/Kubernetes, hardening)
-website/               static project website (permitra.de)
 examples/              generated example exports
 ```
 
