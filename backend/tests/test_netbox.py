@@ -1,7 +1,13 @@
 """Tests for the NetBox import (issue #23)."""
 import json
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# The fake NetBox listens on loopback, which validate_url refuses unless it is
+# allowed on purpose. Set here rather than patched away, so the tests go through
+# the same check a real installation does.
+os.environ.setdefault("PERMITRA_ALLOW_LOCAL_NETBOX", "1")
 
 import pytest
 from sqlalchemy import create_engine

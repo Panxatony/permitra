@@ -59,6 +59,7 @@ services:
       # audit log and could otherwise be made up freely by the client. Leave
       # empty if the container is published directly.
       PERMITRA_TRUSTED_PROXIES: ${PERMITRA_TRUSTED_PROXIES:-}
+      PERMITRA_LOGIN_RATE: ${PERMITRA_LOGIN_RATE:-}
     build: ./frontend
     ports:
       - "${FRONTEND_PORT:-8080}:80"

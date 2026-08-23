@@ -22,16 +22,37 @@ def _code_at(secret: str, counter: int) -> str:
     return f"{value % 1_000_000:06d}"
 
 
-def verify(secret: str, code: str, window: int = 1) -> bool:
-    """Verifies the code with a tolerance of ±window time steps (30s each)."""
+def matching_counter(secret: str, code: str, window: int = 1) -> int | None:
+    """The time step this code belongs to, or None if it belongs to none.
+
+    Returning the counter rather than a bare yes/no is what makes single use
+    enforceable: the caller stores it and refuses anything not newer. Without
+    that, a code stays valid for the whole tolerance window (about 90 seconds),
+    so an observed code - shoulder-surfed, phished, read from a log - can be
+    replayed for as long as it is on screen."""
     code = (code or "").strip().replace(" ", "")
     if not secret or not code.isdigit():
-        return False
-    counter = int(time.time()) // 30
-    return any(
-        hmac.compare_digest(_code_at(secret, counter + offset), code)
-        for offset in range(-window, window + 1)
-    )
+        return None
+    now = int(time.time()) // 30
+    for offset in range(-window, window + 1):
+        counter = now + offset
+        if hmac.compare_digest(_code_at(secret, counter), code):
+            return counter
+    return None
+
+
+def verify(secret: str, code: str, window: int = 1, last_counter: int | None = None) -> int | None:
+    """Checks a code and rejects one that was already used.
+
+    `last_counter` is the time step accepted the last time. A code from that
+    step or an earlier one is refused even though it is arithmetically correct -
+    that is the whole point of remembering it."""
+    counter = matching_counter(secret, code, window)
+    if counter is None:
+        return None
+    if last_counter is not None and counter <= last_counter:
+        return None
+    return counter
 
 
 def otpauth_uri(username: str, secret: str, issuer: str = "Permitra") -> str:

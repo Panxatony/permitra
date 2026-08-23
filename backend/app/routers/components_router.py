@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_roles
@@ -18,7 +18,11 @@ from ..schemas import ComponentCreate, ComponentOut
 
 
 class ActualConfigIn(BaseModel):
-    content: str
+    # A device configuration is text, and a large one is still only a few
+    # hundred kilobytes. Without a bound, one request can fill the database and
+    # every later drift run loads all of it into memory. 4 MB is roomy for a
+    # policy dump and small enough that a hostile upload cannot do either.
+    content: str = Field(max_length=4 * 1024 * 1024)
 
 
 class LinkIn(BaseModel):

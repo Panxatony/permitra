@@ -32,11 +32,16 @@ def get_config(db: Session = Depends(get_db), _user: User = Depends(require_role
 def set_config(payload: dict, db: Session = Depends(get_db),
                admin: User = Depends(require_roles(Role.admin)), request: Request = None):
     """Store URL/token/TLS. An empty token field leaves the stored token unchanged."""
-    from ..netbox import encrypt_token
+    from ..netbox import encrypt_token, validate_url
     from ..netbox import get_config as _get
 
     cfg = _get(db) or NetboxConfig()
-    cfg.url = (payload.get("url") or "").strip()
+    # Rejected here rather than at the first import, so the admin finds out
+    # while they are looking at the field they just filled in.
+    try:
+        cfg.url = validate_url(payload.get("url") or "")
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     cfg.verify_tls = bool(payload.get("verify_tls", True))
     if "statuses" in payload:
         cfg.statuses = (payload.get("statuses") or "active,reserved").strip()

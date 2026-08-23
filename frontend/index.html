@@ -4,14 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Permitra – Sicherheitsregeln</title>
-    <script>
-      /* Apply the stored theme choice BEFORE the app renders - otherwise
-         the light theme briefly flashes up while loading. */
-      try {
-        var t = localStorage.getItem('permitra_theme');
-        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
-      } catch (e) {}
-    </script>
+    <!-- Blocking on purpose: it has to run before the first paint. See
+         public/theme-boot.js for why it is not inline. -->
+    <script src="/theme-boot.js"></script>
   </head>
   <body>
     <div id="root"></div>

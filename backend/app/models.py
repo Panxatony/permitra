@@ -401,9 +401,15 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(128), default="")
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.architect)
     is_active: Mapped[bool] = mapped_column(default=True)
-    # Two-factor (TOTP): the secret is set during setup, it only counts once enabled
-    totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Two-factor (TOTP): the secret is set during setup, it only counts once
+    # enabled. Stored encrypted (see app/crypto.py) - in plaintext, read access
+    # to the database would be enough to mint valid second factors. The column
+    # is wider than a raw seed because ciphertext is.
+    totp_secret: Mapped[str | None] = mapped_column(String(255), nullable=True)
     totp_enabled: Mapped[bool] = mapped_column(default=False)
+    # The last accepted time step. A code from this step or an earlier one is
+    # refused, so a code cannot be used twice inside the tolerance window.
+    totp_last_counter: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Session invalidation: tokens issued before this point in time are no longer
     # valid (set on deactivation, password change/reset)
     token_valid_from: Mapped[datetime | None] = mapped_column(

@@ -5,53 +5,101 @@ The import is a read-only operation against the NetBox REST API
 (/api/ipam/prefixes)."""
 from __future__ import annotations
 
-import base64
 import contextlib
-import hashlib
 import json
+import os
 import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 
-from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.orm import Session
 
-from .auth import SECRET_KEY
+from .crypto import decrypt, encrypt
 from .messages import _
 from .models import NetboxConfig, NetboxPrefix, utcnow
 
 DEFAULT_STATUSES = ("active", "reserved")
+MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
-
-def _fernet() -> Fernet:
-    key = base64.urlsafe_b64encode(hashlib.sha256(SECRET_KEY.encode()).digest())
-    return Fernet(key)
-
-
-def encrypt_token(raw: str) -> str:
-    return _fernet().encrypt(raw.encode()).decode() if raw else ""
-
-
-def decrypt_token(enc: str) -> str:
-    if not enc:
-        return ""
-    try:
-        return _fernet().decrypt(enc.encode()).decode()
-    except InvalidToken:
-        return ""
+# Kept as names of their own: at the call sites "token" says what is being
+# handled, and the module stays readable when other secrets join it.
+encrypt_token = encrypt
+decrypt_token = decrypt
 
 
 def get_config(db: Session) -> NetboxConfig | None:
     return db.query(NetboxConfig).first()
 
 
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """Refuses to follow a redirect.
+
+    urllib follows redirects by default and carries the Authorization header
+    along, so a NetBox that answers 302 could send the token to a host of its
+    choosing - and walk the request past the address check below on the way."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError(_("NetBox redirected to {url} – not followed", url=newurl))
+
+
+def validate_url(raw: str) -> str:
+    """Checks a NetBox address before the server is made to call it.
+
+    The address is configured by an admin, but "an admin typed it" is not the
+    same as "it is safe to fetch": the server calls it from inside the network,
+    so http://169.254.169.254/ or a management interface is reachable from here
+    even when it is not from the browser. What is allowed is a plain http(s)
+    URL with a host that is not a loopback, link-local, or otherwise internal
+    address. Names are not resolved here - DNS can change between check and
+    call - so this rejects the obvious literals rather than claiming to close
+    SSRF entirely."""
+    import ipaddress
+
+    url = (raw or "").strip()
+    if not url:
+        return ""
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(_("Only http:// and https:// are allowed"))
+    host = (parsed.hostname or "").strip("[]")
+    if not host:
+        raise ValueError(_("The address has no host"))
+    # An installation where NetBox really does run on this host is a legitimate
+    # setup, so loopback is allowed - but only when it is switched on
+    # deliberately, because it is also the classic way into a service that
+    # binds to localhost precisely to stay unreachable.
+    allow_local = os.getenv("PERMITRA_ALLOW_LOCAL_NETBOX", "").lower() in ("1", "true", "yes")
+    if host.lower() in ("localhost", "metadata.google.internal"):
+        if not (allow_local and host.lower() == "localhost"):
+            raise ValueError(_("'{host}' is not an allowed target", host=host))
+        return url
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return url  # a name - checked by the network, not here
+    if ip.is_loopback and allow_local:
+        return url
+    if (ip.is_loopback or ip.is_link_local or ip.is_multicast
+            or ip.is_reserved or ip.is_unspecified):
+        raise ValueError(_("'{host}' is not an allowed target", host=host))
+    return url
+
+
 def _request(cfg: NetboxConfig, path_or_url: str) -> dict:
-    # Use an absolute URL (e.g. from the 'next' field) as is, otherwise append
-    # it to the base URL
-    url = path_or_url if path_or_url.startswith("http") else cfg.url.rstrip("/") + path_or_url
-    # S310 rationale: the NetBox base URL is operator-configured and stored by an admin,
-    # not user-supplied; see the SSRF note in the security audit.
+    # An absolute URL only ever comes from the paginating 'next' field, i.e.
+    # from the remote side. It has to stay on the configured host - otherwise
+    # the response would decide where the next request with our token goes.
+    if path_or_url.startswith("http"):
+        base, target = urllib.parse.urlparse(cfg.url), urllib.parse.urlparse(path_or_url)
+        if (target.scheme, target.netloc) != (base.scheme, base.netloc):
+            raise RuntimeError(_("NetBox referred to a different host ({host}) – ignored",
+                                 host=target.netloc))
+        url = path_or_url
+    else:
+        url = validate_url(cfg.url).rstrip("/") + path_or_url
+    # S310 rationale: the scheme and target are checked in validate_url, and
+    # redirects are refused below.
     req = urllib.request.Request(url, headers={  # noqa: S310
         "Authorization": f"Token {decrypt_token(cfg.token_enc)}",
         "Accept": "application/json",
@@ -61,9 +109,12 @@ def _request(cfg: NetboxConfig, path_or_url: str) -> dict:
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
+    opener = urllib.request.build_opener(_NoRedirects, urllib.request.HTTPSHandler(context=ctx))
     try:
-        with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:  # noqa: S310
-            return json.loads(resp.read())
+        with opener.open(req, timeout=15) as resp:
+            # A NetBox page is small; a bounded read keeps a hostile or broken
+            # endpoint from streaming until memory runs out.
+            return json.loads(resp.read(MAX_RESPONSE_BYTES))
     except urllib.error.HTTPError as exc:
         body = ""
         with contextlib.suppress(Exception):  # the error body is best-effort context only

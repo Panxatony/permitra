@@ -2,6 +2,7 @@
 forgotten/new password, 2FA management and WebAuthn passkeys."""
 import base64
 import os
+import secrets
 import time
 from urllib.parse import urlparse
 
@@ -10,7 +11,7 @@ from fastapi.responses import PlainTextResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from .. import audit, mailer, totp
+from .. import audit, crypto, mailer, totp
 from ..auth import create_token, get_current_user, hash_password, verify_password
 from ..database import get_db
 from ..messages import _
@@ -30,6 +31,11 @@ LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "5"))
 LOGIN_LOCK_MINUTES = int(os.environ.get("LOGIN_LOCK_MINUTES", "15"))
 
 
+# A valid hash of a value nobody can supply. Verifying against it costs the same
+# as verifying a real one, which is exactly the point.
+_DECOY_HASH = hash_password(secrets.token_urlsafe(32))
+
+
 def _register_failure(db: Session, user: User) -> None:
     from datetime import timedelta
     user.failed_logins = (user.failed_logins or 0) + 1
@@ -46,8 +52,23 @@ async def login(
     db: Session = Depends(get_db),
 ):
     user = db.query(User).filter(User.username == form.username).first()
-    # Check the account lock (fail-secure; identical message, no user enumeration)
-    if user and user.locked_until is not None:
+    # The password is always verified, against a decoy hash when the account does
+    # not exist. Skipping it for unknown names makes the response measurably
+    # faster and turns the login into a reliable "does this user exist" oracle.
+    password_ok = verify_password(form.password, user.password_hash if user else _DECOY_HASH)
+    if not user or not password_ok:
+        if user:
+            _register_failure(db, user)
+        audit.record(db, "auth", "auth.login_failed", actor=form.username,
+                     source_ip=audit.client_ip(request),
+                     detail=_("account locked") if (user and user.locked_until) else "")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Wrong username or password"))
+
+    # The lock is only reported once the password has been proven correct.
+    # Whoever gets here already knows the credentials, so naming the lock tells
+    # them nothing new - while an attacker guessing names never sees a 429 and
+    # can therefore neither enumerate accounts nor lock one out on purpose.
+    if user.locked_until is not None:
         locked_until = user.locked_until
         if locked_until.tzinfo is None:
             from datetime import timezone
@@ -57,13 +78,6 @@ async def login(
                          source_ip=audit.client_ip(request))
             raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
                                 _("Account temporarily locked – try again later"))
-    if not user or not verify_password(form.password, user.password_hash):
-        if user:
-            _register_failure(db, user)
-        audit.record(db, "auth", "auth.login_failed", actor=form.username,
-                     source_ip=audit.client_ip(request),
-                     detail=_("account locked") if (user and user.locked_until) else "")
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Wrong username or password"))
     if not user.is_active:
         audit.record(db, "auth", "auth.login_denied", actor=user.username,
                      source_ip=audit.client_ip(request), detail=_("account deactivated"))
@@ -74,11 +88,17 @@ async def login(
         otp = ((await request.form()).get("otp") or "").strip()
         if not otp:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_required")
-        if not totp.verify(user.totp_secret, otp):
+        counter = totp.verify(crypto.decrypt(user.totp_secret), otp,
+                              last_counter=user.totp_last_counter)
+        if counter is None:
             _register_failure(db, user)
             audit.record(db, "auth", "auth.login_failed", actor=user.username,
                          source_ip=audit.client_ip(request), detail=_("wrong 2FA code"))
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_invalid")
+        # Burn the code before the session is handed out, so a replay in the
+        # same time window finds it already used.
+        user.totp_last_counter = counter
+        db.commit()
     # Success: reset the failure counter and the lock
     if user.failed_logins or user.locked_until:
         user.failed_logins = 0
@@ -175,18 +195,25 @@ def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_u
     if user.totp_enabled:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             _("Two-factor authentication is already enabled"))
-    user.totp_secret = totp.new_secret()
+    secret = totp.new_secret()
+    user.totp_secret = crypto.encrypt(secret)
+    user.totp_last_counter = None
     db.commit()
-    return {"secret": user.totp_secret,
-            "otpauth_url": totp.otpauth_uri(user.username, user.totp_secret)}
+    # The plaintext seed leaves the server exactly once, to be scanned. It is
+    # not readable back afterwards - a new setup replaces it.
+    return {"secret": secret,
+            "otpauth_url": totp.otpauth_uri(user.username, secret)}
 
 
 @router.post("/totp/enable")
 def totp_enable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not user.totp_secret:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("Start the setup first"))
-    if not totp.verify(user.totp_secret, payload.get("code") or ""):
+    counter = totp.verify(crypto.decrypt(user.totp_secret), payload.get("code") or "",
+                          last_counter=user.totp_last_counter)
+    if counter is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("The code is invalid"))
+    user.totp_last_counter = counter
     user.totp_enabled = True
     db.commit()
     audit.record(db, "auth", "auth.totp_enabled", actor=user.username)
@@ -199,6 +226,7 @@ def totp_disable(payload: dict, db: Session = Depends(get_db), user: User = Depe
         raise HTTPException(status.HTTP_403_FORBIDDEN, _("The password is wrong"))
     user.totp_enabled = False
     user.totp_secret = None
+    user.totp_last_counter = None
     db.commit()
     audit.record(db, "auth", "auth.totp_disabled", actor=user.username)
     return {"detail": _("Two-factor authentication disabled")}
@@ -312,6 +340,9 @@ def passkey_login_options(payload: dict, db: Session = Depends(get_db)):
     username = (payload.get("username") or "").strip()
     user = db.query(User).filter(User.username == username).first()
     if not user or not user.passkeys or not user.is_active:
+        # Deliberately the same answer for "no such account", "no passkey" and
+        # "deactivated": three different ones would answer the question the
+        # login form refuses to answer.
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             _("No passkey is registered for this account"))
     options = generate_authentication_options(
