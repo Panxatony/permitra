@@ -11,15 +11,16 @@ function plusOneYear() {
 }
 
 function RuleRows({ rules, onExtend, onDeactivate, canAct }) {
+  const { t } = useLang()
   const [dates, setDates] = useState({})
-  if (!rules.length) return <p className="muted">Keine Regeln.</p>
+  if (!rules.length) return <p className="muted">{t('No rules.')}</p>
   return (
     <div className="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Rule-ID</th><th>Anlass</th><th>Komponenten</th><th>Dienste</th>
-            <th>Gültig bis</th><th>Verantwortlich</th><th>Aktion</th>
+            <th>{t('Rule ID')}</th><th>{t('Justification')}</th><th>{t('Components')}</th><th>{t('Services')}</th>
+            <th>{t('Valid until')}</th><th>{t('Owner')}</th><th>{t('Action')}</th>
           </tr>
         </thead>
         <tbody>
@@ -38,10 +39,10 @@ function RuleRows({ rules, onExtend, onDeactivate, canAct }) {
                       onChange={(e) => setDates({ ...dates, [r.rule_id]: e.target.value })} />
                     <button className="btn btn-approve"
                       onClick={() => onExtend(r.rule_id, dates[r.rule_id] || plusOneYear())}>
-                      Verlängern
+                      {t('Extend')}
                     </button>
                     <button className="btn btn-ghost" onClick={() => onDeactivate(r.rule_id)}>
-                      Deaktivieren
+                      {t('Deactivate')}
                     </button>
                   </>
                 )}
@@ -74,7 +75,8 @@ export default function Recertification() {
     setNotice('')
     try {
       await api.extendRule(ruleId, validUntil)
-      setNotice(`${ruleId} rezertifiziert bis ${validUntil}.`)
+      setNotice(t('{rule} recertified until {date}.')
+        .replace('{rule}', ruleId).replace('{date}', validUntil))
       load()
     } catch (err) {
       setError(err.message)
@@ -82,11 +84,11 @@ export default function Recertification() {
   }
 
   const deactivate = async (ruleId) => {
-    if (!window.confirm(`Regel ${ruleId} deaktivieren?`)) return
+    if (!window.confirm(t('Deactivate rule {rule}?').replace('{rule}', ruleId))) return
     setError('')
     try {
       await api.deactivate(ruleId, t('Deactivated as part of the recertification'))
-      setNotice(`${ruleId} deaktiviert.`)
+      setNotice(t('{rule} deactivated.').replace('{rule}', ruleId))
       load()
     } catch (err) {
       setError(err.message)
@@ -98,18 +100,17 @@ export default function Recertification() {
       <div className="page-head">
         <h1>{t('Recertification')}</h1>
         <span className="muted">
-          Abgelaufene Regeln werden vom System täglich automatisch deaktiviert –
-          hier vorher verlängern oder gezielt deaktivieren
+          {t('Expired rules are deactivated automatically by the system every day – extend them here beforehand, or deactivate them deliberately')}
         </span>
       </div>
 
       <form className="filterbar" onSubmit={(e) => { e.preventDefault(); load() }}>
-        <label className="inline">Vorlauf:
+        <label className="inline">{t('Lead time')}:
           <select value={days} onChange={(e) => { setDays(Number(e.target.value)) }}>
-            <option value={14}>14 Tage</option>
-            <option value={30}>30 Tage</option>
-            <option value={90}>90 Tage</option>
-            <option value={365}>1 Jahr</option>
+            <option value={14}>14 {t('days')}</option>
+            <option value={30}>30 {t('days')}</option>
+            <option value={90}>90 {t('days')}</option>
+            <option value={365}>1 {t('year')}</option>
           </select>
         </label>
         <button className="btn btn-primary" type="submit">{t('Refresh')}</button>

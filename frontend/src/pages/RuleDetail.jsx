@@ -35,7 +35,7 @@ export default function RuleDetail() {
   useEffect(() => { load() }, [load])
 
   if (error) return <div className="error">{error}</div>
-  if (!rule) return <p className="muted">Lade…</p>
+  if (!rule) return <p className="muted">{t('Loading')}…</p>
 
   const isArchitect = user.role === 'architect' || user.role === 'admin'
   const isOps = user.role === 'operations' || user.role === 'admin'
@@ -79,11 +79,13 @@ export default function RuleDetail() {
 
       {risk && risk.level !== 'none' && (
         <div className={risk.level === 'high' ? 'error' : 'warnbox'}>
-          <strong>⚠️ {t('Risk')}: {risk.level.toUpperCase()}</strong>
-          {' '}({t('Target protection level')}: {risk.target_protection_level})
+          {/* Level and severity are stored in English; they are values shown to
+              a person, so they go through the dictionary like any other text. */}
+          <strong>⚠️ {t('Risk')}: {t(risk.level).toUpperCase()}</strong>
+          {' '}({t('Target protection level')}: {t(risk.target_protection_level)})
           <ul>
             {risk.findings.map((f, i) => (
-              <li key={i}><span className={`badge risk-${f.severity}`}>{f.severity}</span> {f.detail}</li>
+              <li key={i}><span className={`badge risk-${f.severity}`}>{t(f.severity)}</span> {f.detail}</li>
             ))}
           </ul>
           {/* Whoever has to decide on this rule must be able to check the
@@ -97,18 +99,18 @@ export default function RuleDetail() {
       )}
       {conflicts.length > 0 && (
         <div className="warnbox">
-          ⚠️ {conflicts.length} mögliche Konflikte:
+          ⚠️ {conflicts.length} {t('possible conflicts')}:
           <ul>
             {conflicts.slice(0, 6).map((c, i) => (
               <li key={i}>
                 {c.kind.startsWith('zone') ? (
-                  <><strong>{c.other_rule_id}</strong> – {c.detail} <Link to="/zones">(Zonen-Matrix)</Link></>
+                  <><strong>{c.other_rule_id}</strong> – {c.detail} <Link to="/zones">({t('Zone matrix')})</Link></>
                 ) : (
                   <><Link to={`/rules/${c.other_rule_id}`}>{c.other_rule_id}</Link> – {c.detail} ({c.kind})</>
                 )}
               </li>
             ))}
-            {conflicts.length > 6 && <li>… und {conflicts.length - 6} weitere</li>}
+            {conflicts.length > 6 && <li>… {t('and {n} more').replace('{n}', conflicts.length - 6)}</li>}
           </ul>
         </div>
       )}
@@ -135,13 +137,13 @@ export default function RuleDetail() {
             <dt>{t('Reason')}</dt><dd>{rule.justification || '–'}</dd>
             <dt>{t('Description')}</dt><dd>{rule.description || '–'}</dd>
             <dt>Requestor</dt><dd>{rule.requestor || '–'}</dd>
-            <dt>Bearbeiter</dt><dd>{rule.owner || '–'}</dd>
-            <dt>Change-ID</dt><dd>{rule.change_id || '–'}</dd>
-            <dt>Fachlicher Bezug</dt><dd>{rule.business_context || '–'}</dd>
+            <dt>{t('Handler')}</dt><dd>{rule.owner || '–'}</dd>
+            <dt>{t('Change ID')}</dt><dd>{rule.change_id || '–'}</dd>
+            <dt>{t('Business context')}</dt><dd>{rule.business_context || '–'}</dd>
             <dt>{t('Validity')}</dt>
             <dd>{rule.valid_from || '…'} – {rule.valid_until || t('unlimited')}</dd>
             <dt>Info</dt><dd>{rule.info || '–'}</dd>
-            <dt>Version</dt><dd>v{rule.version} · angelegt von {rule.created_by}</dd>
+            <dt>Version</dt><dd>v{rule.version} · {t('created by')} {rule.created_by}</dd>
           </dl>
         </section>
 

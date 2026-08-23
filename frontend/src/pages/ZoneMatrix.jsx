@@ -430,7 +430,8 @@ export default function ZoneMatrix() {
     }
     const key = `${from}|${to}`
     if (pendingMap[key]) {
-      setNotice(`Für ${from} → ${to} wartet bereits ein Antrag auf Freigabe.`)
+      setNotice(t('A request for {from} → {to} is already awaiting approval.')
+        .replace('{from}', from).replace('{to}', to))
       return
     }
     setNotice('')
@@ -517,7 +518,8 @@ export default function ZoneMatrix() {
   }
 
   const removeZone = async (name) => {
-    if (!window.confirm(`Löschung der Zone "${name}" beantragen? (Freigabe durch zwei Change Approver)`)) return
+    if (!window.confirm(t('Request deletion of zone "{name}"? (approval by two change approvers)')
+      .replace('{name}', name))) return
     setError('')
     try {
       const r = await api.deleteZone(name)
@@ -536,17 +538,13 @@ export default function ZoneMatrix() {
       <div className="page-head">
         <h1>{t('Security zones')}</h1>
         <span className="muted">
-          Übersicht, Firewall-Erreichbarkeit und Kommunikationsmatrix der Zonen
+          {t('Overview, firewall reachability and communication matrix of the zones')}
         </span>
       </div>
 
       <div className="infobox">
-        <strong>BSI-Prinzip:</strong> Der Übergang zwischen Sicherheitszonen erfolgt
-        <strong> immer über eine Firewall</strong>. Cisco ACI ist als Sicherheitskomponente
-        für den Zonenübergang <strong>nicht ausreichend</strong> (keine Firewall nach
-        BSI-Definition) — ACI Contracts sind das Mittel <em>innerhalb</em> einer Zone.
-        Permitra erzwingt das: Eine zonenübergreifende Regel ohne Firewall-Komponente
-        wird abgelehnt.
+        <strong>{t('BSI principle')}:</strong>{' '}
+        {t('A transition between security zones always goes through a firewall. As a security component, Cisco ACI is not sufficient for a zone transition (not a firewall by the BSI definition) — ACI contracts are the means within a zone. Permitra enforces this: a cross-zone rule without a firewall component is rejected.')}
       </div>
 
       {error && <div className="error">{error}</div>}
@@ -657,9 +655,9 @@ export default function ZoneMatrix() {
               <label>{t('P-A-P classification')}
                 <select value={metaZone.pap_level || 'internal'}
                   onChange={(e) => setMetaZone({ ...metaZone, pap_level: e.target.value })}>
-                  <option value="external">extern (Nord)</option>
-                  <option value="pap">P-A-P-Ebene</option>
-                  <option value="internal">intern (Süd)</option>
+                  <option value="external">{t('external (north)')}</option>
+                  <option value="pap">{t('P-A-P level')}</option>
+                  <option value="internal">{t('internal (south)')}</option>
                 </select>
               </label>
               <label>{t('Attached to')}
@@ -817,17 +815,15 @@ export default function ZoneMatrix() {
             ))}
           </div>
           <p className="muted small">
-            Löschen ist nur möglich, wenn keine Regel die Zone verwendet; die Matrix-Einträge
-            der Zone werden mitgelöscht.
+            {t('Deletion is only possible when no rule uses the zone; the zone’s matrix entries are deleted with it.')}
           </p>
         </div>
       )}
 
       <section className="card wide">
-        <h2>Matrix-Änderungen: Freigaben & Historie</h2>
+        <h2>{t('Matrix changes: approvals & history')}</h2>
         <p className="muted small">
-          Jede Matrix-Änderung wird als Antrag protokolliert und erst nach Freigabe durch den
-          Betrieb wirksam (Vier-Augen-Prinzip: eigene Anträge können nicht selbst freigegeben werden).
+          {t('Every matrix change is recorded as a request and takes effect only after operations approves it (four-eyes principle: you cannot approve your own request).')}
         </p>
         <div className="table-wrap">
           <table>

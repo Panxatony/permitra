@@ -192,7 +192,7 @@ export default function RuleForm() {
             const entries = form[field].filter((e) => e.ip || e.alias)
             setForm({ ...form, [field]: [...entries, { ip: obj.ip, alias: obj.name }] })
           }}>
-            <option value="">+ aus Objektkatalog…</option>
+            <option value="">{t('+ from the object catalog…')}</option>
             {addressObjects.map((o) => <option key={o.id} value={o.id}>{o.name} ({o.ip})</option>)}
           </select>
         )}
@@ -218,10 +218,8 @@ export default function RuleForm() {
     // New addresses: the assignment has to be set once and is then stored
     const missing = unknownAssignable.filter((u) => !(assignments[u.ip] || []).length)
     if (missing.length) {
-      setError(
-        `Bitte festlegen, auf welchen Komponenten Regeln für folgende neue Adressen `
-        + `angelegt werden sollen: ${missing.map((u) => u.ip).join(', ')}`,
-      )
+      setError(t('Please decide which components rules should be created on for these new addresses: {addresses}')
+        .replace('{addresses}', missing.map((u) => u.ip).join(', ')))
       return
     }
     const payload = {
@@ -302,9 +300,8 @@ export default function RuleForm() {
         )}
         {unknownAssignable.length > 0 && (
           <div className="warnbox">
-            <strong>Neue Adresse(n):</strong> Bitte einmalig festlegen, auf welchen Komponenten
-            Regeln für diese Adressen angelegt werden sollen (die Zuordnung wird gespeichert
-            und künftig automatisch angewendet):
+            <strong>{t('New address(es):')}</strong>{' '}
+            {t('Please decide once which components rules for these addresses should be created on (the mapping is stored and applied automatically from then on):')}
             {unknownAssignable.map((u) => (
               <div key={u.ip} className="unknown-address">
                 <code>{u.ip}</code>{u.alias ? <span className="muted"> {u.alias}</span> : null}
@@ -364,7 +361,7 @@ export default function RuleForm() {
                 const kept = form.services.filter((s) => s.port || s.protocol.startsWith('ICMP'))
                 setForm({ ...form, services: [...kept, { protocol: obj.protocol, port: obj.port }] })
               }}>
-                <option value="">+ aus Objektkatalog…</option>
+                <option value="">{t('+ from the object catalog…')}</option>
                 {serviceObjects.map((o) => (
                   <option key={o.id} value={o.id}>{o.name} ({o.protocol}{o.port ? `/${o.port}` : ''})</option>
                 ))}
@@ -391,9 +388,9 @@ export default function RuleForm() {
           <label>Requestor{reqSettings.require_requestor === 'yes' && ' *'}
             <input value={form.requestor} onChange={set('requestor')}
               required={reqSettings.require_requestor === 'yes'} /></label>
-          <label>Bearbeiter / Verantwortlich<input value={form.owner} onChange={set('owner')} /></label>
-          <label>Change-ID<input value={form.change_id} onChange={set('change_id')} placeholder="z.B. CHN0000273" /></label>
-          <label>Fachlicher Bezug<input value={form.business_context} onChange={set('business_context')} /></label>
+          <label>{t('Handler / owner')}<input value={form.owner} onChange={set('owner')} /></label>
+          <label>{t('Change ID')}<input value={form.change_id} onChange={set('change_id')} placeholder={t('e.g. CHN0000273')} /></label>
+          <label>{t('Business context')}<input value={form.business_context} onChange={set('business_context')} /></label>
           <label>{t('Valid from')}<input type="date" value={form.valid_from} onChange={set('valid_from')} /></label>
           <label>{t('Valid until')}{reqSettings.require_valid_until === 'yes' && ' *'}
             <input type="date" value={form.valid_until} onChange={set('valid_until')}

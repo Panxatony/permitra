@@ -16,7 +16,7 @@ const NODE_COLORS = {
 }
 
 const LINK_TYPE_SUGGESTIONS = [
-  'OSPF Routing', 'BGP Peering', 'Statisches Routing', 'PBR / Service Graph',
+  'OSPF routing', 'BGP peering', 'Static routing', 'PBR / service graph',
   'L2 Trunk', 'IPsec VPN', 'VXLAN', 'L3Out',
 ]
 
@@ -47,7 +47,8 @@ function TopologySection({ components }) {
   }
 
   const remove = async (link) => {
-    if (!window.confirm(`Beziehung ${link.a_name} ↔ ${link.b_name} löschen?`)) return
+    if (!window.confirm(t('Remove the link {a} ↔ {b}?')
+      .replace('{a}', link.a_name).replace('{b}', link.b_name))) return
     try { await api.deleteComponentLink(link.id); load() } catch (err) { setError(err.message) }
   }
 
@@ -70,18 +71,17 @@ function TopologySection({ components }) {
 
   return (
     <section className="card wide">
-      <h2>Kommunikationsbeziehungen der Komponenten</h2>
+      <h2>{t('Communication links between components')}</h2>
       <p className="muted small">
-        Anordnung nach Nord-Süd-Ebene (kleinere Ebene = nördlicher/Internet-nah). Die Ebene wird
-        je Komponente gepflegt; Linien dokumentieren, wer direkt mit wem spricht.
+        {t('Arranged by north-south tier (a lower tier is further north, closer to the internet). The tier is maintained per component; the lines document who talks to whom directly.')}
       </p>
       {error && <div className="error">{error}</div>}
 
       <div className="topology-wrap">
         <svg viewBox={`0 0 ${W} ${H}`} className="topology-svg" role="img"
           aria-label={t('Topology of the security components (north at the top, south at the bottom)')}>
-          <text x="14" y="26" className="topo-compass">Nord ▲</text>
-          <text x="14" y={H - 12} className="topo-compass">Süd ▼</text>
+          <text x="14" y="26" className="topo-compass">{t('North ▲')}</text>
+          <text x="14" y={H - 12} className="topo-compass">{t('South ▼')}</text>
           <line x1="30" y1="34" x2="30" y2={H - 26} className="topo-axis" />
           {rows.map((row, i) => (
             <text key={tiers[i]} x="46" y={TOP + i * ROW_H + 34} className="topo-tier-label">
@@ -146,7 +146,7 @@ function TopologySection({ components }) {
 
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Komponente</th><th></th><th>Komponente</th><th>Verbindungsart</th><th>Beschreibung</th><th></th></tr></thead>
+          <thead><tr><th>{t('Component')}</th><th></th><th>{t('Component')}</th><th>{t('Link type')}</th><th>{t('Description')}</th><th></th></tr></thead>
           <tbody>
             {links.map((l) => (
               <tr key={l.id}>
@@ -156,46 +156,46 @@ function TopologySection({ components }) {
                 <td>{l.link_type ? <span className="badge linktype-badge">{l.link_type}</span> : '–'}</td>
                 <td>{l.description}</td>
                 <td className="row-actions">
-                  <button className="btn btn-ghost" onClick={() => remove(l)}>Löschen</button>
+                  <button className="btn btn-ghost" onClick={() => remove(l)}>{t('Delete')}</button>
                 </td>
               </tr>
             ))}
-            {!links.length && <tr><td colSpan={6} className="muted">Keine Beziehungen dokumentiert.</td></tr>}
+            {!links.length && <tr><td colSpan={6} className="muted">{t('No links documented.')}</td></tr>}
           </tbody>
         </table>
       </div>
 
       <form onSubmit={submit} className="object-form">
         <div className="grid-3">
-          <label>Komponente A
+          <label>{t('Component A')}
             <select value={form.component_a_id} required
               onChange={(e) => setForm({ ...form, component_a_id: e.target.value })}>
-              <option value="">– wählen –</option>
+              <option value="">{t('– select –')}</option>
               {components.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          <label>Komponente B
+          <label>{t('Component B')}
             <select value={form.component_b_id} required
               onChange={(e) => setForm({ ...form, component_b_id: e.target.value })}>
-              <option value="">– wählen –</option>
+              <option value="">{t('– select –')}</option>
               {components.filter((c) => String(c.id) !== form.component_a_id)
                 .map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-          <label>Verbindungsart
+          <label>{t('Link type')}
             <input value={form.link_type} list="link-type-suggestions"
               onChange={(e) => setForm({ ...form, link_type: e.target.value })}
-              placeholder="z.B. OSPF Routing" />
+              placeholder={t('e.g. OSPF routing')} />
             <datalist id="link-type-suggestions">
               {LINK_TYPE_SUGGESTIONS.map((t) => <option key={t} value={t} />)}
             </datalist>
           </label>
-          <label>Beschreibung<input value={form.description}
+          <label>{t('Description')}<input value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="z.B. Standort-Transit FFM–BER" /></label>
+            placeholder={t('e.g. site transit FFM–BER')} /></label>
         </div>
         <div className="actions">
-          <button className="btn btn-primary" type="submit">Beziehung anlegen</button>
+          <button className="btn btn-primary" type="submit">{t('Create link')}</button>
         </div>
       </form>
     </section>
@@ -240,17 +240,15 @@ function DriftPanel({ components }) {
 
   return (
     <section className="card wide">
-      <h2>Soll-Ist-Abgleich (Drift)</h2>
+      <h2>{t('Target/actual comparison (drift)')}</h2>
       <p className="muted small">
-        Ist-Konfiguration des Geräts einfügen (z.B. „show configuration | display set“ bzw.
-        Management-API-Export) – der Abgleich erfolgt über die Rule-IDs (SR####), die Permitra
-        in allen Exporten mitführt. Ein direkter Geräte-Abruf kann später als Adapter andocken.
+        {t('Paste the device’s actual configuration (e.g. “show configuration | display set” or a management API export) – the comparison runs over the rule IDs (SR####) that Permitra carries in every export. A direct device query can be added later as an adapter.')}
       </p>
       {error && <div className="error">{error}</div>}
       {notice && <div className="okbox">{notice}</div>}
-      <label className="inline">Komponente:
+      <label className="inline">{t('Component')}:
         <select value={selected} onChange={select}>
-          <option value="">– wählen –</option>
+          <option value="">{t('– select –')}</option>
           {components.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </label>
@@ -260,30 +258,34 @@ function DriftPanel({ components }) {
           <div className="drift-report">
             <div className={report.in_sync ? 'okbox' : 'warnbox'}>
               {report.in_sync
-                ? `✓ ${report.component} ist synchron (${report.expected_rule_count} freigegebene Regeln, `
-                  + `${report.actual_rule_count} auf dem Gerät).`
-                : `⚠ Abweichungen auf ${report.component} – Stand vom `
-                  + `${new Date(report.fetched_at).toLocaleString('de-DE')} (${report.uploaded_by})`}
+                ? `✓ ${t('{component} is in sync ({expected} approved rules, {actual} on the device).')
+                  .replace('{component}', report.component)
+                  .replace('{expected}', report.expected_rule_count)
+                  .replace('{actual}', report.actual_rule_count)}`
+                : `⚠ ${t('Deviations on {component} – state as of {when} ({who})')
+                  .replace('{component}', report.component)
+                  .replace('{when}', new Date(report.fetched_at).toLocaleString('de-DE'))
+                  .replace('{who}', report.uploaded_by)}`}
             </div>
             {!report.in_sync && (
               <div className="detail-grid">
                 <div>
-                  <h3>Fehlt auf dem Gerät ({report.missing.length})</h3>
+                  <h3>{t('Missing on the device')} ({report.missing.length})</h3>
                   <ul>{report.missing.map((r) => <li key={r.rule_id}><strong>{r.rule_id}</strong> {r.justification || r.name}</li>)}</ul>
                 </div>
                 <div>
-                  <h3>Auf dem Gerät, aber nicht (mehr) freigegeben ({report.stale.length})</h3>
+                  <h3>{t('On the device but no longer approved')} ({report.stale.length})</h3>
                   <ul>{report.stale.map((r) => <li key={r.rule_id}><strong>{r.rule_id}</strong> <StatusBadge status={r.status} /></li>)}</ul>
                 </div>
                 <div>
-                  <h3>Unbekannte Regel-IDs / Schatten-Regeln ({report.unknown.length})</h3>
+                  <h3>{t('Unknown rule IDs / shadow rules')} ({report.unknown.length})</h3>
                   <ul>{report.unknown.map((rid) => <li key={rid}><code>{rid}</code></li>)}</ul>
                 </div>
               </div>
             )}
           </div>
         ) : (
-          <p className="muted">Für diese Komponente ist noch keine Ist-Konfiguration hinterlegt.</p>
+          <p className="muted">{t('No actual configuration has been stored for this component yet.')}</p>
         )
       )}
 
@@ -292,7 +294,7 @@ function DriftPanel({ components }) {
           <textarea rows={6} value={config} onChange={(e) => setConfig(e.target.value)}
             placeholder={t('Paste the actual configuration here…\nset security policies from-zone ... policy SR0101 ...')} />
           <button className="btn btn-primary" type="submit" disabled={!config.trim()}>
-            Ist-Konfiguration speichern & abgleichen
+            {t('Save actual configuration & compare')}
           </button>
         </form>
       )}
@@ -345,7 +347,7 @@ export default function Components() {
   }
 
   const remove = async (c) => {
-    if (!window.confirm(`Komponente "${c.name}" löschen?`)) return
+    if (!window.confirm(t('Delete component "{name}"?').replace('{name}', c.name))) return
     setError('')
     try {
       await api.deleteComponent(c.id)
@@ -359,7 +361,7 @@ export default function Components() {
     <div>
       <div className="page-head">
         <h1>{t('Security components')}</h1>
-        <span className="muted">Firewall-Cluster und ACI-Fabrics, auf denen die Regeln umgesetzt werden</span>
+        <span className="muted">{t('Firewall clusters and ACI fabrics the rules are implemented on')}</span>
         <button className="btn btn-primary head-action" onClick={openCreate}>{t('＋ New component')}</button>
       </div>
       {error && <div className="error">{error}</div>}
@@ -370,8 +372,8 @@ export default function Components() {
         <table>
           <thead>
             <tr>
-              <th>Name</th><th>Typ</th><th>Standort/Zone</th><th>Ebene (N→S)</th>
-              <th>Management-Adresse</th><th>Beschreibung</th><th>Status</th><th></th>
+              <th>{t('Name')}</th><th>{t('Type')}</th><th>{t('Site/zone')}</th><th>{t('Tier (N→S)')}</th>
+              <th>{t('Management address')}</th><th>{t('Description')}</th><th>{t('Status')}</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -383,15 +385,15 @@ export default function Components() {
                 <td><code>{c.ns_tier}</code></td>
                 <td className="addr">{c.mgmt_address}</td>
                 <td>{c.description}</td>
-                <td>{c.active ? <span className="badge status-approved">aktiv</span>
-                  : <span className="badge status-deactivated">inaktiv</span>}</td>
+                <td>{c.active ? <span className="badge status-approved">{t('active')}</span>
+                  : <span className="badge status-deactivated">{t('inactive')}</span>}</td>
                 <td className="row-actions">
-                  <button className="btn btn-ghost" onClick={() => openEdit(c)}>Bearbeiten</button>
-                  <button className="btn btn-ghost" onClick={() => remove(c)}>Löschen</button>
+                  <button className="btn btn-ghost" onClick={() => openEdit(c)}>{t('Edit')}</button>
+                  <button className="btn btn-ghost" onClick={() => remove(c)}>{t('Delete')}</button>
                 </td>
               </tr>
             ))}
-            {!components.length && <tr><td colSpan={8} className="muted">Keine Komponenten angelegt.</td></tr>}
+            {!components.length && <tr><td colSpan={8} className="muted">{t('No components created.')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -401,31 +403,31 @@ export default function Components() {
           {modalError && <div className="error">{modalError}</div>}
           <form onSubmit={submit} className="modal-form">
             <div className="grid-2">
-              <label>Name<input value={form.name} onChange={set('name')}
-                placeholder="z.B. FW-Cluster-FFM" required autoFocus /></label>
-              <label>Typ
+              <label>{t('Name')}<input value={form.name} onChange={set('name')}
+                placeholder={t('e.g. FW-Cluster-FFM')} required autoFocus /></label>
+              <label>{t('Type')}
                 <select value={form.type} onChange={set('type')}>
                   <option value="checkpoint">Check Point</option>
                   <option value="juniper">Juniper SRX</option>
                   <option value="aci">Cisco ACI</option>
                 </select>
               </label>
-              <label>Standort/Zone<input value={form.location} onChange={set('location')}
+              <label>{t('Site/zone')}<input value={form.location} onChange={set('location')}
                 placeholder={t('e.g. Zone FFM')} /></label>
-              <label>Nord-Süd-Ebene
+              <label>{t('North-south tier')}
                 <input type="number" min="0" max="1000" value={form.ns_tier} onChange={set('ns_tier')} />
-                <span className="muted small">0 = nördlich (Internet-nah), größer = südlicher</span>
+                <span className="muted small">{t('0 = north (close to the internet), higher = further south')}</span>
               </label>
-              <label>Management-Adresse<input value={form.mgmt_address} onChange={set('mgmt_address')}
-                placeholder="z.B. cpmgmt.ffm.demo.local - 10.10.80.20" /></label>
-              <label>Beschreibung<input value={form.description} onChange={set('description')} /></label>
+              <label>{t('Management address')}<input value={form.mgmt_address} onChange={set('mgmt_address')}
+                placeholder={t('e.g. cpmgmt.ffm.demo.local - 10.10.80.20')} /></label>
+              <label>{t('Description')}<input value={form.description} onChange={set('description')} /></label>
             </div>
             <div className="actions">
               <label className="checkbox">
-                <input type="checkbox" checked={form.active} onChange={set('active')} /> aktiv
+                <input type="checkbox" checked={form.active} onChange={set('active')} /> {t('active')}
               </label>
-              <button className="btn btn-primary" type="submit">{editId ? 'Speichern' : 'Anlegen'}</button>
-              <button className="btn btn-ghost" type="button" onClick={close}>Abbrechen</button>
+              <button className="btn btn-primary" type="submit">{editId ? t('Save') : t('Create')}</button>
+              <button className="btn btn-ghost" type="button" onClick={close}>{t('Cancel')}</button>
             </div>
           </form>
         </Modal>

@@ -61,8 +61,8 @@ function PathFlow({ result, t }) {
     <>
       {result.unknown_addresses.length > 0 && (
         <div className="warnbox">
-          Für {result.unknown_addresses.join(' und ')} ist keine Komponenten-Zuordnung
-          gepflegt – der Pfad kann unvollständig sein.
+          {t('No component mapping is maintained for {addresses} – the path may be incomplete.')
+            .replace('{addresses}', result.unknown_addresses.join(', '))}
         </div>
       )}
 
@@ -73,13 +73,14 @@ function PathFlow({ result, t }) {
             {result.allowed_services.map((s, i) => (
               <code key={i} className="svc">{s.protocol}{s.port ? `/${s.port}` : ''}</code>
             ))}
-            {result.intra_zone && <span className="muted"> (Intra-Zone, via ACI)</span>}
+            {result.intra_zone && <span className="muted"> ({t('intra-zone, via ACI')})</span>}
           </>
         ) : (
           <>
-            ✕ Kommunikation <strong>{result.src} → {result.dst}</strong> ist nicht möglich
+            ✕ {t('Communication')} <strong>{result.src} → {result.dst}</strong> {t('is not possible')}
             {result.components.some((c) => !c.covered)
-              ? ` – auf ${result.components.filter((c) => !c.covered).map((c) => c.name).join(', ')} fehlt eine freigegebene Regel`
+              ? ` ${t('– {components} lack an approved rule')
+                .replace('{components}', result.components.filter((c) => !c.covered).map((c) => c.name).join(', '))}`
               : result.components.length
                 ? t(' – no common service is permitted across all components')
                 : t(' – no components to traverse could be determined')}
@@ -124,7 +125,7 @@ function PathFlow({ result, t }) {
                   ))}
                 </ul>
               ) : (
-                <div className="path-missing">Keine passende Regel auf dieser Komponente</div>
+                <div className="path-missing">{t('No matching rule on this component')}</div>
               )}
             </div>
           </div>

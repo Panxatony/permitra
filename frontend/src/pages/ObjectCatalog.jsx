@@ -6,6 +6,7 @@ const EMPTY_ADDR = { name: '', ip: '', description: '' }
 const EMPTY_SVC = { name: '', protocol: 'TCP', port: '', description: '' }
 
 function EpgSection() {
+  const { t } = useLang()
   const [epgs, setEpgs] = useState([])
   const [mappings, setMappings] = useState([])
   const [epgForm, setEpgForm] = useState({ name: '', tenant: 'DEMO', app_profile: 'AP-DEMO', bridge_domain: '' })
@@ -48,7 +49,7 @@ function EpgSection() {
   }
 
   const removeEpg = async (epg) => {
-    if (!window.confirm(`EPG "${epg.name}" löschen?`)) return
+    if (!window.confirm(t('Delete EPG "{name}"?').replace('{name}', epg.name))) return
     try { await api.deleteEpg(epg.id); load() } catch (err) { setError(err.message) }
   }
   const removeMap = async (m) => {
@@ -57,12 +58,9 @@ function EpgSection() {
 
   return (
     <section className="card wide">
-      <h2>ACI EPGs & Adress-Zuordnung</h2>
+      <h2>{t('ACI EPGs & address mapping')}</h2>
       <p className="muted small">
-        ACI Contracts verbinden EPGs, nicht IPs: Der ACI-Export löst Quell-/Zieladressen über
-        diese Zuordnung auf (Quelle → Consumer, Ziel → Provider, „any" → vzAny) und fasst alle
-        Regeln eines EPG-Paars in einem Contract zusammen. Adressen ohne Zuordnung werden als
-        Einzel-Contract exportiert und in den Warnungen ausgewiesen.
+        {t('ACI contracts connect EPGs, not IPs: the ACI export resolves source and destination addresses through this mapping (source → consumer, destination → provider, “any” → vzAny) and merges all rules of an EPG pair into one contract. Addresses without a mapping are exported as individual contracts and reported in the warnings.')}
       </p>
       {error && <div className="error">{error}</div>}
       <div className="detail-grid">
@@ -70,14 +68,14 @@ function EpgSection() {
           <h3>EPGs ({epgs.length})</h3>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Tenant</th><th>App Profile</th><th>Bridge Domain</th><th></th></tr></thead>
+              <thead><tr><th>{t('Name')}</th><th>Tenant</th><th>App Profile</th><th>Bridge Domain</th><th></th></tr></thead>
               <tbody>
                 {epgs.map((e) => (
                   <tr key={e.id}>
                     <td><strong>{e.name}</strong></td>
                     <td>{e.tenant}</td><td>{e.app_profile}</td><td>{e.bridge_domain}</td>
                     <td className="row-actions">
-                      <button className="btn btn-ghost" onClick={() => removeEpg(e)}>Löschen</button>
+                      <button className="btn btn-ghost" onClick={() => removeEpg(e)}>{t('Delete')}</button>
                     </td>
                   </tr>
                 ))}
@@ -86,23 +84,23 @@ function EpgSection() {
           </div>
           <form onSubmit={addEpg} className="object-form">
             <div className="grid-3">
-              <label>Name<input value={epgForm.name} required placeholder="z.B. epg-prod-app"
+              <label>{t('Name')}<input value={epgForm.name} required placeholder={t('e.g. epg-prod-app')}
                 onChange={(e) => setEpgForm({ ...epgForm, name: e.target.value })} /></label>
               <label>Tenant<input value={epgForm.tenant}
                 onChange={(e) => setEpgForm({ ...epgForm, tenant: e.target.value })} /></label>
               <label>App Profile<input value={epgForm.app_profile}
                 onChange={(e) => setEpgForm({ ...epgForm, app_profile: e.target.value })} /></label>
-              <label>Bridge Domain<input value={epgForm.bridge_domain} placeholder="z.B. BD-PROD-APP"
+              <label>Bridge Domain<input value={epgForm.bridge_domain} placeholder={t('e.g. BD-PROD-APP')}
                 onChange={(e) => setEpgForm({ ...epgForm, bridge_domain: e.target.value })} /></label>
             </div>
-            <div className="actions"><button className="btn btn-primary" type="submit">EPG anlegen</button></div>
+            <div className="actions"><button className="btn btn-primary" type="submit">{t('Create EPG')}</button></div>
           </form>
         </div>
         <div>
-          <h3>Adresse → EPG ({mappings.length})</h3>
+          <h3>{t('Address → EPG')} ({mappings.length})</h3>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>IP/Netz</th><th>Alias</th><th>EPG</th><th></th></tr></thead>
+              <thead><tr><th>{t('IP/network')}</th><th>Alias</th><th>EPG</th><th></th></tr></thead>
               <tbody>
                 {[...mappings].sort((a, b) =>
                   a.epg_name.localeCompare(b.epg_name) || a.ip.localeCompare(b.ip)).map((m) => (
@@ -120,20 +118,20 @@ function EpgSection() {
           </div>
           <form onSubmit={addMap} className="object-form">
             <div className="grid-3">
-              <label>IP/Netz(e)<input value={mapForm.ip} required
-                placeholder="z.B. 10.10.30.0/24, 10.10.30.5 – mehrere mit Komma"
+              <label>{t('IP/network(s)')}<input value={mapForm.ip} required
+                placeholder={t('e.g. 10.10.30.0/24, 10.10.30.5 – several separated by commas')}
                 onChange={(e) => setMapForm({ ...mapForm, ip: e.target.value })} /></label>
               <label>Alias<input value={mapForm.alias}
                 onChange={(e) => setMapForm({ ...mapForm, alias: e.target.value })} /></label>
               <label>EPG
                 <select value={mapForm.epg_id} required
                   onChange={(e) => setMapForm({ ...mapForm, epg_id: e.target.value })}>
-                  <option value="">– wählen –</option>
+                  <option value="">{t('– select –')}</option>
                   {epgs.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
                 </select>
               </label>
             </div>
-            <div className="actions"><button className="btn btn-primary" type="submit">Zuordnung speichern</button></div>
+            <div className="actions"><button className="btn btn-primary" type="submit">{t('Save mapping')}</button></div>
           </form>
         </div>
       </div>
@@ -165,7 +163,7 @@ export default function ObjectCatalog() {
       if (addrEditId) {
         const res = await api.updateAddressObject(addrEditId, addrForm)
         if (res.description?.includes(t('rule(s) updated'))) {
-          setNotice(`IP-Änderung übernommen – ${res.description.match(/\[(.*)\]/)?.[1] || ''}.`)
+          setNotice(`${t('IP change applied')} – ${res.description.match(/\[(.*)\]/)?.[1] || ''}.`)
         }
       } else {
         await api.createAddressObject(addrForm)
@@ -191,11 +189,11 @@ export default function ObjectCatalog() {
   }
 
   const removeAddr = async (o) => {
-    if (!window.confirm(`Adress-Objekt "${o.name}" löschen?`)) return
+    if (!window.confirm(t('Delete address object "{name}"?').replace('{name}', o.name))) return
     try { await api.deleteAddressObject(o.id); load() } catch (err) { setError(err.message) }
   }
   const removeSvc = async (o) => {
-    if (!window.confirm(`Dienst-Objekt "${o.name}" löschen?`)) return
+    if (!window.confirm(t('Delete service object "{name}"?').replace('{name}', o.name))) return
     try { await api.deleteServiceObject(o.id); load() } catch (err) { setError(err.message) }
   }
 
@@ -204,8 +202,7 @@ export default function ObjectCatalog() {
       <div className="page-head">
         <h1>{t('Object catalog')}</h1>
         <span className="muted">
-          Wiederverwendbare Adress- und Dienst-Objekte – ändert sich die IP eines
-          Adress-Objekts, werden alle Regeln mit diesem Alias automatisch mitgezogen
+          {t('Reusable address and service objects – when the IP of an address object changes, every rule using that alias follows automatically')}
         </span>
       </div>
       {error && <div className="error">{error}</div>}
@@ -216,7 +213,7 @@ export default function ObjectCatalog() {
           <h2>{t('Address objects')} ({addresses.length})</h2>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Name (Alias)</th><th>IP/Netz</th><th>Beschreibung</th><th></th></tr></thead>
+              <thead><tr><th>{t('Name (alias)')}</th><th>{t('IP/network')}</th><th>{t('Description')}</th><th></th></tr></thead>
               <tbody>
                 {addresses.map((o) => (
                   <tr key={o.id}>
@@ -226,9 +223,9 @@ export default function ObjectCatalog() {
                     <td className="row-actions">
                       <button className="btn btn-ghost"
                         onClick={() => { setAddrEditId(o.id); setAddrForm({ name: o.name, ip: o.ip, description: o.description }) }}>
-                        Bearbeiten
+                        {t('Edit')}
                       </button>
-                      <button className="btn btn-ghost" onClick={() => removeAddr(o)}>Löschen</button>
+                      <button className="btn btn-ghost" onClick={() => removeAddr(o)}>{t('Delete')}</button>
                     </td>
                   </tr>
                 ))}
@@ -237,19 +234,19 @@ export default function ObjectCatalog() {
           </div>
           <form onSubmit={submitAddr} className="object-form">
             <div className="grid-3">
-              <label>Name/Alias<input value={addrForm.name}
+              <label>{t('Name/alias')}<input value={addrForm.name}
                 onChange={(e) => setAddrForm({ ...addrForm, name: e.target.value })}
-                placeholder="z.B. web01.demo.local" required /></label>
-              <label>IP/Netz<input value={addrForm.ip}
+                placeholder={t('e.g. web01.demo.local')} required /></label>
+              <label>{t('IP/network')}<input value={addrForm.ip}
                 onChange={(e) => setAddrForm({ ...addrForm, ip: e.target.value })}
-                placeholder="z.B. 10.10.10.5" required /></label>
-              <label>Beschreibung<input value={addrForm.description}
+                placeholder={t('e.g. 10.10.10.5')} required /></label>
+              <label>{t('Description')}<input value={addrForm.description}
                 onChange={(e) => setAddrForm({ ...addrForm, description: e.target.value })} /></label>
             </div>
             <div className="actions">
               <button className="btn btn-primary" type="submit">{addrEditId ? t('Save (IP is propagated)') : t('Create')}</button>
               {addrEditId && <button type="button" className="btn btn-ghost"
-                onClick={() => { setAddrEditId(null); setAddrForm(EMPTY_ADDR) }}>Abbrechen</button>}
+                onClick={() => { setAddrEditId(null); setAddrForm(EMPTY_ADDR) }}>{t('Cancel')}</button>}
             </div>
           </form>
         </section>
@@ -258,7 +255,7 @@ export default function ObjectCatalog() {
           <h2>{t('Service objects')} ({services.length})</h2>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Protokoll</th><th>Port</th><th>Beschreibung</th><th></th></tr></thead>
+              <thead><tr><th>{t('Name')}</th><th>{t('Protocol')}</th><th>Port</th><th>{t('Description')}</th><th></th></tr></thead>
               <tbody>
                 {services.map((o) => (
                   <tr key={o.id}>
@@ -267,7 +264,7 @@ export default function ObjectCatalog() {
                     <td><code>{o.port || '–'}</code></td>
                     <td>{o.description}</td>
                     <td className="row-actions">
-                      <button className="btn btn-ghost" onClick={() => removeSvc(o)}>Löschen</button>
+                      <button className="btn btn-ghost" onClick={() => removeSvc(o)}>{t('Delete')}</button>
                     </td>
                   </tr>
                 ))}
@@ -276,10 +273,10 @@ export default function ObjectCatalog() {
           </div>
           <form onSubmit={submitSvc} className="object-form">
             <div className="grid-3">
-              <label>Name<input value={svcForm.name}
+              <label>{t('Name')}<input value={svcForm.name}
                 onChange={(e) => setSvcForm({ ...svcForm, name: e.target.value })}
-                placeholder="z.B. HTTPS" required /></label>
-              <label>Protokoll
+                placeholder={t('e.g. HTTPS')} required /></label>
+              <label>{t('Protocol')}
                 <select value={svcForm.protocol}
                   onChange={(e) => setSvcForm({ ...svcForm, protocol: e.target.value })}>
                   <option>TCP</option><option>UDP</option><option>TCP/UDP</option>
@@ -288,10 +285,10 @@ export default function ObjectCatalog() {
               </label>
               <label>Port<input value={svcForm.port}
                 onChange={(e) => setSvcForm({ ...svcForm, port: e.target.value })}
-                placeholder="z.B. 443" /></label>
+                placeholder={t('e.g. 443')} /></label>
             </div>
             <div className="actions">
-              <button className="btn btn-primary" type="submit">Anlegen</button>
+              <button className="btn btn-primary" type="submit">{t('Create')}</button>
             </div>
           </form>
         </section>

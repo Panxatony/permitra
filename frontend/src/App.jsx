@@ -22,9 +22,9 @@ import Search from './pages/Search'
 import ZoneMatrix from './pages/ZoneMatrix'
 
 const THEME_ICONS = { system: '🖥️', light: '☀️', dark: '🌙' }
-const THEME_LABELS = { system: 'System', light: 'Hell', dark: 'Dunkel' }
+const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 
-const ROLE_LABELS = { architect: 'Architekt', operations: 'Betrieb', change_approver: 'Change Approver', admin: 'Administrator' }
+const ROLE_LABELS = { architect: 'Architect', operations: 'Operations', change_approver: 'Change approver', admin: 'Administrator' }
 
 function Layout({ children }) {
   const user = getUser()
