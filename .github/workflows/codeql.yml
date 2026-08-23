@@ -1,0 +1,56 @@
+# CodeQL static analysis.
+#
+# This has no counterpart in the GitLab pipeline - it is GitHub-native and free
+# for public repositories, so it is worth having here rather than skipped for
+# symmetry. It looks for a different class of problem than ruff does: taint
+# flow from a request into a query, a path, or a subprocess. For an application
+# that decides what a firewall is configured to allow, that is the class worth
+# catching.
+#
+# Findings land in the Security tab, not in the pull request checks, so a false
+# positive does not block a merge.
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, because the queries improve over time even when the code does not.
+    - cron: '27 4 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # required to upload the results
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['python', 'javascript-typescript']
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@v3
+        with:
+          language: ${{ matrix.language }}
+          # security-extended adds queries that are noisier but catch more; for
+          # a project of this size the extra findings are reviewable.
+          queries: security-extended
+
+      # Both languages here are interpreted - there is nothing to compile, and
+      # the autobuilder would only spend time discovering that.
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

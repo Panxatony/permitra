@@ -1,0 +1,53 @@
+# Dependency updates.
+#
+# The dependency audit in CI reports a known vulnerability; this is what
+# actually closes it. Weekly rather than daily, and grouped, because a stream of
+# single-package pull requests gets ignored - and an ignored update is the same
+# as no update.
+
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # One pull request for the routine bumps. A security advisory still comes
+      # as its own pull request, which is the point of separating them.
+      backend-dependencies:
+        patterns: ['*']
+        update-types: [minor, patch]
+    commit-message:
+      prefix: 'deps(backend)'
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      frontend-dependencies:
+        patterns: ['*']
+        update-types: [minor, patch]
+    commit-message:
+      prefix: 'deps(frontend)'
+
+  # The workflows pin actions by tag; this keeps those tags current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'ci'
+
+  - package-ecosystem: docker
+    directories:
+      - /backend
+      - /frontend
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: 'deps(docker)'

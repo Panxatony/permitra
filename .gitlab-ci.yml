@@ -133,7 +133,9 @@ npm-audit:
     - cd frontend && npm audit --audit-level=high
   allow_failure: true
 
-# No secret must accidentally end up in the repository.
+# No secret must accidentally end up in the repository. The scan itself lives in
+# scripts/secret_scan.py so GitHub Actions runs the identical check - two copies
+# of a check are one copy that quietly falls behind.
 secret-scan:
   stage: security
   image: python:3.12-slim
@@ -141,39 +143,7 @@ secret-scan:
     # The slim image ships without git, but the scan needs `git ls-files`
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends git >/dev/null
   script:
-    - |
-      python - <<'PY'
-      import re, subprocess, sys
-      # Check tracked files – .env & co. are ignored anyway
-      files = subprocess.run(["git", "ls-files"], capture_output=True, text=True).stdout.split()
-      patterns = [
-          (re.compile(r"SECRET_KEY\s*[:=]\s*['\"][A-Za-z0-9+/=_-]{16,}"), "hard-coded SECRET_KEY"),
-          (re.compile(r"(?i)(password|passwort)\s*[:=]\s*['\"][^'\"]{8,}"), "hard-coded password"),
-          (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "private key"),
-          (re.compile(r"\bglpat-[A-Za-z0-9_-]{20,}"), "GitLab token"),
-      ]
-      # Not real secrets: shell/compose variables and command substitution
-      placeholder = re.compile(r"\$\(|\$\{|\$[A-Z_]+|change-?me|example|xxx|\.\.\.", re.I)
-      allow = ("tests/", "seed_demo.py", "seed.py", ".gitlab-ci.yml", "docs/", "README")
-      hits = []
-      for f in files:
-          if f.endswith((".png", ".jpg", ".ico", ".lock")) or any(a in f for a in allow):
-              continue
-          try:
-              text = open(f, encoding="utf-8", errors="ignore").read()
-          except OSError:
-              continue
-          for rx, label in patterns:
-              for m in rx.finditer(text):
-                  if placeholder.search(m.group(0)):
-                      continue
-                  hits.append(f"{f}: {label} -> {m.group(0)[:60]}")
-      if hits:
-          print("Possible secrets found in the repository:")
-          print("\n".join(hits))
-          sys.exit(1)
-      print("No secrets found in tracked files.")
-      PY
+    - python scripts/secret_scan.py
 
 # ---------------------------------------------------------------- build
 
