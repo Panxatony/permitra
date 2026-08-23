@@ -2,6 +2,44 @@
 
 Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
+## Unreleased
+
+- **The drift comparison counts what is on the device, not just what it
+  recognises.** It only ever looked for SR IDs, which answers "did my rules
+  arrive?" and misses the question Permitra exists for. A rule somebody opened by
+  hand carries no ID, so it produced nothing to find — not reported as
+  unjustified, not reported at all — and the report said `in_sync: true` while it
+  sat on the firewall. The report now names the unjustified rules by identifier
+  and line, and the dashboard carries one coverage figure for the estate together
+  with what it could not measure, because an aggregate improves by looking away.
+  A configuration in an unreadable format is reported as unreadable, never as
+  clean.
+- **An emergency change has a way in.** Approval by somebody else holds until the
+  application is down and the only approver is unreachable; then the rule gets
+  opened on the firewall and a tool without a fast path does not prevent that, it
+  only prevents it from being recorded. `POST /api/rules/emergency` documents it:
+  mandatory reason, straight into review, and it deactivates itself if nobody
+  approves within the window. Its own audit event, because how often it happens
+  is what separates a control from a habit.
+- **A rule can be rolled back to an earlier version.** As a new version, so the
+  history stays complete. This was already the case and was listed as missing.
+- **Log and history entries follow the instance language, including their past.**
+  They used to be translated as they were written, which froze each one in
+  whichever language was configured that day — an instance switched to German
+  kept reading English forever. They are stored as the English template plus
+  their values now and rendered when read. The implementation status also stopped
+  arriving as a Python dict repr.
+- **Fixed:** the Check Point pattern in the coverage scan was written against the
+  management API spelling and never tried against what Permitra's own exporter
+  writes, so a genuine Check Point script scanned as an unreadable format and the
+  component silently had no coverage figure.
+- **Fixed:** the Juniper exporter carried the rule ID only in an export comment,
+  which never reaches the device — so a real SRX dump showed every policy as
+  unjustified. It is written into the policy description now.
+- **Fixed:** the demo showed a state the application cannot produce — rules
+  implemented on every component while still `approved` rather than `active`,
+  making the dashboard contradict itself.
+
 ## 0.7.4-alpha — 2026-08-23
 
 First public release. **Alpha**: the feature set is complete enough to work with
@@ -49,8 +87,10 @@ Findings from the internal code audit, closed before this release:
 - **Backups are encrypted and the restore path is tested.** The dump holds
   password hashes, TOTP seeds, API token hashes and the whole audit chain, and
   was written as plain SQL — reading the backup directory was as good as reading
-  the database. `scripts/backup.sh` now refuses to write an unencrypted dump, and
-  refuses a passphrase stored inside the backup directory it protects.
+  the database. `scripts/backup.sh` now refuses to write an unencrypted dump
+  unless `PERMITRA_BACKUP_PLAINTEXT=1` is set deliberately, in which case it says
+  so on every run; and it refuses a passphrase stored inside the backup directory
+  it protects.
   `scripts/restore.sh` plays one back, refuses to overwrite a populated database
   without `--force`, and re-verifies the audit hash chain afterwards. CI runs the
   whole round trip on every pull request, including a check that the encrypted
