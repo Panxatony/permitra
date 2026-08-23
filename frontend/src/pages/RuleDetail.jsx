@@ -148,6 +148,8 @@ export default function RuleDetail() {
             <dt>{t('Destination')}</dt><dd className="addr"><AddressList entries={rule.destination} /></dd>
             <dt>{t('Services')}</dt><dd><ServiceList services={rule.services} /></dd>
             <dt>{t('Action')}</dt><dd><code>{rule.action}</code></dd>
+            <dt>{t('Logging')}</dt>
+            <dd><code>{rule.log_level || 'detailed'}</code></dd>
           </dl>
         </section>
 

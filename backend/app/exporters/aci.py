@@ -18,7 +18,8 @@ import json
 
 import yaml
 
-from ..models import AciGateway, AddressEpgMap, Rule, ServiceObject
+from ..messages import _
+from ..models import AciGateway, AddressEpgMap, Rule, RuleLogging, ServiceObject
 from ..validation import parse_network
 from .common import sanitize_name, service_ports, split_protocols
 
@@ -110,6 +111,7 @@ def build_contract_model(rules: list[Rule], db) -> dict:
                 pbr_by_bd[gw.bridge_domain] = gw.pbr_service_graph
 
     filters: dict[str, list[dict]] = {}
+    subject_logs: dict[tuple, set[bool]] = {}
     contracts: dict[tuple[str, str], dict] = {}
     legacy, warnings = [], []
     tenants = set()
@@ -151,7 +153,28 @@ def build_contract_model(rules: list[Rule], db) -> dict:
                 )
                 for fname in rule_filters:
                     contract["subjects"].setdefault(fname, set()).add(rule.rule_id)
+                    # ACI aggregates several rules into one subject, so their
+                    # logging settings have to be reconciled rather than
+                    # carried. A subject logs if *any* contributing rule asks
+                    # for it: under-logging is the failure that costs evidence,
+                    # over-logging costs disk. Disagreement is reported below
+                    # rather than resolved silently - somebody chose "none" for
+                    # a rule and will not get it.
+                    subject_logs.setdefault((key, fname), set()).add(
+                        rule.effective_log_level != RuleLogging.none)
+                    contract.setdefault("subject_logs", {})
                 tenants.add(provider.tenant or DEFAULT_TENANT)
+
+    # One decision per subject: does it log, and did the rules behind it agree?
+    for (key, fname), decisions in subject_logs.items():
+        contract = contracts[key]
+        contract["subject_logs"][fname] = any(decisions)
+        if len(decisions) > 1:
+            warnings.append(_(
+                "Contract {contract}, filter {filter}: the rules behind it disagree "
+                "about logging – the subject logs, because a missing log entry "
+                "cannot be reconstructed later",
+                contract=contract["name"], filter=fname))
 
     tenant = tenants.pop() if len(tenants) == 1 else DEFAULT_TENANT
     return {
@@ -177,7 +200,14 @@ def _legacy_tree(rule: Rule) -> list[dict]:
                                    "descr": f"{rule.rule_id} | no EPG mapping"[:128]},
                     "children": [{"vzSubj": {"attributes": {"name": f"subj-{sanitize_name(rule.rule_id)}",
                                                             "revFltPorts": "yes"},
-                                             "children": [{"vzRsSubjFiltAtt": {"attributes": {"tnVzFilterName": flt_name}}}]}}]}},
+                                             "children": [{"vzRsSubjFiltAtt": {"attributes": {
+                                                 "tnVzFilterName": flt_name,
+                                                 # A rule without an EPG mapping falls back to its
+                                                 # own contract - it still has a logging setting,
+                                                 # and dropping it here would lose the attribute for
+                                                 # exactly the rules nobody has modelled properly.
+                                                 "directives": "log" if rule.effective_log_level != RuleLogging.none else "",
+                                             }}}]}}]}},
     ]
 
 
@@ -204,7 +234,12 @@ def export_json(rules: list[Rule], db=None) -> str:
                         "revFltPorts": "yes",
                         "descr": ("Rules: " + ", ".join(sorted(rule_ids)))[:128],
                     },
-                    "children": [{"vzRsSubjFiltAtt": {"attributes": {"tnVzFilterName": fname}}}],
+                    "children": [{"vzRsSubjFiltAtt": {"attributes": {
+                        "tnVzFilterName": fname,
+                        # "log" is the directive that actually turns logging on
+                        # for a filter attachment; "" is the explicit off.
+                        "directives": "log" if contract.get("subject_logs", {}).get(fname) else "",
+                    }}}],
                 }
             }
             if contract["service_graph"]:

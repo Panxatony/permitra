@@ -48,6 +48,10 @@ def read_criteria(db: Session = Depends(get_db), _user: User = Depends(get_curre
             {"code": "risky-service", "severity": "medium",
              "detail": _("A service from the list below is used"),
              "note": _("Raised to high when the source zone is exposed")},
+            {"code": "no-logging", "severity": "medium",
+             "detail": _("The rule logs nothing, into a zone with protection level "
+                         "'high' or 'very high'"),
+             "note": _("An access nobody recorded cannot be reconstructed afterwards")},
             {"code": "any-service", "severity": "medium",
              "detail": _("Service 'any' on a cross-zone rule")},
         ],

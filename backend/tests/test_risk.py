@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
-from app.models import Vrf, Zone
+from app.models import RuleLogging, Vrf, Zone
 from app.risk import assess_rule
 
 
@@ -29,7 +29,11 @@ def db():
 
 def rule(**kw):
     base = {"source": [{"ip": "10.0.0.1", "alias": ""}], "destination": [{"ip": "10.0.0.2", "alias": ""}],
-            "services": [{"protocol": "TCP", "port": "443"}], "source_zone": "DEV", "destination_zone": "DEV"}
+            "services": [{"protocol": "TCP", "port": "443"}], "source_zone": "DEV", "destination_zone": "DEV",
+            # A stub stands in for a Rule, so it carries what a Rule carries -
+            # including the logging level the assessment now reads. Same default
+            # as the column, so these tests keep asking what they asked before.
+            "effective_log_level": RuleLogging.detailed}
     base.update(kw)
     return SimpleNamespace(**base)
 
