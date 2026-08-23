@@ -1,4 +1,4 @@
-"""Tests for the NetBox import (issue #23)."""
+"""Tests for the NetBox import (GitLab issue 23)."""
 import json
 import os
 import threading
