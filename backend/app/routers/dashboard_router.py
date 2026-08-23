@@ -6,6 +6,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..expiry import expiring_rules
 from ..models import (
+    IN_FORCE,
     AciGateway,
     Rule,
     RuleStatus,
@@ -48,7 +49,7 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
 
     # Approved ones with pending implementation + deactivated ones awaiting removal ("to remove")
     candidate_rules = db.query(Rule).filter(
-        Rule.status.in_((RuleStatus.approved, RuleStatus.deactivated)),
+        Rule.status.in_((*IN_FORCE, RuleStatus.deactivated)),
         Rule.deleted_at.is_(None)
     ).all()
     to_implement = sum(1 for r in candidate_rules if impl_pending(r))

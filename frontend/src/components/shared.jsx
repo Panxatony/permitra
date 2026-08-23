@@ -23,12 +23,17 @@ export function Modal({ title, onClose, children }) {
   )
 }
 
+/* In workflow order. The keys are English like every other dictionary key -
+   with German ones the labels stayed German on an English instance, because a
+   key that is not in the dictionary falls back to itself. */
 export const STATUS_LABELS = {
-  draft: 'Entwurf',
-  in_review: 'Im Review',
-  approved: 'Freigegeben',
-  rejected: 'Abgelehnt',
-  deactivated: 'Deaktiviert',
+  draft: 'Draft',
+  in_review: 'In review',
+  approved: 'Approved',
+  active: 'Active',
+  rejected: 'Rejected',
+  deactivated: 'Deactivated',
+  deleted: 'Deleted',
 }
 
 export const PLATFORM_LABELS = { juniper: 'Juniper', checkpoint: 'Check Point', aci: 'ACI' }

@@ -14,6 +14,7 @@ from ..expiry import expiring_rules, invalid_validity_rules
 from ..exporters.generic import rule_to_dict
 from ..messages import _
 from ..models import (
+    IN_FORCE,
     AddressComponentMap,
     Comment,
     ComponentType,
@@ -235,7 +236,10 @@ def list_rules(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    query = db.query(Rule).filter(Rule.deleted_at.is_(None))
+    # Deleted rules stay in the overview: a rule that is no longer needed is
+    # documented as `deleted`, not made to disappear. They take effect nowhere
+    # else - every functional query goes through active_rules() instead.
+    query = db.query(Rule)
     if vrf:
         query = query.filter(Rule.vrf_id == get_vrf(db, vrf).id)
     if q:
@@ -313,7 +317,7 @@ def impl_pending(rule: Rule) -> bool:
     impl = rule.impl_status or {}
     if any(impl.get(c.name) == "to remove" for c in rule.components):
         return True
-    if rule.status != RuleStatus.approved or not rule.components:
+    if rule.status not in IN_FORCE or not rule.components:
         return False
     return any(impl.get(c.name) not in ("implemented", "deactivated") for c in rule.components)
 
@@ -563,7 +567,7 @@ def path_analysis(
         ]
         enabling = [
             r for (r, _, _) in rules_here
-            if r.status == RuleStatus.approved and r.action == RuleAction.permit
+            if r.status in IN_FORCE and r.action == RuleAction.permit
         ]
         allowed_here = {service_key(s) for r in enabling for s in (r.services or [])}
         if enabling:
@@ -689,7 +693,10 @@ def create_rule(
 
 @router.get("/{rule_id}", response_model=RuleDetail)
 def get_rule(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
-    return get_rule_or_404(db, rule_id)
+    # Readable even once deleted - the record is the evidence. Every endpoint
+    # that changes something keeps the strict lookup, so a deleted rule cannot
+    # be edited or approved back into service.
+    return get_rule_or_404(db, rule_id, include_deleted=True)
 
 
 @router.put("/{rule_id}", response_model=RuleOut)
@@ -721,7 +728,7 @@ def update_rule(
     # proposal raised earlier is therefore moot.
     rule.removal_reason = ""
     # A substantive change to an approved rule resets the review
-    if rule.status in (RuleStatus.approved, RuleStatus.rejected):
+    if rule.status in (*IN_FORCE, RuleStatus.rejected):
         rule.status = RuleStatus.draft
     add_version(db, rule, user, payload.change_note or _("Rule changed"))
     db.commit()
@@ -736,9 +743,14 @@ def delete_rule(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.admin)),
 ):
-    """Soft delete: the rule is marked as deleted (disappearing from lists and
-    exports) while its version history is retained for the audit trail. The
-    deletion itself is logged in a tamper-evident way."""
+    """Deletion is an end state, not a removal.
+
+    The rule keeps its record and moves to the status `deleted`, so it stays
+    visible in the overview and its history remains available as evidence. It
+    stops taking effect at that moment: exports, drift, path analysis and the
+    expiry check all go through `active_rules()`, which excludes it. Being
+    visible and being in force are two different things, and only the first one
+    survives a deletion."""
     from .. import audit
     from ..models import utcnow as _now
 
@@ -746,6 +758,9 @@ def delete_rule(
     if rule.deleted_at is not None:
         return
     rule.deleted_at = _now()
+    rule.status = RuleStatus.deleted
+    rule.version += 1
+    add_version(db, rule, user, _("Rule set to deleted"))
     db.commit()
     audit.record(db, "rule", "rule.deleted", actor=user.username, object=rule.rule_id,
                  detail=_("Rule deleted (soft delete): {name}", name=rule.name),
@@ -969,7 +984,7 @@ def extend_validity(
     from datetime import date
 
     rule = get_rule_or_404(db, rule_id)
-    if rule.status != RuleStatus.approved:
+    if rule.status not in IN_FORCE:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             _("Only approved rules can be recertified – submit expired or deactivated ones again"),
@@ -1018,9 +1033,41 @@ def set_impl_status(
     rule.impl_status = {**(rule.impl_status or {}), **impl_status}
     rule.version += 1
     add_version(db, rule, user, _("Implementation status: {impl_status}", impl_status=impl_status))
+    _sync_active_status(db, rule, user)
     db.commit()
     db.refresh(rule)
     return rule
+
+
+def fully_implemented(rule: Rule) -> bool:
+    """Every assigned component confirms the rule is in place.
+
+    A rule without components cannot be confirmed by anyone, so it never counts
+    as implemented - otherwise it would slip into `active` for free."""
+    impl = rule.impl_status or {}
+    return bool(rule.components) and all(
+        impl.get(c.name) == "implemented" for c in rule.components)
+
+
+def _sync_active_status(db: Session, rule: Rule, user: User) -> None:
+    """Moves the rule between `approved` and `active` as operations reports in.
+
+    Only these two states are touched. A rule in review, rejected, deactivated
+    or deleted is somewhere the rollout status has no say over, and promoting it
+    would overwrite a decision that was made deliberately."""
+    if rule.status == RuleStatus.approved and fully_implemented(rule):
+        note = _("Implemented on every component – the rule is active")
+        rule.status = RuleStatus.active
+    elif rule.status == RuleStatus.active and not fully_implemented(rule):
+        note = _("No longer implemented on every component – the rule is approved again")
+        rule.status = RuleStatus.approved
+    else:
+        return
+    # A version of its own, so the status change is readable in the history
+    # rather than hidden inside the entry of the rollout report that triggered
+    # it - and because a version number may only be used once.
+    rule.version += 1
+    add_version(db, rule, user, note)
 
 
 # --- Versions, comments, conflicts -------------------------------------------
@@ -1102,7 +1149,7 @@ def add_comment(
 @router.get("/{rule_id}/conflicts", response_model=list[ConflictOut])
 def conflicts(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     rule = get_rule_or_404(db, rule_id)
-    others = active_rules(db).filter(Rule.status != RuleStatus.deactivated,
+    others = active_rules(db).filter(Rule.status.notin_((RuleStatus.deactivated, RuleStatus.deleted)),
                                      Rule.vrf_id == rule.vrf_id).all()
     warnings = find_conflicts(rule, others)
     # In addition: violations and advisories from the zone communication matrix

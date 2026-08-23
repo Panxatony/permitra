@@ -240,9 +240,16 @@ code { background: var(--panel-alt); padding: .1em .35em; border-radius: 4px; fo
 }
 .status-draft { background: var(--neutral-bg); color: var(--neutral-fg); }
 .status-in_review { background: var(--amber-bg); color: var(--amber); }
-.status-approved { background: var(--green-bg); color: var(--green); }
+/* Approved is the decision, active is the confirmed rollout - the outline
+   marks "not yet on the devices" so the two do not read as one state. */
+.status-approved { background: var(--green-bg); color: var(--green); box-shadow: inset 0 0 0 1px currentColor; }
+.status-active { background: var(--green-bg); color: var(--green); }
 .status-rejected { background: var(--red-bg); color: var(--red); }
 .status-deactivated { background: var(--neutral-bg); color: var(--muted-2); text-decoration: line-through; }
+.status-deleted { background: var(--red-bg); color: var(--muted-2); text-decoration: line-through; }
+/* A deleted rule stays in the list as documentation, but must not compete
+   with the rules that are actually in force. */
+tr.row-deleted td { opacity: .55; }
 .platform-juniper { background: var(--blue-bg); color: var(--blue-fg); margin-right: .25rem; }
 .platform-checkpoint { background: var(--red-bg); color: var(--red); margin-right: .25rem; }
 .platform-aci { background: var(--green-bg-2); color: var(--green); margin-right: .25rem; }

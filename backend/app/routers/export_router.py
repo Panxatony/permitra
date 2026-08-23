@@ -7,7 +7,7 @@ from ..auth import get_current_user
 from ..database import get_db
 from ..exporters import aci, aerleon_export, checkpoint, generic, hostfw, juniper
 from ..messages import _
-from ..models import Rule, RuleStatus, User
+from ..models import IN_FORCE, Rule, User
 from ..validation import parse_network
 
 router = APIRouter(prefix="/api/export", tags=["export"])
@@ -60,7 +60,7 @@ def aerleon(
         )
     query = db.query(Rule).filter(Rule.deleted_at.is_(None))
     if only_approved:
-        query = query.filter(Rule.status == RuleStatus.approved)
+        query = query.filter(Rule.status.in_(IN_FORCE))
     rules = query.order_by(Rule.rule_id).all()
     if component_id:
         rules = [r for r in rules if any(c.id == component_id for c in r.components)]
@@ -79,7 +79,7 @@ def aerleon(
     headers = {}
     if download:
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
-    not_approved = [r.rule_id for r in rules if r.status != RuleStatus.approved]
+    not_approved = [r.rule_id for r in rules if r.status not in IN_FORCE]
     audit.record(db, "export", "export.rules", actor=user.username,
                  object=f"aerleon/{target}",
                  detail=_("{count} rule(s)", count=len(rules))
@@ -158,7 +158,7 @@ def export(
     # ?ids= let a deactivated or expired rule be exported as a ready-to-apply
     # device configuration, and it thereby found its way back onto the firewall.
     if only_approved:
-        query = query.filter(Rule.status == RuleStatus.approved)
+        query = query.filter(Rule.status.in_(IN_FORCE))
     if app_id:
         query = query.filter(Rule.app_id.ilike(f"%{app_id}%"))
     rules = query.order_by(Rule.rule_id).all()
@@ -179,7 +179,7 @@ def export(
             # Say so, otherwise the user goes looking in entirely the wrong place.
             existing = (db.query(Rule)
                          .filter(Rule.rule_id.in_(wanted), Rule.deleted_at.is_(None))
-                         .filter(Rule.status != RuleStatus.approved).all())
+                         .filter(Rule.status.notin_(IN_FORCE)).all())
             if existing:
                 listed = ", ".join(f"{r.rule_id} ({_(r.status.value)})" for r in existing)
                 detail = _("Not approved and therefore not exported: {listed}. "
@@ -195,7 +195,7 @@ def export(
         content = aci.export_json(rules, db) if fmt == "aci-json" else aci.export_yaml(rules, db)
     else:
         content = export_fn(rules)
-    not_approved = [r.rule_id for r in rules if r.status != RuleStatus.approved]
+    not_approved = [r.rule_id for r in rules if r.status not in IN_FORCE]
     audit.record(db, "export", "export.rules", actor=user.username,
                  object=fmt, detail=_("{count} rule(s)", count=len(rules))
                  + (f", app_id={app_id}" if app_id else "")

@@ -674,6 +674,9 @@ const DE = {
   '{rule} recertified until {date}.': '{rule} rezertifiziert bis {date}.',
   '– select cluster –': '– Cluster wählen –',
   '– {components} lack an approved rule': '– auf {components} fehlt eine freigegebene Regel',
+  'Active': 'Aktiv',
+  'Deleted': 'Gelöscht',
+  'This rule is deleted. It is kept as documentation and no longer takes effect – it is not exported, not analysed and not recertified.': 'Diese Regel ist gelöscht. Sie bleibt als Dokumentation erhalten und ist nicht mehr wirksam – sie wird nicht exportiert, nicht in der Analyse berücksichtigt und nicht rezertifiziert.',
 }
 
 const LangContext = createContext({ lang: 'en', t: (s) => s })

@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from .messages import _
-from .models import Comment, Rule, RuleStatus, RuleVersion
+from .models import IN_FORCE, Comment, Rule, RuleStatus, RuleVersion
 
 log = logging.getLogger("permitra.expiry")
 
@@ -61,7 +61,7 @@ def expiring_rules(db: Session, days: int = 30) -> tuple[list[Rule], list[Rule]]
     horizon = today + timedelta(days=days)
     candidates = (
         db.query(Rule)
-        .filter(Rule.status == RuleStatus.approved, Rule.valid_until.isnot(None), Rule.deleted_at.is_(None))
+        .filter(Rule.status.in_(IN_FORCE), Rule.valid_until.isnot(None), Rule.deleted_at.is_(None))
         .filter(Rule.valid_until <= horizon.isoformat())
         .order_by(Rule.valid_until)
         .all()

@@ -6,6 +6,7 @@ from ..database import get_db
 from ..domain_values import PAP_LEVELS, PROTECTION_LEVELS
 from ..messages import _
 from ..models import (
+    IN_FORCE,
     Comment,
     Role,
     Rule,
@@ -593,7 +594,7 @@ def request_policy_change(
 def _affected_rules(db: Session, from_zone: str, to_zone: str, statuses=None):
     """Active rules of the zone relation from -> to (for the impact analysis of
     zone matrix changes from allow to block)."""
-    statuses = statuses or (RuleStatus.approved, RuleStatus.in_review, RuleStatus.draft)
+    statuses = statuses or (*IN_FORCE, RuleStatus.in_review, RuleStatus.draft)
     return (
         active_rules(db)
         .filter(Rule.source_zone.ilike(from_zone), Rule.destination_zone.ilike(to_zone),
@@ -625,7 +626,7 @@ def _rules_touching_network(db: Session, *cidrs: str, vrf_id: int | None = None)
                    for n in networks)
 
     query = active_rules(db).filter(
-        Rule.status.in_((RuleStatus.approved, RuleStatus.in_review, RuleStatus.draft)))
+        Rule.status.in_((*IN_FORCE, RuleStatus.in_review, RuleStatus.draft)))
     if vrf_id is not None:
         query = query.filter(Rule.vrf_id == vrf_id)
     hits = []
@@ -998,7 +999,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                          from_zone=zone_a.name, to_zone=zone_b.name,
                          request=change.batch_id[:8])
                 for rule in _affected_rules(db, zone_a.name, zone_b.name,
-                                            statuses=(RuleStatus.approved,)):
+                                            statuses=IN_FORCE):
                     rule.status = RuleStatus.in_review
                     rule.version += 1
                     add_version(db, rule, user, note)

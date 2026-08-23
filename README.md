@@ -34,8 +34,11 @@ Project website: https://permitra.de · Live demo: https://demo.permitra.de
 | `change_approver` | Approvals: rule reviews (one approval) and zone/network/matrix requests (two approvals by different approvers); focused approvals start page |
 | `admin` | Permitra administration (user management, settings); focused admin start page |
 
-**Rule workflow:** `draft → in review → approved/rejected → (deactivated)`.
+**Rule workflow:** `draft → in review → approved → active`, with `rejected`, `deactivated` and `deleted` as the ways out.
 Content changes to an approved rule reset it to `draft`. When a previously implemented rule is re-approved, its implementation status switches to *to change* so operations can re-apply and mark it *implemented* again. The dashboard shows a tile with the number of rules awaiting implementation.
+
+- **`approved` and `active` are not the same thing.** Approval is the decision that the rule *may* exist; `active` is operations' confirmation that it *does* exist — the status is set automatically as soon as every assigned component reports *implemented*, and falls back to `approved` when one of them no longer does. Keeping them apart is what makes "approved but never rolled out" visible instead of indistinguishable from "in service". Both count as **in force**: exports, drift comparison, path analysis and the expiry check cover the pair, never `approved` alone.
+- **A rule is never deleted.** A rule that is no longer needed gets the status `deleted`: the record, its versions and its audit trail are kept, and it **stays visible in the overview** (greyed out, struck through) and can still be opened. What ends is its effect — a deleted rule is not exported, not counted in the path analysis, not compared in the drift report and not recertified. *Visible* and *in force* are two different properties, and only the first survives a deletion. Nothing in the application removes a rule row.
 
 **Data model:** rule IDs in the `SR#####` format (5 digits, up to 99999 rules), assigned server-side; application, application ID (**APP-ID**, for per-app reports), source/destination zones (derived automatically), multiple services (protocol/port) per rule, justification, requestor, owner, change ID, business context, validity period, version history with snapshots, comments.
 

@@ -151,7 +151,7 @@ export default function RuleList() {
             </thead>
             <tbody>
               {rules.map((r) => (
-                <tr key={r.rule_id}>
+                <tr key={r.rule_id} className={r.status === 'deleted' ? 'row-deleted' : ''}>
                   <td>
                     <Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link>
                     {r.removal_reason && (

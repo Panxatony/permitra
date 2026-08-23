@@ -5,7 +5,9 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 ## Unreleased — 2026-08
 
 ### Added
-- **Core prototype**: rule management with server-assigned `SR#####` IDs (5 digits, up to 99999 rules), structured addresses (IP/CIDR + optional alias), multiple services per rule, review workflow (draft → in review → approved/rejected → deactivated), version history with snapshots, comments, conflict detection (overlap, duplicate, shadowing).
+- **Core prototype**: rule management with server-assigned `SR#####` IDs (5 digits, up to 99999 rules), structured addresses (IP/CIDR + optional alias), multiple services per rule, review workflow (draft → in review → approved → active, with rejected/deactivated/deleted as the ways out), version history with snapshots, comments, conflict detection (overlap, duplicate, shadowing).
+- **Rollout is a status, not a footnote**: a rule becomes `active` automatically once operations confirms it as *implemented* on every assigned component, and falls back to `approved` when one no longer does — so "approved but never rolled out" is visible instead of indistinguishable from "in service". Both states count as in force for exports, drift, path analysis and expiry.
+- **Rules are never deleted**: a rule that is no longer needed takes the status `deleted` and stays visible in the overview with its full history; it stops taking effect (no export, no path analysis, no drift, no recertification) but is never removed.
 - **Roles**: architect, operations, change approver (one approval for rule reviews, two different approvers for zone/matrix/network requests, four-eyes principle), admin with a focused administration area.
 - **Security zones**: zone catalog with BSI P-A-P classification, BSI documentation per zone (owner, protection level per C/I/A goal with maximum principle), zone communication matrix (allow/block) maintained via batch requests with dual approval, hard-enforced BSI principle that zone transitions require a firewall (ACI is intra-zone only), north-south P-A-P diagram.
 - **Least privilege**: configurable default-deny for zone relationships without a matrix entry (admin setting `zone_matrix_default`).

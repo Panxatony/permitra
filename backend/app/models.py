@@ -47,11 +47,31 @@ class Role(str, enum.Enum):
 
 
 class RuleStatus(str, enum.Enum):
+    """draft → in_review → approved → active, plus the two ways out.
+
+    `approved` and `active` differ in who last acted: approval is the decision
+    that the rule *may* exist, active is operations' confirmation that it does
+    exist on every component. Keeping them apart is what makes "approved but
+    never rolled out" visible instead of indistinguishable from "in service".
+
+    `deleted` is an end state, not a disappearance: a rule that is no longer
+    needed keeps its record and stays visible. Nothing removes a rule row."""
+
     draft = "draft"            # being planned (architect)
     in_review = "in_review"    # submitted for review
-    approved = "approved"      # approved, ready for rollout
+    approved = "approved"      # approved, waiting to be rolled out
+    active = "active"          # confirmed implemented on every component
     rejected = "rejected"      # rejected, back to the architect
     deactivated = "deactivated"  # rule taken out of service
+    deleted = "deleted"        # no longer needed - kept, never removed
+
+
+# A rule counts as in force once it is approved: it is what the components are
+# supposed to carry, whether operations has confirmed the rollout yet or not.
+# Exports, drift, path analysis and expiry all mean this set, not `approved`
+# alone - checking for `approved` after the split would silently drop every
+# rule that is actually in service.
+IN_FORCE = (RuleStatus.approved, RuleStatus.active)
 
 
 class RuleAction(str, enum.Enum):

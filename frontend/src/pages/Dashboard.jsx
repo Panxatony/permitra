@@ -4,7 +4,10 @@ import { api } from '../api'
 import { STATUS_LABELS } from '../components/shared'
 import { useLang } from '../i18n'
 
-const STATUS_ORDER = ['approved', 'in_review', 'draft', 'rejected', 'deactivated']
+/* Workflow order, with `active` ahead of `approved`: the interesting number is
+   how many rules are approved but not yet on the devices, and that only reads
+   as a gap when the two sit next to each other. */
+const STATUS_ORDER = ['active', 'approved', 'in_review', 'draft', 'rejected', 'deactivated', 'deleted']
 
 function Tile({ value, label, to, tone }) {
   const inner = (

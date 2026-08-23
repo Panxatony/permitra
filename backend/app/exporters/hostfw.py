@@ -9,7 +9,7 @@ Formats:
 Every line carries the SR ID as a comment (traceability/drift).
 """
 from ..messages import _
-from ..models import Rule, RuleAction, RuleStatus
+from ..models import IN_FORCE, Rule, RuleAction
 from ..validation import parse_network
 from .common import service_ports, split_protocols
 
@@ -25,7 +25,7 @@ def matching_rules(rules: list[Rule], target_ip: str) -> list[tuple[Rule, bool]]
     net = parse_network(target_ip)
     result = []
     for rule in rules:
-        if rule.status != RuleStatus.approved or rule.action != RuleAction.permit:
+        if rule.status not in IN_FORCE or rule.action != RuleAction.permit:
             continue
         direct = via_any = False
         for entry in rule.destination or []:

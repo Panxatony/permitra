@@ -14,7 +14,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from .models import ComponentActualConfig, Rule, RuleStatus, SecurityComponent, active_rules
+from .models import IN_FORCE, ComponentActualConfig, Rule, SecurityComponent, active_rules
 
 RULE_ID_RE = re.compile(r"\bSR\d{3,6}\b")
 
@@ -48,7 +48,7 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
         .filter(Rule.components.any(SecurityComponent.id == component.id))
         .all()
     )
-    approved = {r.rule_id: r for r in assigned if r.status == RuleStatus.approved}
+    approved = {r.rule_id: r for r in assigned if r.status in IN_FORCE}
     # For classifying what sits on the device, deleted rules count as well: a
     # deleted rule still present on the firewall is a removal case ("to be torn
     # down") - not an unknown third-party rule.
@@ -60,7 +60,7 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
         for rid in sorted(actual_ids)
         if rid in all_rules
         and (all_rules[rid].deleted_at is not None
-             or all_rules[rid].status != RuleStatus.approved)
+             or all_rules[rid].status not in IN_FORCE)
     ]
     unknown = sorted(rid for rid in actual_ids if rid not in all_rules)
 

@@ -7,6 +7,11 @@ import { useLang } from '../i18n'
 
 const IMPL_OPTIONS = ['open', 'new', 'to change', 'to remove', 'implemented', 'deactivated']
 
+/* Approved and active are the same thing to act on: the rule is in force. A
+   deleted rule offers no actions at all - it is documentation, not a workflow
+   step, and nothing may put it back into service. */
+const IN_FORCE = ['approved', 'active']
+
 export default function RuleDetail() {
   const { id } = useParams()
   const user = getUser()
@@ -156,7 +161,7 @@ export default function RuleDetail() {
                 <button className="btn" onClick={() => navigate(`/rules/${id}/edit`)}>{t('Edit')}</button>
               </>
             )}
-            {isArchitect && !['draft', 'rejected'].includes(rule.status) && (
+            {isArchitect && !['draft', 'rejected', 'deleted'].includes(rule.status) && (
               <button className="btn" onClick={() => navigate(`/rules/${id}/edit`)}>
                 {t('Edit (resets review)')}
               </button>
@@ -181,11 +186,16 @@ export default function RuleDetail() {
                 </div>
               )
             })()}
-            {rule.status === 'approved' && (isOps || isArchitect) && (
+            {IN_FORCE.includes(rule.status) && (isOps || isArchitect) && (
               <button className="btn btn-ghost" onClick={act(() => api.deactivate(id, reviewComment))}>{t('Deactivate rule')}</button>
             )}
-            {rule.status === 'approved' && (
+            {IN_FORCE.includes(rule.status) && (
               <Link className="btn" to={`/export?ids=${rule.rule_id}`}>{t('Export configuration →')}</Link>
+            )}
+            {rule.status === 'deleted' && (
+              <p className="muted small">
+                {t('This rule is deleted. It is kept as documentation and no longer takes effect – it is not exported, not analysed and not recertified.')}
+              </p>
             )}
           </div>
 
