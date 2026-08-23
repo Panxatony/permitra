@@ -37,7 +37,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
@@ -99,7 +99,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
@@ -159,7 +159,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
@@ -180,7 +180,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
