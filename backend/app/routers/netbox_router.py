@@ -1,4 +1,4 @@
-"""NetBox import (issue #23): configuration and import by admins, adoption into
+"""NetBox import (GitLab issue 23): configuration and import by admins, adoption into
 the zone registry by architects/operations via the approval workflow."""
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
