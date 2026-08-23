@@ -5,7 +5,7 @@ Produces per rule:
   - custom applications (tcp-443, udp-161, ...) for all services
   - one security policy from-zone/to-zone with match/then
 """
-from ..models import Rule
+from ..models import Rule, RuleAction, RuleLogging
 from .common import parse_address_entries, sanitize_name, service_ports, split_protocols
 
 
@@ -23,6 +23,15 @@ def _applications(rule: Rule) -> list[str]:
             for port in ports:
                 apps.append(f"{proto}-{port}")
     return apps or ["any"]
+
+
+# Junos names the second refusal `reject`: it answers with ICMP unreachable or a
+# TCP RST instead of discarding silently.
+JUNOS_ACTION = {
+    RuleAction.permit: "permit",
+    RuleAction.deny: "deny",
+    RuleAction.reject: "reject",
+}
 
 
 def export_rule(rule: Rule) -> str:
@@ -68,8 +77,21 @@ def export_rule(rule: Rule) -> str:
     # between a Juniper policy and the security rule that justifies it. Check
     # Point and ACI already carry the ID in device-visible fields.
     lines.append(f'{base} description "{rule.rule_id}"')
-    lines.append(f"{base} then {'permit' if rule.action.value == 'permit' else 'deny'}")
-    lines.append(f"{base} then log session-init session-close")
+    lines.append(f"{base} then {JUNOS_ACTION[rule.action]}")
+
+    # Logging used to be this one hard-coded line on every rule, whatever the
+    # policy said - so the export could not be wrong and could not be right
+    # either. It follows the rule now (#37).
+    #
+    # session-close only for a permitted session: nothing closes a session that
+    # was never established, so writing it on a deny reads like accounting that
+    # will never arrive.
+    level = rule.effective_log_level
+    if level != RuleLogging.none:
+        events = "session-init"
+        if level == RuleLogging.detailed and rule.action == RuleAction.permit:
+            events = "session-init session-close"
+        lines.append(f"{base} then log {events}")
     return "\n".join(lines)
 
 

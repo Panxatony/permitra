@@ -53,3 +53,15 @@ LEGACY_RISK_LEVEL = {
     "mittel": "medium",
     "hoch": "high",
 }
+
+# What a rule logs when it matches (#37). Whether a rule logs is a property of
+# the rule, and one Permitra had no place for - so it appeared in no export, was
+# never compared against the device, and could not be reviewed. For an
+# application meant to hold the evidence about a ruleset, having the ruleset
+# documented and its logging not is a strange gap.
+#
+# Three levels because that is what the targets actually distinguish, not to be
+# thorough: Juniper separates session-init from session-close, Check Point has
+# Log and Detailed Log. Two would collapse a choice people really make; four
+# would invent one.
+LOG_LEVELS = ["none", "standard", "detailed"]

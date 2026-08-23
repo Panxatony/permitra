@@ -12,6 +12,8 @@ import re
 
 import yaml
 
+from ..models import RuleAction, RuleLogging
+
 # Target platforms: generator name -> (header template, description).
 # {filter} is replaced by the filter name; zone-based targets use
 # {from_zone}/{to_zone} and get one filter per zone pair.
@@ -110,11 +112,20 @@ def _term_addresses(entries, addr_tokens):
     return sorted(set(tokens)) or None
 
 
+AERLEON_ACTION = {
+    RuleAction.permit: "accept",
+    RuleAction.deny: "deny",
+    RuleAction.reject: "reject",
+}
+
+
 def _rule_terms(rule, addr_tokens, svc_tokens):
     """One term per protocol group (exact mapping of tcp:443 + udp:53 etc.)."""
     src = _term_addresses(rule.source, addr_tokens)
     dst = _term_addresses(rule.destination, addr_tokens)
-    action = "accept" if rule.action.value == "permit" else "deny"
+    # Capirca distinguishes the two refusals as well, so the choice survives
+    # into every target it generates rather than flattening to "deny" (#37).
+    action = AERLEON_ACTION[rule.action]
     comment = " – ".join(x for x in (rule.name, rule.application) if x) or rule.rule_id
 
     by_protocol: dict[str, list[str]] = {}
@@ -140,6 +151,11 @@ def _rule_terms(rule, addr_tokens, svc_tokens):
     for protocol, tokens in groups:
         term = {"name": rule.rule_id.lower() if len(groups) == 1 else f"{rule.rule_id.lower()}-{protocol}",
                 "comment": comment, "action": action}
+        # Capirca has one logging switch, not three levels, so `detailed` and
+        # `standard` both become "log". Collapsing here rather than pretending
+        # the distinction survives is the honest translation.
+        if rule.effective_log_level != RuleLogging.none:
+            term["logging"] = "true"
         if src:
             term["source-address"] = " ".join(src)
         if dst:

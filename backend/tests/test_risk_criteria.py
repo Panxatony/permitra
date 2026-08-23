@@ -91,7 +91,7 @@ def test_criteria_list_every_pattern(db):
     out = read_criteria(db=db, _user=User(username="appr", role=Role.change_approver))
     codes = {p["code"] for p in out["patterns"]}
     assert codes == {"any-to-any", "any-source", "broad-network",
-                     "risky-service", "any-service"}
+                     "risky-service", "any-service", "no-logging"}
     assert all(p["severity"] in ("low", "medium", "high") for p in out["patterns"])
 
 

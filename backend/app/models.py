@@ -77,7 +77,23 @@ IN_FORCE = (RuleStatus.approved, RuleStatus.active)
 
 class RuleAction(str, enum.Enum):
     permit = "permit"
+    # Two kinds of refusal, and the difference is operational rather than
+    # cosmetic (#37): drop discards silently and the caller sees a timeout;
+    # reject answers with ICMP unreachable or a TCP RST and the caller sees an
+    # immediate error. Dropping inside your own network turns a misconfiguration
+    # into a thirty-second hang and a support ticket that takes a day. Silence
+    # outward, an answer inward, is a deliberate choice - and a choice nobody
+    # recorded is a choice nobody can review.
     deny = "deny"
+    reject = "reject"
+
+
+class RuleLogging(str, enum.Enum):
+    """What a rule logs when it matches. See domain_values.LOG_LEVELS."""
+
+    none = "none"
+    standard = "standard"
+    detailed = "detailed"
 
 
 # Rollout status per platform (matches "Status Juniper"/"Status ACI" in the Excel file)
@@ -653,6 +669,18 @@ class Rule(Base):
     # approved again once the inadmissibility has been resolved.
     removal_reason: Mapped[str] = mapped_column(String(255), default="")
 
+    # Whether this rule logs, and how much (#37). "Are accesses into the zone
+    # with very high protection requirement logged?" is a question Permitra
+    # could not answer, although it knows the zone, its protection level and
+    # every rule crossing into it - the auditor got sent to the firewall, which
+    # is the thing Permitra exists to make unnecessary.
+    #
+    # The default is `detailed` because that is exactly what the Juniper
+    # exporter hard-coded for every rule before this existed. A migration must
+    # not quietly change what a device would receive.
+    log_level: Mapped[RuleLogging] = mapped_column(
+        Enum(RuleLogging), default=RuleLogging.detailed)
+
     # --- Emergency change (#36) ---------------------------------------------
     # A rule opened directly on the firewall at three in the morning, because
     # the approver was unreachable. Permitra cannot prevent that; what it can do
@@ -670,6 +698,18 @@ class Rule(Base):
     emergency_reason: Mapped[str] = mapped_column(Text, default="")
     emergency_approval_due: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True)
+
+    @property
+    def effective_log_level(self) -> RuleLogging:
+        """The logging level, also for a rule that has not been flushed yet.
+
+        A column default is applied by the database on insert, so a Rule built
+        in memory - which is what an exporter is sometimes handed, and what
+        every test does - still carries None. Exporters must not crash on that,
+        and they must not quietly log nothing either: the answer is the same
+        default the column has.
+        """
+        return self.log_level or RuleLogging.detailed
 
     @property
     def emergency_pending(self) -> bool:

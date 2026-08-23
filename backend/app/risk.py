@@ -11,6 +11,7 @@ import ipaddress
 from sqlalchemy.orm import Session
 
 from .messages import _
+from .models import RuleLogging
 from .zone_check import find_zone
 
 # Seed for the risky-service list. The list itself lives in the database
@@ -176,6 +177,19 @@ def assess_rule(db: Session, rule) -> dict:
                      for s in rule.services or []):
         findings.append({"severity": "medium", "code": "any-service",
                          "detail": _("Service 'any' on a cross-zone rule")})
+
+    # 5) A rule into a protected zone that logs nothing (#37, BSI OPS.1.1.5).
+    # "Are accesses into the zone with very high protection requirement logged?"
+    # is the question that had no answer here. Only raised where the protection
+    # level makes it one - logging every rule everywhere is a cost, and a
+    # criterion that fires on everything is one nobody reads.
+    if (rule.effective_log_level == RuleLogging.none
+            and protection_level in ("high", "very high")):
+        findings.append({
+            "severity": _bump("medium", protection_level), "code": "no-logging",
+            "detail": _("The rule logs nothing, into a zone with protection level "
+                        "'{level}' – an access nobody recorded cannot be "
+                        "reconstructed afterwards", level=_(protection_level))})
 
     level = "none"
     for f in findings:

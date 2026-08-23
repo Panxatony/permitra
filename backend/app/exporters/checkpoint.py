@@ -6,7 +6,7 @@ session with a concluding publish.
 """
 import json
 
-from ..models import Rule
+from ..models import Rule, RuleAction, RuleLogging
 from .common import parse_address_entries, service_ports, split_protocols
 
 ACCESS_LAYER = "Network"
@@ -49,6 +49,19 @@ def _service_objects(rule: Rule) -> tuple[list[dict], list[str]]:
     return objects, names or ["Any"]
 
 
+CP_ACTION = {
+    RuleAction.permit: "Accept",
+    RuleAction.deny: "Drop",       # discard silently - the caller sees a timeout
+    RuleAction.reject: "Reject",   # answer - the caller sees an immediate error
+}
+
+CP_TRACK = {
+    RuleLogging.none: "None",
+    RuleLogging.standard: "Log",
+    RuleLogging.detailed: "Detailed Log",
+}
+
+
 def rule_payload(rule: Rule) -> dict:
     """Payload for add-access-rule (management API)."""
     _, src_names, dst_names = _network_objects(rule)
@@ -60,8 +73,12 @@ def rule_payload(rule: Rule) -> dict:
         "source": sorted(set(src_names)),
         "destination": sorted(set(dst_names)),
         "service": sorted(set(svc_names)),
-        "action": "Accept" if rule.action.value == "permit" else "Drop",
-        "track": {"type": "Log"},
+        "action": CP_ACTION[rule.action],
+        # Check Point's own three levels, which is why the model has three:
+        # None, Log, Detailed Log are the choices an administrator makes in
+        # SmartConsole, and "Log" for everything regardless of the rule was what
+        # this exporter wrote before (#37).
+        "track": {"type": CP_TRACK[rule.effective_log_level]},
         "comments": f"{rule.rule_id} | {rule.change_id} | {rule.justification}".strip(" |"),
     }
 

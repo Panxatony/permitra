@@ -15,6 +15,7 @@ const EMPTY = {
   destination: [{ ip: '', alias: '' }],
   services: [{ protocol: 'TCP', port: '' }],
   action: 'permit',
+  log_level: 'detailed',
   description: '',
   justification: '',
   business_context: '',
@@ -398,7 +399,20 @@ export default function RuleForm() {
           {t('Action:')}
           <select value={form.action} onChange={set('action')}>
             <option value="permit">permit</option>
-            <option value="deny">deny</option>
+            {/* Two refusals, and the difference is operational: drop discards
+                silently and the caller waits out a timeout, reject answers and
+                the caller gets an immediate error. The hint says which is
+                which, because the words alone do not. */}
+            <option value="deny">{t('deny (drop – silent, caller sees a timeout)')}</option>
+            <option value="reject">{t('reject (answers – caller sees an error at once)')}</option>
+          </select>
+        </label>
+        <label className="inline">
+          {t('Logging:')}
+          <select value={form.log_level} onChange={set('log_level')}>
+            <option value="none">{t('none')}</option>
+            <option value="standard">{t('standard (log each match)')}</option>
+            <option value="detailed">{t('detailed (incl. session end)')}</option>
           </select>
         </label>
       </fieldset>

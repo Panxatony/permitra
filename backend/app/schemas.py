@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .domain_values import PAP_LEVELS, PROTECTION_LEVELS
 from .messages import _, render
-from .models import ComponentType, Role, RuleAction, RuleStatus, ZonePolicyType
+from .models import ComponentType, Role, RuleAction, RuleLogging, RuleStatus, ZonePolicyType
 from .validation import validate_ip_entry, validate_service
 
 DATE_LABELS = {"valid_from": "Valid from", "valid_until": "Valid until"}
@@ -91,6 +91,10 @@ class RuleFields(BaseModel):
     destination: list[dict] = []
     services: list[dict] = []
     action: RuleAction = RuleAction.permit
+    # What the rule logs when it matches (#37). Defaults to `detailed` because
+    # that is what every export produced before this field existed, so an
+    # existing rule's configuration does not change under it.
+    log_level: RuleLogging = RuleLogging.detailed
     description: str = ""
     justification: str = ""
     business_context: str = ""
@@ -126,6 +130,10 @@ class RuleBase(BaseModel):
     destination: list[AddressEntry]
     services: list[Service]
     action: RuleAction = RuleAction.permit
+    # What the rule logs when it matches (#37). Defaults to `detailed` because
+    # that is what every export produced before this field existed, so an
+    # existing rule's configuration does not change under it.
+    log_level: RuleLogging = RuleLogging.detailed
     description: str = ""
     justification: str = ""
     business_context: str = ""
