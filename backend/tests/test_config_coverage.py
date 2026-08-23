@@ -129,8 +129,10 @@ def test_the_id_is_found_in_the_description_alone(db):
 
 
 def test_check_point_rules_are_recognised(db):
+    """Both spellings, because both are real: the CLI takes "add access-rule"
+    with a space, the management API command is "add-access-rule"."""
     script = (
-        'mgmt_cli add-access-rule layer "Network" name "SR00001 jump-to-app" '
+        'mgmt_cli add access-rule layer "Network" name "SR00001 jump-to-app" '
         'source "h_1" destination "h_2" action "Accept"\n'
         'mgmt_cli add-access-rule layer "Network" name "manual-fix" '
         'source "any" destination "h_3" action "Accept"\n'
@@ -139,6 +141,21 @@ def test_check_point_rules_are_recognised(db):
         config_blocks.scan(script, ComponentType.checkpoint))
     assert coverage["total"] == 2
     assert [u["identifier"] for u in coverage["unjustified"]] == ["manual-fix"]
+
+
+def test_our_own_check_point_export_is_readable(db):
+    """The check that would have caught this: the pattern was written against
+    the API spelling and never tried against what the exporter actually writes,
+    so a real Check Point script scanned as an unrecognisable format and the
+    component silently had no coverage figure at all."""
+    from app.exporters import checkpoint
+
+    add_rule(db, "SR00001")
+    rule = db.query(Rule).filter(Rule.rule_id == "SR00001").one()
+    blocks = config_blocks.scan(checkpoint.export_cli([rule]), ComponentType.checkpoint)
+
+    assert blocks is not None, "our own export must not read as an unknown format"
+    assert [b.rule_id for b in blocks] == ["SR00001"]
 
 
 # ---------- Saying "I cannot tell" instead of "all clear" ----------
