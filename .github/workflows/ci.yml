@@ -41,7 +41,7 @@ jobs:
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
-          python-version: '3.12'
+          python-version: '3.14'
       - run: pip install --quiet ruff
       # Rules and exceptions live in backend/ruff.toml - the default rule set
       # drowns real findings in FastAPI idiom (Depends in default arguments).
@@ -62,7 +62,7 @@ jobs:
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
-          python-version: '3.12'
+          python-version: '3.14'
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install --quiet -r backend/requirements-dev.txt
@@ -103,7 +103,7 @@ jobs:
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
-          python-version: '3.12'
+          python-version: '3.14'
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
       - run: pip install --quiet -r backend/requirements-dev.txt
@@ -140,7 +140,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           # Keep in step with frontend/Dockerfile, same reason.
-          node-version: '22'
+          node-version: '26'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci --prefer-offline --no-audit --no-fund
@@ -163,13 +163,13 @@ jobs:
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
-          python-version: '3.12'
+          python-version: '3.14'
       - run: pip install --quiet pip-audit
       - run: pip-audit -r backend/requirements.txt --progress-spinner off
       - uses: actions/setup-node@v7
         with:
           # Keep in step with frontend/Dockerfile, same reason.
-          node-version: '22'
+          node-version: '26'
       - run: npm audit --audit-level=high
         working-directory: frontend
 
@@ -184,7 +184,7 @@ jobs:
         with:
           # Keep in step with backend/Dockerfile. If they drift, CI proves the
           # tests pass on a runtime that is not the one being shipped.
-          python-version: '3.12'
+          python-version: '3.14'
       - name: No secret may end up in the repository
         run: python scripts/secret_scan.py
 
