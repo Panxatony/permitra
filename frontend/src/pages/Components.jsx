@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import { Modal, StatusBadge} from '../components/shared'
-import { useLang } from '../i18n'
+import { dateLocale, useLang } from '../i18n'
 
 const TYPE_LABELS = { juniper: 'Juniper SRX', checkpoint: 'Check Point', aci: 'Cisco ACI' }
 const EMPTY = {
@@ -21,7 +21,7 @@ const LINK_TYPE_SUGGESTIONS = [
 ]
 
 function TopologySection({ components }) {
-  const { t } = useLang()
+  const { lang, t } = useLang()
   const [links, setLinks] = useState([])
   const [form, setForm] = useState({ component_a_id: '', component_b_id: '', link_type: '', description: '' })
   const [error, setError] = useState('')
@@ -203,7 +203,7 @@ function TopologySection({ components }) {
 }
 
 function DriftPanel({ components }) {
-  const { t } = useLang()
+  const { lang, t } = useLang()
   const [selected, setSelected] = useState('')
   const [report, setReport] = useState(null)
   const [config, setConfig] = useState('')
@@ -264,7 +264,7 @@ function DriftPanel({ components }) {
                   .replace('{actual}', report.actual_rule_count)}`
                 : `⚠ ${t('Deviations on {component} – state as of {when} ({who})')
                   .replace('{component}', report.component)
-                  .replace('{when}', new Date(report.fetched_at).toLocaleString('de-DE'))
+                  .replace('{when}', new Date(report.fetched_at).toLocaleString(dateLocale(lang)))
                   .replace('{who}', report.uploaded_by)}`}
             </div>
             {!report.in_sync && (
@@ -303,7 +303,7 @@ function DriftPanel({ components }) {
 }
 
 export default function Components() {
-  const { t } = useLang()
+  const { lang, t } = useLang()
   const [components, setComponents] = useState([])
   const [form, setForm] = useState(EMPTY)
   const [editId, setEditId] = useState(null)

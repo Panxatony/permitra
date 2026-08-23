@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
 import { ServiceList, StatusBadge, formatEntry, useZoneLabels } from '../components/shared'
-import { useLang } from '../i18n'
+import { dateLocale, useLang } from '../i18n'
 
 const TYPE_LABELS = { juniper: 'Juniper SRX', checkpoint: 'Check Point', aci: 'Cisco ACI' }
 
@@ -107,7 +107,7 @@ function PathFlow({ result, t }) {
                   {{ source: 'quellseitig', both: 'beidseitig', destination: 'zielseitig' }[c.side] || ''}
                 </span>
                 {c.via_pbr && (
-                  <span className="badge pbr-badge" title={`PBR-Umleitung über ${c.gateway}`}>
+                  <span className="badge pbr-badge" title={t('PBR redirect via {gateway}').replace('{gateway}', c.gateway)}>
                     via PBR ({c.gateway})
                   </span>
                 )}
@@ -143,7 +143,7 @@ function PathFlow({ result, t }) {
 }
 
 export default function Search() {
-  const { t } = useLang()
+  const { lang, t } = useLang()
   const zoneLabel = useZoneLabels()
   const [src, setSrc] = useState('')
   const [dst, setDst] = useState('')
@@ -204,7 +204,7 @@ export default function Search() {
       {(result || pathRules) && (
         <div className="print-only print-head">
           <strong>Permitra – Analyse</strong>{' '}
-          {src}{dst ? ` → ${dst}` : ''} · {new Date().toLocaleString('de-DE')}
+          {src}{dst ? ` → ${dst}` : ''} · {new Date().toLocaleString(dateLocale(lang))}
         </div>
       )}
 
