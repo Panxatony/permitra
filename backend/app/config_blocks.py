@@ -43,9 +43,15 @@ BLOCK_STARTS: dict[ComponentType, re.Pattern] = {
     # Juniper: many lines share one policy name; the name is the block.
     ComponentType.juniper: re.compile(
         r"^\s*set\s+security\s+policies\s+from-zone\s+\S+\s+to-zone\s+\S+\s+policy\s+(\S+)"),
-    # Check Point: one invocation per rule in the mgmt_cli script.
+    # Check Point: one invocation per rule in the mgmt_cli script. Both
+    # spellings, because they are both real: the CLI takes "add access-rule"
+    # with a space - which is what our own exporter writes - while the
+    # management API command is named "add-access-rule". Matching only the
+    # hyphenated one meant a genuine Check Point script produced no blocks at
+    # all, so every Check Point component reported its format as unreadable and
+    # silently had no coverage figure.
     ComponentType.checkpoint: re.compile(
-        r"^\s*mgmt_cli\s+add-access-rule\b.*?(?:--name|\bname)\s+[\"']?([^\"'\s]+)"),
+        r"^\s*mgmt_cli\s+add[-\s]access-rule\b.*?(?:--name|\bname)\s+[\"']?([^\"'\s]+)"),
 }
 
 

@@ -13,12 +13,14 @@ from datetime import date, timedelta
 
 from app.database import Base, SessionLocal, engine
 from app.models import (
+    IN_FORCE,
     AciGateway,
     AddressComponentMap,
     AddressEpgMap,
     AddressObject,
     AuditEvent,
     Comment,
+    ComponentActualConfig,
     ComponentLink,
     ComponentType,
     Epg,
@@ -35,6 +37,7 @@ from app.models import (
     ZonePolicy,
     ZonePolicyChange,
     ZonePolicyType,
+    utcnow,
 )
 
 random.seed(42)
@@ -162,6 +165,97 @@ def make_addresses(zone: str) -> list[dict]:
 def make_services(dst_zone: str) -> list[dict]:
     options = SERVICES_BY_DEST.get(dst_zone, DEFAULT_SERVICES)
     return [{"protocol": p, "port": port} for p, port in random.choice(options)]
+
+
+def _seed_device_configs(db):
+    """Gives the drift comparison something real to look at.
+
+    The configuration is generated from the demo rules with the actual exporter,
+    so it is what Permitra would have produced - and then two rules nobody
+    documented are appended, because a device that matches the documentation
+    perfectly is not what anybody's estate looks like and shows none of what the
+    comparison is for.
+
+    Uploaded twice, the clean version first: the coverage trend compares
+    measurements, so a single upload leaves it with nothing to say.
+    """
+    from app.coverage import record_snapshot
+    from app.exporters import checkpoint, juniper
+
+    # Both platforms config_blocks can read. The ACI fabric is left without a
+    # configuration on purpose: an estate where everything is measured is not
+    # one anybody has, and the figure is only worth showing together with what
+    # it does not cover.
+    exporters = {ComponentType.juniper: juniper.export,
+                 ComponentType.checkpoint: checkpoint.export_cli}
+    firewalls = [c for c in db.query(SecurityComponent)
+                 .order_by(SecurityComponent.name).all() if c.type in exporters]
+
+    undocumented = {
+        ComponentType.juniper: (
+            "\n## opened by hand during an incident, never documented\n"
+            "set security policies from-zone Z050-PROD to-zone Z090-EXT "
+            "policy quickfix-payment match source-address any\n"
+            "set security policies from-zone Z050-PROD to-zone Z090-EXT "
+            "policy quickfix-payment then permit\n"
+            "set security policies from-zone Z030-MGMT to-zone Z050-PROD "
+            "policy vendor-support-temp match source-address any\n"
+            "set security policies from-zone Z030-MGMT to-zone Z050-PROD "
+            "policy vendor-support-temp then permit\n"
+        ),
+        ComponentType.checkpoint: (
+            "\n# opened by hand during an incident, never documented\n"
+            'mgmt_cli add-access-rule layer "Network" name "quickfix-payment" '
+            'source "any" destination "h_payment" action "Accept"\n'
+        ),
+    }
+
+    for index, component in enumerate(firewalls):
+        rules = [r for r in db.query(Rule).all()
+                 if component in r.components and r.status in IN_FORCE]
+        if not rules:
+            continue
+        clean = exporters[component.type](rules[:25])
+
+        # First measurement: everything on the device is accounted for.
+        config = ComponentActualConfig(component_id=component.id, content=clean,
+                                       uploaded_by="demo-seed")
+        db.add(config)
+        record_snapshot(db, component, clean, "demo-seed")
+
+        # Second: on some of them, rules nobody documented have appeared since.
+        # Others stay clean, so the per-component table shows both outcomes.
+        content = clean + undocumented[component.type] if index % 2 == 0 else clean
+        config.content = content
+        record_snapshot(db, component, content, "demo-seed")
+
+
+def _seed_emergency_change(db):
+    """One emergency change still waiting for its approval after the fact.
+
+    Without it the dashboard banner never appears and the demo shows nothing of
+    what #36 is about - which is the half of the feature that matters, since the
+    point is that an emergency change is impossible to overlook.
+    """
+    from datetime import timedelta
+
+    rule = (db.query(Rule)
+            .filter(Rule.status == RuleStatus.in_review)
+            .order_by(Rule.id.desc()).first())
+    if not rule:
+        return
+    declared = utcnow() - timedelta(hours=6)
+    rule.emergency_declared_at = declared
+    rule.emergency_declared_by = "betrieb"
+    rule.emergency_reason = ("Zahlungs-Gateway ausgefallen (INC-4711), "
+                             "Change Approver um 03:00 nicht erreichbar")
+    rule.emergency_approval_due = declared + timedelta(hours=24)
+    rule.version += 1
+    db.add(RuleVersion(
+        rule_pk=rule.id, version=rule.version, snapshot={"seed": "demo"},
+        change_note="Emergency change declared: {reason}",
+        change_values={"reason": rule.emergency_reason},
+        changed_by="betrieb"))
 
 
 def seed(wipe: bool):
@@ -528,6 +622,9 @@ def seed(wipe: bool):
     # would come back up in English each night, while permitra.de, the
     # screenshots and the audience it is shown to are German.
     set_setting(db, "ui_language", "de")
+
+    _seed_device_configs(db)
+    _seed_emergency_change(db)
 
     db.commit()
     rules_count = db.query(Rule).count()
