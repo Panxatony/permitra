@@ -91,7 +91,7 @@ from app import audit
 db = SessionLocal()
 result = audit.verify_chain(db)
 db.close()
-print(f"audit chain: ok={result[\"ok\"]} checked={result[\"checked\"]}")
+print("audit chain: ok=%s checked=%s" % (result["ok"], result["checked"]))
 raise SystemExit(0 if result["ok"] else 1)
 '
 
