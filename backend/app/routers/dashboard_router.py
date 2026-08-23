@@ -1,3 +1,5 @@
+from datetime import timezone
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -16,9 +18,37 @@ from ..models import (
     SecurityComponent,
     User,
     Zone,
+    utcnow,
 )
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+
+def _emergency_summary(db: Session) -> dict:
+    pending = (
+        db.query(Rule)
+        .filter(Rule.emergency_approval_due.isnot(None), Rule.deleted_at.is_(None))
+        .order_by(Rule.emergency_approval_due)
+        .all()
+    )
+    now = utcnow()
+
+    def aware(dt):
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+    items = [
+        {
+            "rule_id": r.rule_id,
+            "name": r.name,
+            "reason": r.emergency_reason,
+            "declared_by": r.emergency_declared_by,
+            "due": r.emergency_approval_due.isoformat(),
+            "overdue": aware(r.emergency_approval_due) <= now,
+        }
+        for r in pending
+    ]
+    return {"pending": len(items), "overdue": sum(1 for i in items if i["overdue"]),
+            "items": items}
 
 
 @router.get("")
@@ -70,6 +100,11 @@ def dashboard(db: Session = Depends(get_db), _: User = Depends(get_current_user)
         # what it could not measure, so the figure cannot be read as fleet-wide
         # when it is not - see app/coverage.py.
         "coverage": coverage.fleet_coverage(db),
+        # Emergency changes still waiting for their after-the-fact approval.
+        # Prominent until it exists, and separately counted once the window has
+        # passed - an overdue one is standing on a firewall with nobody's
+        # signature under it.
+        "emergency": _emergency_summary(db),
         "recent_changes": [
             {
                 "rule_id": rule_id,

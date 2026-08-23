@@ -175,6 +175,32 @@ export default function Dashboard() {
         )}
       </div>
 
+      {data.emergency && data.emergency.pending > 0 && (
+        <section className={`emergency-banner ${data.emergency.overdue ? 'overdue' : ''}`}>
+          <h2>
+            {data.emergency.pending}{' '}
+            {data.emergency.pending === 1
+              ? t('emergency change is waiting for approval after the fact')
+              : t('emergency changes are waiting for approval after the fact')}
+            {data.emergency.overdue > 0 && (
+              <span className="emergency-overdue"> – {data.emergency.overdue} {t('overdue')}</span>
+            )}
+          </h2>
+          <ul>
+            {data.emergency.items.map((e) => (
+              <li key={e.rule_id} className={e.overdue ? 'emergency-overdue' : ''}>
+                <Link to={`/rules/${e.rule_id}`} className="rule-link">{e.rule_id}</Link>{' '}
+                {e.name} – <em>{e.reason}</em>{' '}
+                <span className="muted small">
+                  ({t('declared by')} {e.declared_by}, {t('due')}{' '}
+                  {new Date(e.due).toLocaleString(dateLocale(lang))})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="tiles">
         <Tile value={data.rules_total} label={t('Total rules')} to="/rules" />
         <Tile value={data.open_reviews} label={t('Open reviews')} to="/rules?status=in_review"

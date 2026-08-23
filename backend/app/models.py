@@ -653,6 +653,29 @@ class Rule(Base):
     # approved again once the inadmissibility has been resolved.
     removal_reason: Mapped[str] = mapped_column(String(255), default="")
 
+    # --- Emergency change (#36) ---------------------------------------------
+    # A rule opened directly on the firewall at three in the morning, because
+    # the approver was unreachable. Permitra cannot prevent that; what it can do
+    # is give it a way in, so the reason is written down while somebody still
+    # remembers it. Without one the change happens anyway and is simply never
+    # recorded, which is strictly worse.
+    #
+    # declared_at is the permanent record: once set it is never cleared, so
+    # "how often do we do this?" stays answerable after the approval landed.
+    # approval_due is the outstanding part: non-NULL means the after-the-fact
+    # approval is still missing, and the rule deactivates itself when it passes.
+    emergency_declared_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    emergency_declared_by: Mapped[str] = mapped_column(String(64), default="")
+    emergency_reason: Mapped[str] = mapped_column(Text, default="")
+    emergency_approval_due: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True)
+
+    @property
+    def emergency_pending(self) -> bool:
+        """On the device, declared as an emergency, still waiting for approval."""
+        return self.emergency_approval_due is not None
+
     @property
     def platforms(self) -> list[str]:
         """Derived from the types of the assigned components (for export/checks)."""

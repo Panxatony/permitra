@@ -62,10 +62,15 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
     all_rules = {r.rule_id: r for r in db.query(Rule).all()}
 
     missing = [rule_brief(r) for rid, r in sorted(approved.items()) if rid not in actual_ids]
+    # A declared emergency change is in review and therefore not IN_FORCE, but it
+    # is on the device on purpose and within its window. Reporting it as stale
+    # would tell operations to tear down the rule that is keeping the incident
+    # closed - and would train them to ignore the finding.
     stale = [
         rule_brief(all_rules[rid])
         for rid in sorted(actual_ids)
         if rid in all_rules
+        and not all_rules[rid].emergency_pending
         and (all_rules[rid].deleted_at is not None
              or all_rules[rid].status not in IN_FORCE)
     ]

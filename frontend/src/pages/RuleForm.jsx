@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useLang } from '../i18n'
 import { api } from '../api'
 
@@ -44,6 +44,11 @@ function ZoneSelect({ label, value, onChange, zones }) {
 export default function RuleForm() {
   const { id } = useParams()
   const isEdit = Boolean(id)
+  /* The rule is already on the firewall; this form is the documentation being
+     caught up afterwards. Same fields, same checks - what differs is that the
+     reason is mandatory and the rule lands in review with a clock on it. */
+  const isEmergency = !isEdit && new URLSearchParams(useLocation().search).has('emergency')
+  const [emergencyReason, setEmergencyReason] = useState('')
   const navigate = useNavigate()
   const { t } = useLang()
   const [form, setForm] = useState(EMPTY)
@@ -236,7 +241,9 @@ export default function RuleForm() {
         await api.updateRule(id, { ...payload, change_note: changeNote })
         navigate(`/rules/${id}`)
       } else {
-        const created = await api.createRule(payload)
+        const created = isEmergency
+          ? await api.declareEmergencyRule({ ...payload, emergency_reason: emergencyReason })
+          : await api.createRule(payload)
         navigate(`/rules/${created.rule_id}`)
       }
     } catch (err) {
@@ -246,8 +253,26 @@ export default function RuleForm() {
 
   return (
     <form className="rule-form" onSubmit={submit}>
-      <h1>{isEdit ? `${t('Edit')}: ${id}` : t('Create new rule')}</h1>
+      <h1>
+        {isEdit ? `${t('Edit')}: ${id}`
+          : isEmergency ? t('Document an emergency change') : t('Create new rule')}
+      </h1>
       {error && <div className="error">{error}</div>}
+      {isEmergency && (
+        <div className="emergency-box">
+          <p>
+            <strong>{t('This rule is already on the device.')}</strong>{' '}
+            {t('It goes into review with a clock on it: without an approval after the '
+               + 'fact it is deactivated automatically and has to be removed again.')}
+          </p>
+          <label>
+            {t('What happened?')} <span className="req">*</span>
+            <textarea rows={3} required minLength={10} value={emergencyReason}
+              onChange={(e) => setEmergencyReason(e.target.value)}
+              placeholder={t('Incident, ticket, who was reachable – a year from now this is all there is')} />
+          </label>
+        </div>
+      )}
 
       <fieldset>
         <legend>{t('Identification')}</legend>

@@ -1,10 +1,12 @@
 import re
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .. import audit
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
 from ..conflicts import find_conflicts
@@ -26,11 +28,13 @@ from ..models import (
     SecurityComponent,
     User,
     active_rules,
+    utcnow,
 )
 from ..schemas import (
     CommentCreate,
     CommentOut,
     ConflictOut,
+    EmergencyRuleCreate,
     ExpiringOut,
     ExtendRequest,
     ResolveOut,
@@ -43,6 +47,7 @@ from ..schemas import (
     RuleUpdate,
     RuleVersionOut,
 )
+from ..settings import get_setting
 from ..validation import format_entry, parse_network
 from ..vrf import get_vrf
 from ..zone_check import check_zone_pair, resolve_zone_for_entries
@@ -667,12 +672,22 @@ def resolve_components_endpoint(
     return out
 
 
-@router.post("", response_model=RuleOut, status_code=201)
-def create_rule(
-    payload: RuleCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles(Role.architect)),
-):
+def _create_rule(db: Session, payload, user: User, *,
+                 status_: RuleStatus | None = None,
+                 matrix_blocking: bool = True) -> Rule:
+    """Creates the rule and returns it, uncommitted.
+
+    Shared by the normal path and the emergency one so there is exactly one
+    place that derives zones, resolves components and enforces the BSI rules - a
+    fast path that quietly skipped half of them would be the loophole this is
+    meant not to be.
+
+    matrix_blocking=False is the single difference the emergency path needs. The
+    rule is already on the firewall; refusing to *document* it because the zone
+    matrix forbids it would leave the traffic flowing and the record missing,
+    which is the worst of both. The violation is recorded instead, and the
+    approver decides.
+    """
     # The rule ID is always assigned by the system (sequential, unique, immutable).
     # On concurrent creation the unique constraint protects us; then try a new number.
     vrf = get_vrf(db, payload.vrf or None)
@@ -681,11 +696,22 @@ def create_rule(
         derive_zones(db, payload, vrf.id)
         components = determine_components(db, payload, vrf.id)
         enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
-        enforce_zone_matrix(
-            db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
-        )
-        data = payload.model_dump(exclude={"component_ids", "vrf"})
+        matrix_violation = ""
+        if matrix_blocking:
+            enforce_zone_matrix(
+                db, payload.source_zone, payload.destination_zone,
+                [c.type.value for c in components]
+            )
+        else:
+            verdict = check_zone_pair(db, payload.source_zone, payload.destination_zone,
+                                      [c.type.value for c in components])
+            if not verdict.allowed:
+                matrix_violation = "; ".join(verdict.messages)
+
+        data = payload.model_dump(exclude={"component_ids", "vrf", "emergency_reason"})
         data["services"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in payload.services]
+        if status_ is not None:
+            data["status"] = status_
         rule = Rule(rule_id=next_rule_id(db), vrf_id=vrf.id, created_by=user.username,
                     components=components, **data)
         db.add(rule)
@@ -694,11 +720,84 @@ def create_rule(
         except IntegrityError:
             db.rollback()
             continue
+        if matrix_violation:
+            # Loud, not silent: the approver has to see that this rule crosses a
+            # relation the matrix forbids before deciding whether it may stay.
+            rule.removal_reason = matrix_violation[:255]
+            db.add(Comment(rule_pk=rule.id, author=user.username,
+                           text=render("Contrary to the zone matrix: {reason}",
+                                       {"reason": matrix_violation})))
         add_version(db, rule, user, "Rule created")
-        db.commit()
-        db.refresh(rule)
         return rule
     raise HTTPException(status.HTTP_409_CONFLICT, _("Assigning a rule ID failed, try again"))
+
+
+@router.post("", response_model=RuleOut, status_code=201)
+def create_rule(
+    payload: RuleCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect)),
+):
+    rule = _create_rule(db, payload, user)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@router.post("/emergency", response_model=RuleOut, status_code=201)
+def declare_emergency_rule(
+    payload: EmergencyRuleCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect, Role.operations)),
+):
+    """Document a rule that was already opened on the firewall, under time pressure.
+
+    Permitra cannot stop somebody opening a port at three in the morning when the
+    approver is unreachable. What it can do is offer a way in, so the reason is
+    written down while somebody still remembers it. A tool without a documented
+    fast path does not prevent emergency changes - it only prevents them from
+    being recorded, which is strictly worse.
+
+    Deliberately not an override. The rule lands in review like any other, it
+    carries a mandatory reason, and it deactivates itself when the window passes
+    without an approval. The path is meant to be narrow and loud, not convenient.
+    """
+    rule = _create_rule(db, payload, user, status_=RuleStatus.in_review,
+                        matrix_blocking=False)
+
+    hours = int(get_setting(db, "emergency_window_hours"))
+    # One timestamp, not two: the window has to be exactly the configured length,
+    # and two calls to utcnow() are microseconds apart.
+    declared = utcnow()
+    rule.emergency_declared_at = declared
+    rule.emergency_declared_by = user.username
+    rule.emergency_reason = payload.emergency_reason.strip()
+    rule.emergency_approval_due = declared + timedelta(hours=hours)
+
+    # The version note and the comment carry the reason, so it is visible in the
+    # history rather than only in a column somebody has to know about.
+    rule.version += 1
+    add_version(db, rule, user, "Emergency change declared: {reason}",
+                reason=rule.emergency_reason)
+    db.add(Comment(rule_pk=rule.id, author=user.username,
+                   text=render("Emergency change declared: {reason}",
+                               {"reason": rule.emergency_reason})))
+
+    # Its own event type, so "how often do we do this?" is answerable. An
+    # emergency path used twice a year is a working control; one used weekly is
+    # a finding, and that difference has to be countable.
+    audit.record(db, "rule", "rule.emergency_declared", actor=user.username,
+                 object=rule.rule_id,
+                 detail="Emergency change, approval due within {hours} h: {reason}",
+                 detail_values={"hours": hours, "reason": rule.emergency_reason},
+                 source_ip=audit.client_ip(request))
+    db.commit()
+    db.refresh(rule)
+
+    from .. import notifications
+    notifications.rule_submitted(db, rule)
+    return rule
 
 
 @router.get("/{rule_id}", response_model=RuleDetail)
@@ -939,6 +1038,11 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
             if impl.get(c.name) == "implemented":
                 impl[c.name] = "to change"
         rule.impl_status = impl
+    if rule.emergency_approval_due is not None:
+        # The window closes on any decision - approved, rejected or deactivated.
+        # emergency_declared_at is deliberately left standing: it is what makes
+        # "how often do we do this?" answerable a year from now.
+        rule.emergency_approval_due = None
     rule.version += 1
     add_version(db, rule, user, note)
     if decision.comment:

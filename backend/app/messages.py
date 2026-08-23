@@ -130,6 +130,16 @@ CATALOG: dict[str, dict[str, str]] = {
         "Component not found": "Komponente nicht gefunden",
         ". Define it once via the address mapping.": ". Bitte einmalig über die Adress-Zuordnung festlegen.",
         "Demo rule created": "Demo-Regel angelegt",
+        "Emergency change declared: {reason}": "Notfall-Änderung erklärt: {reason}",
+        "Emergency change not approved in time – deactivated":
+            "Notfall-Änderung nicht rechtzeitig freigegeben – deaktiviert",
+        "Emergency change, approval due within {hours} h: {reason}":
+            "Notfall-Änderung, Freigabe fällig binnen {hours} h: {reason}",
+        "Contrary to the zone matrix: {reason}": "Entgegen der Zonen-Matrix: {reason}",
+        "The emergency change was not approved within the window. Remove the rule on the components, or submit it again for a proper review.":
+            "Die Notfall-Änderung wurde nicht innerhalb des Zeitfensters freigegeben. Bitte die Regel auf den Komponenten entfernen oder erneut regulär zum Review einreichen.",
+        "Describe what happened - this is the evidence, and a year from now it is all there will be":
+            "Bitte beschreiben, was passiert ist – das ist der Nachweis, und in einem Jahr ist es alles, was übrig bleibt",
         "Description updated": "Beschreibung aktualisiert",
         "Destination": "Ziel",
         "EPG not found": "EPG nicht gefunden",
