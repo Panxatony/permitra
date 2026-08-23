@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, getUser } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
-import { AddressList, ComponentBadges, Highlighted, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
+import { AddressList, ComponentBadges, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
 const IMPL_OPTIONS = ['open', 'new', 'to change', 'to remove', 'implemented', 'deactivated']
@@ -19,7 +19,6 @@ export default function RuleDetail() {
   const { lang, t } = useLang()
   const zoneLabel = useZoneLabels()
   const [rule, setRule] = useState(null)
-  const [impl, setImpl] = useState(null)
   const [conflicts, setConflicts] = useState([])
   const [risk, setRisk] = useState(null)
   const [comment, setComment] = useState('')
@@ -31,7 +30,6 @@ export default function RuleDetail() {
       setRule(await api.rule(id))
       api.conflicts(id).then(setConflicts).catch(() => setConflicts([]))
       api.risk(id).then(setRisk).catch(() => setRisk(null))
-      api.implementation(id).then(setImpl).catch(() => setImpl(null))
     } catch (err) {
       setError(err.message)
     }
@@ -233,29 +231,6 @@ export default function RuleDetail() {
               placeholder={t('Comment for the review…')} />
             <button className="btn" type="submit">{t('Comment')}</button>
           </form>
-        </section>
-
-        <section className="card wide">
-          <h2>{t('Implementation on the components')}</h2>
-          {!impl ? <p className="muted">{t('Loading…')}</p> : impl.implementations.map((entry) => (
-            <div key={entry.component_id} className="impl-block">
-              <div className="path-comp-head">
-                <span className={`badge platform-${entry.type}`}>{entry.component}</span>
-                <span className="badge">{entry.impl_status}</span>
-                {entry.note && <span className="muted small">{entry.note}</span>}
-              </div>
-              {entry.aci && (
-                <p className="small">
-                  Consumer <strong>{entry.aci.consumer}</strong> → Provider{' '}
-                  <strong>{entry.aci.provider}</strong> · Contract <code>{entry.aci.contract}</code>
-                  {' '}· Filter {entry.aci.filters.map((f) => <code key={f} className="svc">{f}</code>)}
-                  {entry.aci.service_graph && <> · Service Graph <code>{entry.aci.service_graph}</code></>}
-                </p>
-              )}
-              {entry.warning && <div className="warnbox">{entry.warning}</div>}
-              <Highlighted text={entry.preview} fmt={entry.format} />
-            </div>
-          ))}
         </section>
 
         <section className="card wide">

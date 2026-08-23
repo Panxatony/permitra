@@ -256,6 +256,24 @@ function DriftPanel({ components }) {
       {selected && report && (
         report.has_config ? (
           <div className="drift-report">
+            {/* The coverage figure first: "did my rules arrive" is the smaller
+                question, "is everything here justified" is the point. */}
+            {report.coverage?.recognised ? (
+              <div className="coverage">
+                <div className="coverage-bar">
+                  <span style={{ width: `${report.coverage.percent}%` }} />
+                </div>
+                <span className="coverage-text">
+                  <strong>{report.coverage.percent}%</strong>{' '}
+                  {t('of the rules on this device are covered by an approved security rule')}
+                  {' '}({report.coverage.justified}/{report.coverage.total})
+                </span>
+              </div>
+            ) : (
+              <p className="muted small">
+                {t('This configuration format cannot be read yet, so the coverage is unknown – only the rule IDs found in it were compared.')}
+              </p>
+            )}
             <div className={report.in_sync ? 'okbox' : 'warnbox'}>
               {report.in_sync
                 ? `✓ ${t('{component} is in sync ({expected} approved rules, {actual} on the device).')
@@ -280,6 +298,18 @@ function DriftPanel({ components }) {
                 <div>
                   <h3>{t('Unknown rule IDs / shadow rules')} ({report.unknown.length})</h3>
                   <ul>{report.unknown.map((rid) => <li key={rid}><code>{rid}</code></li>)}</ul>
+                </div>
+                <div>
+                  <h3>{t('Not justified by any rule')} ({report.coverage?.unjustified?.length || 0})</h3>
+                  <p className="muted small">
+                    {t('On the device, but carrying no rule ID – nobody requested or approved these.')}
+                  </p>
+                  <ul>{(report.coverage?.unjustified || []).map((u) => (
+                    <li key={u.identifier}>
+                      <code>{u.identifier}</code>{' '}
+                      <span className="muted small">{t('line')} {u.line}</span>
+                    </li>
+                  ))}</ul>
                 </div>
               </div>
             )}

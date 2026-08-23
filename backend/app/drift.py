@@ -6,14 +6,21 @@ Actual: the stored device configuration (uploaded or - later - retrieved via
         carries in policy names/comments of every export.
 
 Findings:
-  - missing:  approved, but not on the device (implementation is missing)
-  - stale:    on the device, but no longer approved in Permitra
-  - unknown:  rule IDs on the device that Permitra does not know at all (shadow rules)
+  - missing:      approved, but not on the device (implementation is missing)
+  - stale:        on the device, but no longer approved in Permitra
+  - unknown:      rule IDs on the device that Permitra does not know at all
+  - unjustified:  rules on the device carrying no rule ID at all
+
+The last one is the point of the whole exercise and used to be invisible: the
+comparison only ever looked for SR IDs, so a rule somebody opened by hand
+produced nothing to find. `unknown` catches typos and stale references;
+`unjustified` catches the actual failure mode. See app/config_blocks.py.
 """
 import re
 
 from sqlalchemy.orm import Session
 
+from . import config_blocks
 from .models import IN_FORCE, ComponentActualConfig, Rule, SecurityComponent, active_rules
 
 RULE_ID_RE = re.compile(r"\bSR\d{3,6}\b")
@@ -64,7 +71,16 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
     ]
     unknown = sorted(rid for rid in actual_ids if rid not in all_rules)
 
-    in_sync = not missing and not stale and not unknown
+    # How many rules the device carries in total, and how many of them claim a
+    # security rule. Without this there is no denominator - and a report that
+    # says "in sync" while unjustified rules sit on the firewall.
+    blocks = config_blocks.scan(config.content, component.type)
+    coverage = config_blocks.coverage(blocks)
+
+    # A configuration in an unrecognised format cannot disprove compliance, so
+    # it must not be allowed to claim it either: in_sync then means only what it
+    # meant before, and the report says the coverage is unknown.
+    in_sync = not missing and not stale and not unknown and not coverage["unjustified"]
     return {
         "has_config": True,
         "component_id": component.id,
@@ -77,4 +93,5 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
         "missing": missing,
         "stale": stale,
         "unknown": unknown,
+        "coverage": coverage,
     }
