@@ -11,8 +11,10 @@ function uiLanguage() {
   return instanceLanguage
 }
 
-const TOKEN_KEY = 'permitra_token'
-const VRF_KEY = 'permitra_vrf'
+// Names of the localStorage slots, not the values kept in them. The secret
+// scanner reads any identifier ending in _token as a credential, hence skipcq.
+const TOKEN_KEY = 'permitra_token'  // skipcq: SCT-A000
+const VRF_KEY = 'permitra_vrf'  // skipcq: SCT-A000
 
 export function getVrfName() {
   return localStorage.getItem(VRF_KEY) || ''
@@ -21,7 +23,7 @@ export function getVrfName() {
 export function setVrfName(name) {
   localStorage.setItem(VRF_KEY, name)
 }
-const USER_KEY = 'permitra_user'
+const USER_KEY = 'permitra_user'  // skipcq: SCT-A000
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)

@@ -19,6 +19,8 @@ services:
       # No fallback values: if SECRET_KEY is missing, the app refuses to start
       # (fail-secure, app/auth.py). A well-known default would allow forgeable
       # admin tokens. Set the values in .env (see .env.example).
+      # skipcq: SCT-A000 - a variable reference, not a password; the text after
+      # ':?' is the error compose prints when it is unset.
       DATABASE_URL: postgresql+psycopg2://permitra:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/permitra
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set (openssl rand -hex 32)}
       # Demo/test operation: creates the well-known demo users. Do NOT set this

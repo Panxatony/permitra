@@ -29,8 +29,16 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     groups:
+      # react and react-dom are one thing pretending to be two: react-dom pins a
+      # peer dependency on the exact react version, so a pull request bumping
+      # only one of them cannot install at all. Grouped across every update type,
+      # major included, because that is precisely when they split.
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
+        update-types: [major, minor, patch]
       frontend-dependencies:
         patterns: ['*']
+        exclude-patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
         update-types: [minor, patch]
     commit-message:
       prefix: 'deps(frontend)'
