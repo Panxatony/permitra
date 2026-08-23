@@ -31,7 +31,9 @@ export default function SetPassword() {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
-        <h1>🛡️ Permitra</h1>
+        <h1 className="brand-heading">
+          <img src="/permitra-logo.svg" alt="Permitra" className="brand-logo" />
+        </h1>
         <p className="muted">{t('Set password')}</p>
         {!token && <div className="error">{t('No token in the link – please open the complete link from the email.')}</div>}
         {done ? (

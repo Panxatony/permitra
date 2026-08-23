@@ -1,0 +1,18 @@
+# Lint rules for the browser checks.
+#
+# Extends the backend configuration so line length, quoting and the rest stay
+# the same across the repository; only the parts that make no sense for a test
+# harness are switched off here.
+
+extend = "../backend/ruff.toml"
+
+[lint]
+extend-ignore = [
+    # urlopen against a URL this harness itself validated as local (see the
+    # guard in conftest.py). The rule exists for code that fetches attacker-
+    # supplied URLs; here the URL is the thing under test.
+    "S310",
+    # "0.0.0.0" appears in a list of hostnames that count as local. It is a
+    # comparison, not a bind address.
+    "S104",
+]

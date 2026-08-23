@@ -1,0 +1,4 @@
+# Browser checks. Kept apart from the backend requirements: they are only
+# needed to run these, and Playwright pulls a browser with it.
+playwright>=1.49
+pytest>=8.3
