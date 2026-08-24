@@ -331,6 +331,8 @@ const DE = {
   'A rule is waiting for you to take it over': 'Eine Regel wartet auf deine Übernahme',
   'Rules are waiting for you to take them over': 'Regeln warten auf deine Übernahme',
   'from': 'von',
+  'Zone matrix forbids rules {from} → {to} (Block)': 'Zonen-Matrix verbietet Regeln {from} → {to} (Block)',
+  'Zone matrix: rules {from} → {to} allowed (firewall)': 'Zonen-Matrix: Regeln {from} → {to} erlaubt (Firewall)',
   'Change': 'Änderung',
   'Change note (for the version history)': 'Änderungsnotiz (für die Versionshistorie)',
   'Change password': 'Passwort ändern',

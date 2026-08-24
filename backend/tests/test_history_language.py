@@ -261,3 +261,19 @@ def test_every_implementation_status_has_a_german_translation():
 
     missing = [s for s in IMPL_STATUSES if s not in messages.CATALOG["de"]]
     assert missing == []
+
+
+def test_the_public_settings_read_heals_a_stale_language_cache(db, language_de):
+    """Messages cache the instance language; a change from another process (the
+    nightly demo reseed) can leave the running server's cache stale - German UI,
+    an English backend message. The interface fetches public settings on every
+    load, so that read corrects the drift."""
+    from app.routers.settings_router import read_public_settings
+    from app.settings import set_setting
+
+    set_setting(db, "ui_language", "de")
+    messages.set_language("en")          # simulate the drift
+    assert messages.current_language() == "en"
+
+    read_public_settings(db)
+    assert messages.current_language() == "de"

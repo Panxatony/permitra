@@ -353,11 +353,13 @@ export default function RuleForm() {
           <div className={zoneCheck.allowed ? (zoneCheck.messages.length ? 'warnbox' : 'okbox') : 'error'}>
             {zoneCheck.allowed
               ? zoneCheck.policy === 'allow_only'
-                ? `✓ Zonen-Matrix: Regeln ${form.source_zone} → ${form.destination_zone} erlaubt (Firewall)`
+                ? `✓ ${t('Zone matrix: rules {from} → {to} allowed (firewall)')
+                    .replace('{from}', form.source_zone).replace('{to}', form.destination_zone)}`
                 : zoneCheck.policy === 'intra'
                   ? t('✓ Intra-zone traffic (same zone, typically ACI)')
                   : t('· Zone relationship not maintained in the matrix')
-              : `✕ Zonen-Matrix verbietet Regeln ${form.source_zone} → ${form.destination_zone} (Block)`}
+              : `✕ ${t('Zone matrix forbids rules {from} → {to} (Block)')
+                    .replace('{from}', form.source_zone).replace('{to}', form.destination_zone)}`}
             {zoneCheck.messages.map((m, i) => <div key={i} className="small">{m}</div>)}
           </div>
         )}
