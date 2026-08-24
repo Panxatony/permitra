@@ -65,15 +65,60 @@ _write_lock = threading.Lock()
 _PG_ADVISORY_KEY = 0x50524D5452  # "PRMTR"
 
 
+def _trusted_proxies() -> list:
+    """The proxy addresses/networks whose X-Forwarded-For we believe.
+
+    Empty by default, and that is the safe default: X-Forwarded-For is a
+    request header, so anything not vouched for by a proxy we placed there is
+    attacker-controlled. Parsed fresh (cheap, and lets a container pick up a
+    changed value on restart without special-casing)."""
+    import ipaddress
+
+    nets = []
+    for entry in os.environ.get("PERMITRA_TRUSTED_PROXIES", "").split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        try:
+            nets.append(ipaddress.ip_network(entry, strict=False))
+        except ValueError:
+            log.warning("Ignoring unparseable PERMITRA_TRUSTED_PROXIES entry %r", entry)
+    return nets
+
+
 def client_ip(request) -> str:
-    """Source IP of a request: first hop from X-Forwarded-For (when behind a
-    reverse proxy), otherwise the direct peer address."""
-    if request is None:
+    """Source IP of a request, and never a forgeable one.
+
+    X-Forwarded-For is trusted only when the immediate peer is a configured
+    trusted proxy (PERMITRA_TRUSTED_PROXIES) - otherwise the header is ignored
+    entirely and the peer address is recorded. This matters more here than
+    almost anywhere: the value is hash-chained into the append-only audit log
+    as evidence, so a client able to set its own source IP could sign a forged
+    origin into the record. Without a trusted proxy configured, the peer is the
+    only thing that cannot be spoofed, and it is what we use.
+
+    From a trusted proxy we take the RIGHTMOST X-Forwarded-For entry - the
+    address that proxy actually observed. The leftmost entries are whatever the
+    client chose to prepend; only the rightmost was appended by infrastructure
+    we trust.
+    """
+    import ipaddress
+
+    if request is None or request.client is None:
         return ""
+    peer = request.client.host
     fwd = request.headers.get("x-forwarded-for", "")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else ""
+    if not fwd:
+        return peer
+    try:
+        peer_addr = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+    if not any(peer_addr in net for net in _trusted_proxies()):
+        # The header exists but reached us from an untrusted hop - ignore it.
+        return peer
+    hops = [h.strip() for h in fwd.split(",") if h.strip()]
+    return hops[-1] if hops else peer
 
 
 # ---------- Hash chain (integrity) -----------------------------------------

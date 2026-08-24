@@ -60,3 +60,20 @@ def split_protocols(protocol: str) -> list[str]:
     if proto.startswith("ICMP"):
         return ["icmp"]
     return [p.lower() for p in proto.split("/") if p]
+
+
+def csv_safe(value) -> str:
+    """A cell that a spreadsheet cannot execute.
+
+    Permitra's whole point is replacing the Excel matrix, so these CSVs are
+    opened in Excel and LibreOffice - where a cell beginning =, +, -, @, or a
+    tab/CR is parsed as a formula. A justification of
+    =HYPERLINK("http://evil","ok") or a worse DDE payload becomes live on open,
+    and the person opening it is an auditor who trusts the file. Prefixing a
+    single quote is the CSV-injection defence OWASP recommends: the spreadsheet
+    shows the text and runs nothing.
+    """
+    text = "" if value is None else str(value)
+    if text and text[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + text
+    return text
