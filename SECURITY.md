@@ -36,6 +36,17 @@ There is no long-term support branch yet. Until 1.0, security fixes are made on
 
 An alpha invites deployment, so the limits belong here rather than in a footnote.
 
+An account may hold **several roles**, and its permission is their union — small
+teams do not have four people for four roles. That widens who reaches an
+endpoint; it does not widen what one person can carry alone. Both four-eyes
+checks key on the acting **account**, never on a role: an account holding
+architect *and* change_approver cannot approve a rule it requested, created or
+submitted (it may approve everyone else's), and the two approvals on a zone,
+network or matrix change must come from two different accounts. Two hats on one
+person is still one pair of eyes. The admin is not an exception to any of it —
+the implicit admin bypass that once let admins through every check was removed,
+and an endpoint that wants the admin names the admin.
+
 **Held:** role-based access control including separation of duties; append-only,
 hash-chained audit events with external anchoring and at-least-once SIEM
 delivery; soft deletion so nothing is destroyed; encrypted secrets at rest

@@ -438,6 +438,10 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 /* The zone-add bar: the button plus the zones already queued for the request.
    The form itself lives in an overlay now, so this row only has to hold what
    stays visible while the matrix is being edited. */
+/* Zones this request will create, shown in the grid so their relations can be
+   set in the same request. Marked as not-yet-existing rather than blended in. */
+.col-head-draft span, .row-head-draft { font-style: italic; color: var(--muted); }
+
 .zone-add-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
   margin-bottom: .5rem; }
 .zone-add-form { display: flex; flex-direction: column; gap: .8rem; }

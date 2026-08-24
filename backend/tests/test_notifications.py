@@ -25,6 +25,11 @@ def db():
              email="", is_active=True, notify_email=True),                  # no address
         User(username="bob", password_hash="x", role=Role.operations,
              email="bob@example.org", is_active=True, notify_email=True),
+        # An admin who wants mail and could receive it. Present so the exact-set
+        # assertions below actually guard the recipient list: without an admin
+        # in the fixture they proved nothing about admins either way.
+        User(username="root", password_hash="x", role=Role.admin,
+             email="root@example.org", is_active=True, notify_email=True),
     ])
     s.commit()
     yield s
@@ -66,6 +71,30 @@ def test_decided_notifies_creator(db, _smtp_on):
 def test_implementation_pending_notifies_operations(db, _smtp_on):
     notifications.rule_implementation_pending(db, make_rule(db), "Rule approved")
     assert {t for t, _ in _smtp_on} == {"bob@example.org"}
+
+
+def test_an_admin_is_not_mailed_about_work_it_cannot_do(db, _smtp_on):
+    """An admin installs and administers Permitra; it reaches neither the
+    reviews nor the recertification (#81, #82). Mailing it about a rule waiting
+    for approval would point it at a page that answers 403 - and a notification
+    that leads nowhere teaches people to ignore the rest."""
+    rule = make_rule(db)
+    notifications.rule_submitted(db, rule)
+    notifications.rule_implementation_pending(db, rule, "Rule approved")
+    assert "root@example.org" not in {t for t, _ in _smtp_on}
+
+
+def test_someone_who_holds_both_roles_is_still_reached(db, _smtp_on):
+    """The counter-check, and the reason this is keyed on the role set rather
+    than on the job title: an admin who is also a change approver does the
+    reviewing, so they are mailed through that role (#78)."""
+    from app.models import apply_roles
+    root = db.query(User).filter(User.username == "root").one()
+    apply_roles(root, [Role.admin, Role.change_approver])
+    db.commit()
+
+    notifications.rule_submitted(db, make_rule(db))
+    assert "root@example.org" in {t for t, _ in _smtp_on}
 
 
 def test_disabled_mailer_sends_nothing(db, monkeypatch):

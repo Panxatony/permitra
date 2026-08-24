@@ -360,6 +360,11 @@ export default function ZoneMatrix() {
   const [newZoneCode, setNewZoneCode] = useState('')
   const [newZoneLevel, setNewZoneLevel] = useState('internal')
   const [newZoneCia, setNewZoneCia] = useState({ cia_c: 'normal', cia_i: 'normal', cia_a: 'normal' })
+  // The same fields the edit dialogue offers: a zone that comes into being
+  // without its owner and attachment needs a second change nobody reviewed.
+  const [newZoneOwner, setNewZoneOwner] = useState('')
+  const [newZoneDesc, setNewZoneDesc] = useState('')
+  const [newZoneComponents, setNewZoneComponents] = useState([])
   const [netInputs, setNetInputs] = useState({})  // zone -> CIDR input
   const [saving, setSaving] = useState('')
   const [settings, setSettings] = useState({})
@@ -453,6 +458,23 @@ export default function ZoneMatrix() {
     })
   }
 
+  /* The matrix has to include the zones this very request creates, or a new
+     zone's relations need a second request after the first is approved - and
+     the batch already supports both in one (the zones are created first, then
+     the cells are applied). Draft zones get a synthetic id for React and are
+     marked so nobody mistakes them for existing ones. */
+  const gridZones = [
+    ...zones,
+    ...draftZones.map((z) => ({ ...z, id: `draft-${z.code}`, isDraft: true })),
+  ]
+  const removeDraftZone = (zone) => {
+    const ref = (zone.code || zone.name).toUpperCase()
+    setDraftZones((list) => list.filter((x) => x.name !== zone.name))
+    setDraft((current) => Object.fromEntries(
+      Object.entries(current).filter(([key]) =>
+        !key.toUpperCase().split('|').includes(ref))))
+  }
+
   const draftCount = Object.keys(draft).length + draftZones.length
 
   const startEdit = () => {
@@ -476,7 +498,12 @@ export default function ZoneMatrix() {
     setError('')
     try {
       const items = [
-        ...draftZones.map((z) => ({ type: 'zone_create', name: z.name, code: z.code, pap_level: z.pap_level, cia_c: z.cia_c, cia_i: z.cia_i, cia_a: z.cia_a })),
+        ...draftZones.map((z) => ({
+          type: 'zone_create', name: z.name, code: z.code, pap_level: z.pap_level,
+          cia_c: z.cia_c, cia_i: z.cia_i, cia_a: z.cia_a,
+          owner: z.owner || '', description: z.description || '',
+          component_ids: z.component_ids || [],
+        })),
         ...Object.entries(draft).map(([key, policy]) => {
           const [from_zone, to_zone] = key.split('|')
           return { type: 'policy', from_zone, to_zone, policy, temporary: false }
@@ -519,9 +546,14 @@ export default function ZoneMatrix() {
       return
     }
     setError('')
-    setDraftZones((list) => [...list, { name, code, pap_level: newZoneLevel, ...newZoneCia }])
+    setDraftZones((list) => [...list, {
+      name, code, pap_level: newZoneLevel, ...newZoneCia,
+      owner: newZoneOwner.trim(), description: newZoneDesc.trim(),
+      component_ids: newZoneComponents,
+    }])
     setNewZone('')
     setNewZoneCia({ cia_c: 'normal', cia_i: 'normal', cia_a: 'normal' })
+    setNewZoneOwner(''); setNewZoneDesc(''); setNewZoneComponents([])
     setZoneDialog(false)
     api.zoneNextCode().then((r) => setNewZoneCode(r.code)).catch(() => setNewZoneCode(''))
   }
@@ -735,14 +767,20 @@ export default function ZoneMatrix() {
           <thead>
             <tr>
               <th className="corner">Von \ Nach</th>
-              {zones.map((z) => <th key={z.id} className="col-head"><span>{zoneLabel(z)}</span></th>)}
+              {gridZones.map((z) => (
+                <th key={z.id} className={`col-head${z.isDraft ? ' col-head-draft' : ''}`}>
+                  <span>{zoneLabel(z)}{z.isDraft ? ' ✎' : ''}</span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {zones.map((from) => (
+            {gridZones.map((from) => (
               <tr key={from.id}>
-                <th className="row-head">{zoneLabel(from)}</th>
-                {zones.map((to) => {
+                <th className={`row-head${from.isDraft ? ' row-head-draft' : ''}`}>
+                  {zoneLabel(from)}{from.isDraft ? ' ✎' : ''}
+                </th>
+                {gridZones.map((to) => {
                   if (from.id === to.id) return <td key={to.id} className="cell-self">–</td>
                   const key = `${zref(from)}|${zref(to)}`
                   const p = policies[key]
@@ -789,8 +827,10 @@ export default function ZoneMatrix() {
             {draftZones.map((z) => (
               <span key={z.name} className="zone-chip">
                 ✎ {z.code}-{z.name} <span className="muted small">({t(z.pap_level)})</span>
-                <button type="button"
-                  onClick={() => setDraftZones(draftZones.filter((x) => x.name !== z.name))}>✕</button>
+                {/* Taking the zone back out takes its cells with it: a request
+                    carrying relations for a zone it no longer creates would ask
+                    approvers to approve something that cannot be applied. */}
+                <button type="button" onClick={() => removeDraftZone(z)}>✕</button>
               </span>
             ))}
           </div>
@@ -811,6 +851,30 @@ export default function ZoneMatrix() {
                       placeholder={t('Zone name, e.g. T-NEW')} autoFocus />
                   </label>
                 </div>
+                <div className="grid-2">
+                  <label>{t('Owner (person/team)')}
+                    <input value={newZoneOwner} onChange={(e) => setNewZoneOwner(e.target.value)} />
+                  </label>
+                  <label>{t('Description (purpose of the zone)')}
+                    <input value={newZoneDesc} onChange={(e) => setNewZoneDesc(e.target.value)} />
+                  </label>
+                </div>
+                <label>{t('Attached to')}
+                  <span className="attach-select">
+                    {fwComponents.map((f) => {
+                      const attached = newZoneComponents.includes(f.id)
+                      return (
+                        <label key={f.id} className="checkbox">
+                          <input type="checkbox" checked={attached}
+                            onChange={() => setNewZoneComponents(attached
+                              ? newZoneComponents.filter((x) => x !== f.id)
+                              : [...newZoneComponents, f.id])} />
+                          <span className={`badge platform-${f.type}`}>{f.name}</span>
+                        </label>
+                      )
+                    })}
+                  </span>
+                </label>
                 <label>{t('P-A-P classification')}
                   <select value={newZoneLevel} onChange={(e) => setNewZoneLevel(e.target.value)}>
                     <option value="external">{t('external (north)')}</option>
@@ -867,14 +931,14 @@ export default function ZoneMatrix() {
       <section className="card wide">
         <h2>{t('Matrix changes: approvals & history')}</h2>
         <p className="muted small">
-          {t('Every matrix change is recorded as a request and takes effect only after operations approves it (four-eyes principle: you cannot approve your own request).')}
+          {t('Every matrix change is recorded as a request and takes effect only after two different change approvers have approved it (four-eyes principle: you cannot approve your own request).')}
         </p>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>{t('Changes')}</th><th>{t('Status')}</th>
-                <th>Beantragt</th><th>Entschieden</th><th></th>
+                <th>{t('Requested')}</th><th>{t('Approvals')}</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -906,9 +970,30 @@ export default function ZoneMatrix() {
                     {b.items.length > 1 && <div className="muted small">{b.items.length} Änderungen</div>}
                   </td>
                   <td>{b.requested_by}<span className="muted small"> · {b.requested_at ? new Date(b.requested_at).toLocaleString(dateLocale(lang)) : ''}</span></td>
-                  <td>{b.decided_by
-                    ? <>{b.decided_by}<span className="muted small"> · {b.decided_at ? new Date(b.decided_at).toLocaleString(dateLocale(lang)) : ''}</span></>
-                    : '–'}</td>
+                  {/* Both approvals, not just the one that finished it. Two
+                      approvals by two different accounts IS the control here -
+                      showing only the second hides half the evidence, and the
+                      first approver disappeared from the record entirely once
+                      the change went through. */}
+                  <td>
+                    {b.first_approved_by && (
+                      <div>
+                        <span className="muted small">1. </span>{b.first_approved_by}
+                        <span className="muted small"> · {b.first_approved_at
+                          ? new Date(b.first_approved_at).toLocaleString(dateLocale(lang)) : ''}</span>
+                      </div>
+                    )}
+                    {b.decided_by
+                      ? (
+                        <div>
+                          {b.first_approved_by && <span className="muted small">2. </span>}
+                          {b.decided_by}
+                          <span className="muted small"> · {b.decided_at
+                            ? new Date(b.decided_at).toLocaleString(dateLocale(lang)) : ''}</span>
+                        </div>
+                      )
+                      : (!b.first_approved_by && '–')}
+                  </td>
                   <td className="row-actions">
                     {b.status === 'pending' && isApprover && (
                       <>

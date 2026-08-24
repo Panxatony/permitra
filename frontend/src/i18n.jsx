@@ -570,6 +570,8 @@ const DE = {
   'Risk': 'Risiko',
   'Role': 'Rolle',
   'Roles': 'Rollen',
+  'Requested': 'Beantragt',
+  'Approvals': 'Freigaben',
   'Zone ID': 'Zonen-ID',
   'normal': 'normal',
   'This rule is already on the device (emergency change)':
@@ -772,7 +774,7 @@ const DE = {
   'Deviations on {component} – state as of {when} ({who})': 'Abweichungen auf {component} – Stand vom {when} ({who})',
   'Document a new ACI gateway': 'Neues ACI Gateway dokumentieren',
   'Edit ACI gateway': 'ACI Gateway bearbeiten',
-  'Every matrix change is recorded as a request and takes effect only after operations approves it (four-eyes principle: you cannot approve your own request).': 'Jede Matrix-Änderung wird als Antrag protokolliert und erst nach Freigabe durch den Betrieb wirksam (Vier-Augen-Prinzip: eigene Anträge können nicht selbst freigegeben werden).',
+  'Every matrix change is recorded as a request and takes effect only after two different change approvers have approved it (four-eyes principle: you cannot approve your own request).': 'Jede Matrix-Änderung wird als Antrag protokolliert und erst wirksam, wenn zwei verschiedene Change Approver sie freigegeben haben (Vier-Augen-Prinzip: eigene Anträge können nicht selbst freigegeben werden).',
   'Expired rules are deactivated automatically by the system every day – extend them here beforehand, or deactivate them deliberately': 'Abgelaufene Regeln werden vom System täglich automatisch deaktiviert – hier vorher verlängern oder gezielt deaktivieren',
   'Firewall clusters and ACI fabrics the rules are implemented on': 'Firewall-Cluster und ACI-Fabrics, auf denen die Regeln umgesetzt werden',
   'Gateway IP': 'Gateway-IP',

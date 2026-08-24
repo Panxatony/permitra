@@ -38,10 +38,10 @@ Project website: https://permitra.de · Live demo: https://demo.permitra.de
 
 | Role | Permissions |
 |---|---|
-| `architect` | Create/edit rules, submit for review, comment |
-| `operations` | Maintain implementation status per component, export, drift comparison |
+| `architect` | Create/edit rules, submit for review, comment, retire an application (proposing its rules for removal) |
+| `operations` | Maintain implementation status per component, export, drift comparison, evidence report |
 | `change_approver` | Approvals: rule reviews (one approval) and zone/network/matrix requests (two approvals by different approvers); runs the recertification cycle (starts and closes campaigns); focused approvals start page |
-| `admin` | Permitra administration only — installation, user management, settings. Deliberately not a superuser: no rule views, no approvals, no recertification |
+| `admin` | Permitra administration only — installation, user management, settings. Deliberately not a superuser: no rule views in the interface, no approvals, no recertification, no reports. It keeps exactly three rule powers, all of them administrative: deleting a rule, and proposing or ending a requestor handover once that account is gone |
 
 An account can hold **several roles**, and its permission is their union — small
 teams do not have four people for four roles. This does not soften separation of
@@ -96,7 +96,10 @@ npm install
 npm run dev                                               # UI on http://localhost:5173
 ```
 
-**Demo logins:** `architekt`, `betrieb`, `approver`, `approver2`, `admin` — password is the username + `123`.
+**Demo logins:** two accounts per role — `architekt`/`architekt2`, `betrieb`/`betrieb2`,
+`approver`/`approver2`, `admin`/`admin2`, plus `doppelrolle` (architect *and* change
+approver, to walk the multi-role case). Password is the username + `123`. Two accounts
+per role is what makes the four-eyes paths walkable: one requests, the other approves.
 API documentation (Swagger): http://localhost:8000/docs
 
 ## Quick start (Docker Compose)
@@ -177,10 +180,9 @@ cd backend && ../.venv/bin/python -m pytest tests/
 ## Roadmap
 
 Tracked as [GitHub issues](https://github.com/Panxatony/permitra/issues). The
-larger open pieces: comparing what a rule on the device actually permits rather
-than only that it claims an approval (#48), deputies and escalation for
-approvers (#50), recertification as a real review of the ruleset rather than
-expiry control (#35), and a retention concept for the audit log (#34).
+larger open pieces: time windows on rules (#83), Layer 7 / App-ID in the export
+(#84), deputies and escalation for approvers (#50), NAT (#38) and rule order
+(#33).
 
 Multi-environment support — overlapping IP ranges per environment, e.g. IT and
 OT — is fully built and currently dormant behind a single default environment.

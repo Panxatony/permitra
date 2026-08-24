@@ -4,6 +4,39 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **An account can hold several roles**, and its permission is their union
+  (#78). Small teams do not have four people for four roles. Separation of
+  duties is untouched, because the four-eyes checks key on the acting *account*
+  rather than on a role — and `_decide` now also refuses the rule's
+  **requestor**, not just its creator and submitter, which is exactly the hat
+  that would otherwise have slipped through on a multi-role account.
+- **The admin is installation and administration only.** It no longer reaches
+  recertification or the reports, in the navigation *and* in the endpoints, and
+  campaigns are started and closed by the change approver alone. Notification
+  mails follow: an admin is no longer told about a review it would get a 403 on.
+  The frontend's `role === X || role === 'admin'` bypasses went with it — they
+  contradicted the backend, which has required the named role since #71.
+- **Retiring an application proposes its rules for removal** (#85). The
+  application is switched off, the holes it needed stay — one of the most common
+  ways a ruleset rots. It proposes rather than decides: each rule goes back into
+  review and is decided one at a time, the dry run is the default, and whoever
+  starts it becomes the submitter and so cannot approve the removals.
+- **An evidence report for audits** (#86): every change in a period, optionally
+  by zone or application, with requester, approver, justification and date —
+  the document an audit asks for, instead of an API to query one record at a
+  time. Matrix changes name both approvers, and the report states whether the
+  audit log still covers the window rather than looking complete over a gap.
+- **Rules and zones are created where they live**, as overlays, and documenting
+  an emergency change is an *option* on the new-rule form rather than a second
+  entry point. A new rule is prefilled to expire in a year — recertification
+  asks whether a rule is still needed, and an open-ended rule never gets asked.
+- **Fixed:** the matrix history showed only the approver who finished a change,
+  hiding the first of the two approvals that are the control; the help "?"
+  navigated to the help page and left you there; overlays inherited the
+  typography of whatever opened them; the derived zone on the rule form wore a
+  green *approved* badge instead of its protection level; a zone rejected as a
+  duplicate reported the error behind the dialogue where nobody could see it.
+
 - **Drift now checks that a rule matches its approval, not just that it claims
   one.** Coverage proved a device rule carried an approved SR ID; it did not
   prove the rule still permitted only what was approved. A rule widened during

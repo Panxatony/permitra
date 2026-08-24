@@ -127,3 +127,95 @@ def test_noop_update_rejected(db):
             {"type": "net_update", "network_id": network.id, "zone": "PROD-APP"},
         ], "")
     assert exc.value.status_code == 400  # no change compared to the current state
+
+
+# ---------- a new zone arrives complete (#: zone request carries everything) ----------
+
+def test_a_requested_zone_is_created_with_its_owner_and_attachment(db):
+    """Everything a zone has belongs in the request, not in a follow-up edit.
+    A zone created without its owner and firewall attachment needs a second
+    change nobody reviewed - and an unattached zone is invisible to the drift
+    comparison until somebody notices."""
+    from app.models import ComponentType, SecurityComponent, Zone
+    db.add(SecurityComponent(id=1, name="FW-A", type=ComponentType.juniper))
+    db.add(SecurityComponent(id=2, name="FW-B", type=ComponentType.juniper))
+    db.commit()
+
+    _create_batch(db, ARCHITECT(), [{
+        "type": "zone_create", "name": "T-NEW", "code": "Z900",
+        "pap_level": "internal", "description": "Test zone",
+        "owner": "Team Netzwerk", "component_ids": [1, 2],
+        "cia_c": "high", "cia_i": "normal", "cia_a": "normal",
+    }], "")
+    change = pending_change(db)
+    _decide_change(db, change.id, APPROVER1(), True, "")
+    _decide_change(db, change.id, APPROVER2(), True, "")
+
+    zone = db.query(Zone).filter(Zone.name == "T-NEW").one()
+    assert zone.owner == "Team Netzwerk"
+    assert zone.description == "Test zone"
+    assert zone.protection_level == "high"
+    assert sorted(c.name for c in zone.components) == ["FW-A", "FW-B"]
+
+
+def test_a_zone_request_naming_an_unknown_component_is_refused(db):
+    """Refused when it is requested, not silently dropped when it is applied -
+    an approval has to be an approval of something real."""
+    with pytest.raises(HTTPException) as exc:
+        _create_batch(db, ARCHITECT(), [{
+            "type": "zone_create", "name": "T-NEW", "code": "Z900",
+            "pap_level": "internal", "component_ids": [999],
+        }], "")
+    assert exc.value.status_code == 422
+
+
+def test_a_zone_can_still_be_requested_without_owner_or_attachment(db):
+    """Both are optional: a zone whose owner is not yet decided must not be
+    impossible to request."""
+    from app.models import Zone
+    _create_batch(db, ARCHITECT(), [{
+        "type": "zone_create", "name": "T-BARE", "code": "Z901", "pap_level": "internal",
+    }], "")
+    change = pending_change(db)
+    _decide_change(db, change.id, APPROVER1(), True, "")
+    _decide_change(db, change.id, APPROVER2(), True, "")
+
+    zone = db.query(Zone).filter(Zone.name == "T-BARE").one()
+    assert zone.owner == ""
+    assert zone.components == []
+
+
+def test_a_new_zone_and_its_matrix_relations_go_in_one_request(db):
+    """A new zone is useless until its relations are maintained, and needing a
+    second request for them means the zone exists for a while with none. The
+    batch applies the zones first and then the cells, so both belong in one.
+
+    The cells reference the zone the way everything does - by `code or name`,
+    and the interface sends the code - so a zone created in the same batch has
+    to be recognised under both. Collecting only the name made exactly this
+    fail with "Zone 'Z900' not found"."""
+    from app.models import Zone, ZonePolicy
+    _create_batch(db, ARCHITECT(), [
+        {"type": "zone_create", "name": "T-NEW", "code": "Z900", "pap_level": "internal"},
+        # referenced by code, as the matrix does
+        {"type": "policy", "from_zone": "Z900", "to_zone": "PROD-APP", "policy": "allow_only"},
+        {"type": "policy", "from_zone": "DMZ-WEB", "to_zone": "Z900", "policy": "block_all"},
+    ], "")
+    change = pending_change(db)
+    _decide_change(db, change.id, APPROVER1(), True, "")
+    _decide_change(db, change.id, APPROVER2(), True, "")
+
+    zone = db.query(Zone).filter(Zone.name == "T-NEW").one()
+    assert db.query(ZonePolicy).count() == 2
+    policies = db.query(ZonePolicy).all()
+    assert {p.from_zone_id for p in policies} | {p.to_zone_id for p in policies} >= {zone.id}
+
+
+def test_a_matrix_cell_for_a_zone_nobody_creates_is_still_refused(db):
+    """The exception is for zones this batch creates - not a way to request
+    relations for a zone that does not and will not exist."""
+    with pytest.raises(HTTPException) as exc:
+        _create_batch(db, ARCHITECT(), [
+            {"type": "policy", "from_zone": "Z999", "to_zone": "PROD-APP", "policy": "allow_only"},
+        ], "")
+    assert exc.value.status_code == 404

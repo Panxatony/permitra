@@ -193,6 +193,7 @@ CATALOG: dict[str, dict[str, str]] = {
             "Ein Requestor ist ein Architekten-Konto – '{username}' ist {role}",
         "That is already the requestor": "Das ist bereits der Requestor",
         "An account must hold at least one role": "Ein Konto muss mindestens eine Rolle haben",
+        "Unknown component: {ids}": "Unbekannte Komponente: {ids}",
         "Dates must be given as YYYY-MM-DD": "Datumsangaben müssen im Format JJJJ-MM-TT erfolgen",
         "The period ends before it starts": "Der Zeitraum endet vor seinem Beginn",
         "A retirement needs a reason - it becomes the removal reason on every rule":

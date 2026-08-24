@@ -9,12 +9,16 @@ Full interactive documentation is at `/docs` on a running instance (OpenAPI).
 |---|---|
 | `POST /api/auth/login` | Login (OAuth2 form, optional `otp` field), returns JWT |
 | `GET /api/rules?q=&source=&destination=&port=&protocol=&status=&component=&impl=&vrf=` | Search/filter with pagination |
-| `POST /api/rules` · `PUT /api/rules/{id}` | Create/update (architect), versioned |
+| `POST /api/rules` · `PUT /api/rules/{id}` | Create/update (architect), versioned. A new rule is prefilled to expire in a year |
 | `POST /api/rules/emergency` | Document a rule already opened on the device (architect, operations) — mandatory reason, into review, time-limited |
-| `POST /api/rules/{id}/submit\|approve\|reject\|deactivate` | Review workflow |
+| `POST /api/rules/{id}/submit\|approve\|reject\|deactivate` | Review workflow. `approve`/`reject` are change-approver only, and four eyes are enforced on the acting **account**: whoever requested, created or submitted the rule cannot approve it, whichever roles that account holds |
+| `GET /api/rules/applications/summary` | The applications rules were opened for, with their in-force counts |
+| `POST /api/rules/applications/{app_id}/retire` | Propose every in-force rule of a retired application for removal (architect). **`dry_run` defaults to `true`** — a call without it reports what would happen and changes nothing |
 | `PUT /api/rules/{id}/impl-status` | Implementation status per component (operations) |
 | `GET /api/rules/{id}/conflicts` | Conflict warnings |
 | `GET /api/zones/…` | Zones, overview, matrix, batch requests, network mapping |
+| `GET /api/recertification/campaigns` · `POST …` · `POST …/{id}/close` | Recertification. Reading is open to the working roles; **starting and closing a campaign is change-approver only** — not the admin |
+| `GET /api/reports/evidence` · `/evidence.csv` | Evidence report for an audit: every change in a period, optionally by zone or application, with requester, approver, justification and date, plus the chain-integrity statement |
 | `GET /api/export/{fmt}` | `csv`, `json`, `juniper`, `checkpoint-cli`, `checkpoint-api`, `aci-json`, `aci-yaml` |
 | `GET /api/export/aerleon/{target}` | Capirca/Aerleon targets incl. `policy` YAML |
 | `GET /api/export/host/{os}?ip=` | Host firewall config for a target server |
