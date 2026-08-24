@@ -4,6 +4,16 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **A rule's requestor can be handed over.** An architect who changes department
+  or company proposes a successor for the rules they requested; the requestor
+  changes only once that successor confirms — an accountable person is not
+  assigned a rule without their consent. An admin may propose for a requestor
+  whose account is already gone (the case the recertification worklist flags),
+  but not while they are still active. Incoming handovers surface on the
+  successor's dashboard.
+- **Fixed:** recertification campaigns keyed the worklist by a rule's owner
+  (the Bearbeiter who rolled it out), not its requestor. Recertification asks
+  "is this still needed?" — a question for the requester, not the implementer.
 - **The audit log has a retention period now.** It held usernames and source
   IPs and grew without bound, which GDPR Art. 5(1)(e) and BSI CON.6 make a
   problem — and the hash chain was the reason it could not be solved, since

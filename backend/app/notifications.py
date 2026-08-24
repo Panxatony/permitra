@@ -102,6 +102,21 @@ def rule_implementation_pending(db: Session, rule, reason: str) -> None:
     )
 
 
+def requestor_handover_proposed(db, rule, successor) -> None:
+    """Tells the proposed successor a rule is waiting for them to take over."""
+    if not (successor.email and successor.notify_email):
+        return
+    subject = _("Permitra: rule {rule_id} handed over to you", rule_id=rule.rule_id)
+
+    def body(_u):
+        return _("Hello {name},\n\n{rule_line} has been proposed for you to take "
+                 "over as requestor. Confirm the takeover in Permitra - until you do, "
+                 "the requestor does not change.\n\n  {link}\n\nPermitra",
+                 name=successor.full_name or successor.username,
+                 rule_line=_rule_line(rule), link=f"{mailer.base_url()}/rules/{rule.rule_id}")
+    _send_each([successor], subject, body)
+
+
 def recertification_due(db: Session, expired: list, expiring: list) -> None:
     """Digest mail to operations about expired/expiring rules."""
     if not mailer.enabled() or not (expired or expiring):

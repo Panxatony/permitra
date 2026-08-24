@@ -133,6 +133,32 @@ function Coverage({ c, t, lang }) {
   )
 }
 
+/* Rules proposed for you to take over as requestor - so a handover is not
+   something you have to be told about out of band. */
+function IncomingHandovers() {
+  const { t } = useLang()
+  const [items, setItems] = useState([])
+  useEffect(() => {
+    api.incomingHandovers().then((r) => setItems(r.items || [])).catch(() => {})
+  }, [])
+  if (!items.length) return null
+  return (
+    <section className="emergency-banner">
+      <h2>{items.length === 1
+        ? t('A rule is waiting for you to take it over')
+        : t('Rules are waiting for you to take them over')} ({items.length})</h2>
+      <ul>
+        {items.map((r) => (
+          <li key={r.rule_id}>
+            <Link to={`/rules/${r.rule_id}`} className="rule-link">{r.rule_id}</Link> {r.name}
+            <span className="muted small"> — {t('from')} {r.handover_proposed_by}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 export default function Dashboard() {
   const { lang, t } = useLang()
   const [data, setData] = useState(null)
@@ -177,6 +203,7 @@ export default function Dashboard() {
       </div>
 
       <SetupChecklist />
+      <IncomingHandovers />
 
       {data.emergency && data.emergency.pending > 0 && (
         <section className={`emergency-banner ${data.emergency.overdue ? 'overdue' : ''}`}>

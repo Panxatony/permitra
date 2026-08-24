@@ -180,6 +180,30 @@ CATALOG: dict[str, dict[str, str]] = {
         "confirmed": "bestätigt",
         "rework": "Überarbeitung",
         "retired": "stillgelegt",
+        "Requestor handover proposed to {successor} - awaiting confirmation":
+            "Requestor-Übergabe an {successor} vorgeschlagen – wartet auf Bestätigung",
+        "Requestor handover confirmed: {previous} → {now}":
+            "Requestor-Übergabe bestätigt: {previous} → {now}",
+        "Requestor handover to {target} cancelled by {who}":
+            "Requestor-Übergabe an {target} abgebrochen von {who}",
+        "To {successor}": "An {successor}",
+        "From {previous}": "Von {previous}",
+        "'{username}' is not an active account": "'{username}' ist kein aktives Konto",
+        "A requestor is an architect account - '{username}' is {role}":
+            "Ein Requestor ist ein Architekten-Konto – '{username}' ist {role}",
+        "That is already the requestor": "Das ist bereits der Requestor",
+        "Only the current requestor may hand a rule over (an admin may, once the requestor's account is gone)":
+            "Nur der aktuelle Requestor darf eine Regel übergeben (ein Admin, sobald dessen Konto fort ist)",
+        "No handover is pending for this rule":
+            "Für diese Regel ist keine Übergabe offen",
+        "Only the proposed requestor can confirm the takeover":
+            "Nur der vorgeschlagene Requestor kann die Übernahme bestätigen",
+        "Only the two sides of the handover, or an admin, can end it":
+            "Nur die beiden Seiten der Übergabe oder ein Admin können sie beenden",
+        "Permitra: rule {rule_id} handed over to you":
+            "Permitra: Regel {rule_id} an dich übergeben",
+        "Hello {name},\n\n{rule_line} has been proposed for you to take over as requestor. Confirm the takeover in Permitra - until you do, the requestor does not change.\n\n  {link}\n\nPermitra":
+            "Hallo {name},\n\n{rule_line} wurde dir zur Übernahme als Requestor vorgeschlagen. Bitte bestätige die Übernahme in Permitra – bis dahin ändert sich der Requestor nicht.\n\n  {link}\n\nPermitra",
         "Description updated": "Beschreibung aktualisiert",
         "Destination": "Ziel",
         "EPG not found": "EPG nicht gefunden",

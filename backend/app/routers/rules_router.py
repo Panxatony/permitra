@@ -2,6 +2,7 @@ import re
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -805,6 +806,155 @@ def declare_emergency_rule(
     from .. import notifications
     notifications.rule_submitted(db, rule)
     return rule
+
+
+class RequestorHandover(BaseModel):
+    new_requestor: str
+
+
+def _active_architect(db: Session, username: str) -> User:
+    user = (db.query(User)
+            .filter(User.username == username, User.is_active.is_(True)).first())
+    if not user:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("'{username}' is not an active account", username=username))
+    if user.role != Role.architect:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("A requestor is an architect account - '{username}' is {role}",
+                              username=username, role=user.role.value))
+    return user
+
+
+@router.post("/{rule_id}/requestor-handover", response_model=RuleOut)
+def propose_requestor_handover(
+    rule_id: str,
+    payload: RequestorHandover,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect, Role.admin)),
+):
+    """Propose a new requestor for a rule - the successor still has to confirm.
+
+    An architect who changes department or company hands their rules over. Only
+    the current requestor may propose it (they are handing over their own
+    responsibility), with one exception: an admin may propose when the current
+    requestor is no longer an active account, because a departed requestor
+    cannot hand over what they can no longer reach - and the recertification
+    worklist flags exactly those rules.
+    """
+    rule = get_rule_or_404(db, rule_id)
+    is_current = user.username == rule.requestor
+    requestor_active = (db.query(User)
+                        .filter(User.username == rule.requestor,
+                                User.is_active.is_(True)).first() is not None)
+    if not is_current and not (user.role == Role.admin and not requestor_active):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            _("Only the current requestor may hand a rule over "
+                              "(an admin may, once the requestor's account is gone)"))
+
+    successor = _active_architect(db, payload.new_requestor.strip())
+    if successor.username == rule.requestor:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("That is already the requestor"))
+
+    rule.pending_requestor = successor.username
+    rule.handover_proposed_by = user.username
+    rule.handover_proposed_at = utcnow()
+    rule.version += 1
+    add_version(db, rule, user,
+                "Requestor handover proposed to {successor} - awaiting confirmation",
+                successor=successor.username)
+    audit.record(db, "rule", "rule.requestor_handover_proposed", actor=user.username,
+                 object=rule.rule_id,
+                 detail="To {successor}", detail_values={"successor": successor.username},
+                 source_ip=audit.client_ip(request))
+    db.commit()
+    db.refresh(rule)
+
+    from .. import notifications
+    notifications.requestor_handover_proposed(db, rule, successor)
+    return rule
+
+
+@router.post("/{rule_id}/requestor-handover/confirm", response_model=RuleOut)
+def confirm_requestor_handover(
+    rule_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect)),
+):
+    """The proposed successor accepts the rule - only now does the requestor change."""
+    rule = get_rule_or_404(db, rule_id)
+    if not rule.pending_requestor:
+        raise HTTPException(status.HTTP_409_CONFLICT, _("No handover is pending for this rule"))
+    if user.username != rule.pending_requestor:
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            _("Only the proposed requestor can confirm the takeover"))
+    previous = rule.requestor
+    rule.requestor = rule.pending_requestor
+    rule.pending_requestor = ""
+    rule.handover_proposed_by = ""
+    rule.handover_proposed_at = None
+    rule.version += 1
+    add_version(db, rule, user,
+                "Requestor handover confirmed: {previous} → {now}",
+                previous=previous or "-", now=user.username)
+    audit.record(db, "rule", "rule.requestor_handover_confirmed", actor=user.username,
+                 object=rule.rule_id,
+                 detail="From {previous}", detail_values={"previous": previous or "-"},
+                 source_ip=audit.client_ip(request))
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@router.post("/{rule_id}/requestor-handover/cancel", response_model=RuleOut)
+def cancel_requestor_handover(
+    rule_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect, Role.admin)),
+):
+    """Withdraw or decline a pending handover.
+
+    Both sides may end it: the proposer withdraws, the proposed successor
+    declines, an admin clears a stuck one. The requestor is unchanged - nothing
+    happened but a proposal, and it leaves the same trail whether accepted or not.
+    """
+    rule = get_rule_or_404(db, rule_id)
+    if not rule.pending_requestor:
+        raise HTTPException(status.HTTP_409_CONFLICT, _("No handover is pending for this rule"))
+    allowed = {rule.handover_proposed_by, rule.pending_requestor}
+    if user.username not in allowed and user.role != Role.admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            _("Only the two sides of the handover, or an admin, can end it"))
+    declined_by = user.username
+    target = rule.pending_requestor
+    rule.pending_requestor = ""
+    rule.handover_proposed_by = ""
+    rule.handover_proposed_at = None
+    rule.version += 1
+    add_version(db, rule, user,
+                "Requestor handover to {target} cancelled by {who}",
+                target=target, who=declined_by)
+    audit.record(db, "rule", "rule.requestor_handover_cancelled", actor=user.username,
+                 object=rule.rule_id, source_ip=audit.client_ip(request))
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@router.get("/handovers/incoming", response_model=RuleListOut)
+def incoming_handovers(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect)),
+):
+    """Rules proposed for this architect to take over - so a handover is not
+    something the successor has to be told about out of band."""
+    rules = (active_rules(db)
+             .filter(Rule.pending_requestor == user.username)
+             .order_by(Rule.rule_id).all())
+    return {"total": len(rules), "items": rules}
 
 
 @router.get("/{rule_id}", response_model=RuleDetail)
