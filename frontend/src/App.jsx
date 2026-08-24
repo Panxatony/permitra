@@ -78,12 +78,10 @@ const NAV = [
   { to: '/', label: 'Dashboard', roles: ['architect', 'operations'] },
   { to: '/approvals', label: 'Approvals', roles: ['change_approver'] },
   { to: '/rules', label: 'Rules', roles: ['architect', 'operations', 'change_approver'] },
-  { to: '/rules/new', label: 'New rule', roles: ['architect'] },
-  // Reachable by operations too - they are the ones at the firewall at three in
-  // the morning, and a fast path they cannot find is none. Deliberately not
-  // styled as a primary action: it should be available, not inviting.
-  { to: '/rules/new?emergency=1', label: 'Emergency change',
-    roles: ['architect', 'operations'], className: 'nav-emergency' },
+  // Creating a rule - and documenting an emergency change, which is an option on
+  // that same form - starts on the rules page as an overlay, so it is where the
+  // rules are rather than a page you navigate away to. The routes below still
+  // exist for deep links.
   { to: '/search', label: 'Analysis', roles: ['architect', 'operations'] },
   { to: '/recertification', label: 'Recertification',
     roles: ['architect', 'operations', 'change_approver'] },

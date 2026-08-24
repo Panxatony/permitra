@@ -287,6 +287,9 @@ label { display: flex; flex-direction: column; gap: .25rem; font-size: .85rem; f
 label:not(.inline):not(.checkbox) > *:last-child { margin-top: auto; }
 label.inline { flex-direction: row; align-items: center; gap: .5rem; }
 label.checkbox { flex-direction: row; align-items: center; gap: .35rem; font-weight: 400; }
+/* Required marker. The field itself carries `required`, so this is the visual
+   half only - hidden from screen readers, which are already told by the input. */
+.req { color: var(--red); font-weight: 700; }
 input, select, textarea {
   font: inherit; font-weight: 400; padding: .45rem .6rem;
   border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
@@ -307,6 +310,11 @@ fieldset > legend + * { margin-top: 0; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: .8rem; }
 .rule-form { max-width: 950px; }
+/* The group editors (source, destination, services) sit outside a <label>, so
+   their fields inherited body typography and rendered a step larger than every
+   label-wrapped field in the same form - most visibly in a native select's
+   option list. Set once on the container; input/select/textarea are font:inherit. */
+.address-editor, .services-edit { font-size: .85rem; }
 .service-row { display: flex; gap: .5rem; margin: .3rem 0; }
 .service-row input { flex: 1; }
 .platform-select { display: flex; gap: 1rem; align-items: center; font-size: .9rem; }
@@ -426,8 +434,14 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .matrix-toolbar { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap; margin: .6rem 0; }
 .matrix-toolbar h2 { margin: 0; }
 .cell-edit:hover { outline: 2px solid var(--primary); outline-offset: -2px; }
-.zone-add { display: flex; gap: .5rem; }
 .zone-manage { margin-top: .8rem; display: flex; flex-direction: column; gap: .6rem; }
+/* The zone-add bar: the button plus the zones already queued for the request.
+   The form itself lives in an overlay now, so this row only has to hold what
+   stays visible while the matrix is being edited. */
+.zone-add-bar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
+  margin-bottom: .5rem; }
+.zone-add-form { display: flex; flex-direction: column; gap: .8rem; }
+
 .zone-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
 .zone-chip {
   display: inline-flex; align-items: center; gap: .3rem; background: var(--panel);
@@ -450,6 +464,9 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
   width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto;
   box-shadow: 0 18px 50px rgba(0, 0, 0, .3);
 }
+/* For forms rather than prose: 640px keeps help text at a readable measure,
+   but folds a three-column form into one. */
+.modal-wide { max-width: 1040px; }
 .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .8rem; }
 .modal-head h2 { margin: 0; }
 .modal-form { display: flex; flex-direction: column; gap: .9rem; }
@@ -520,6 +537,11 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
   border: 1px solid var(--border); color: var(--muted);
   font-size: .75rem; font-weight: 700; text-decoration: none;
   vertical-align: middle; margin-left: .2rem;
+  /* It is a <button> now (it opens the explanation in place rather than
+     navigating), so the browser's button defaults have to be cleared or the
+     "?" changes shape depending on which element it happens to be. */
+  background: none; padding: 0; line-height: 1;
+  font-family: inherit; cursor: pointer;
 }
 .help-link:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
 .nav-help { opacity: .75; }
@@ -683,7 +705,9 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 
 /* Address entries */
 .address-editor { display: flex; flex-direction: column; gap: .3rem; }
-.addr-label { font-size: .85rem; font-weight: 600; }
+/* The typography of a form label, for the places that label a group of inputs
+   rather than one - source, destination, services. */
+.field-label { font-size: .85rem; font-weight: 600; }
 .addr-entries div { line-height: 1.5; }
 .platform-unknown { background: var(--neutral-bg); color: var(--neutral-fg); }
 .comp-badge { margin-right: .25rem; }
@@ -725,6 +749,13 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
   margin: .75rem 0; padding: .6rem .8rem; border-radius: 6px;
   border: 1px solid var(--green-border); background: var(--green-bg-2);
   font-size: .88rem; }
+/* The emergency option on the new-rule form: an option, not a mode - placed
+   above the form so the choice is made before the fields are filled in.
+   Layout comes from label.checkbox (row, normal weight); only the spacing and
+   the wrap behaviour are specific to this one. */
+.emergency-toggle { align-items: flex-start; margin: 0 0 .8rem; }
+.emergency-toggle input { margin-top: .15rem; flex: none; }
+
 .evidence-integrity.warn { border-color: var(--amber-border); background: var(--amber-bg-2); }
 .role-option input:disabled + * , .role-option input:disabled { cursor: not-allowed; }
 .approval-box { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; padding: .9rem 1rem; }
@@ -758,7 +789,7 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
   .pair-form input, .pair-form input:first-child { width: 100%; min-width: 0; max-width: none; }
   .service-row { flex-wrap: wrap; }
   .service-row input { min-width: 0; }
-  .platform-select, .zone-add { flex-direction: column; align-items: stretch; gap: .4rem; }
+  .platform-select { flex-direction: column; align-items: stretch; gap: .4rem; }
   .actions { flex-wrap: wrap; }
   .comment-form { flex-direction: column; }
   .unknown-address { flex-direction: column; align-items: flex-start; }
