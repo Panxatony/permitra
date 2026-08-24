@@ -22,6 +22,7 @@ from .routers import (
     netbox_router,
     objects_router,
     recert_router,
+    reports_router,
     risk_router,
     rules_router,
     settings_router,
@@ -30,6 +31,7 @@ from .routers import (
     zones_router,
 )
 from .seed import seed_users
+from .version import VERSION
 
 
 def _lifespan(app):          # eigentliche Implementierung weiter unten
@@ -40,7 +42,7 @@ app = FastAPI(
     lifespan=_lifespan,
     title="Permitra",
     description="Central management of security rules for firewalls (Juniper SRX, Check Point) and ACI contracts",
-    version="0.7.4-alpha",
+    version=VERSION,
 )
 
 # CORS origins are configurable (PERMITRA_CORS_ORIGINS, comma-separated).
@@ -78,6 +80,7 @@ app.include_router(objects_router.router)
 app.include_router(epgs_router.router)
 app.include_router(risk_router.router)
 app.include_router(recert_router.router)
+app.include_router(reports_router.router)
 app.include_router(vrfs_router.router)
 
 

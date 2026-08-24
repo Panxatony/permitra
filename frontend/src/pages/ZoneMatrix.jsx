@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, getUser } from '../api'
-import { Modal } from '../components/shared'
+import { HelpLink, Modal } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
 const SB_BADGE = { normal: 'status-draft', 'high': 'status-in_review', 'very high': 'status-rejected' }
@@ -700,7 +700,7 @@ export default function ZoneMatrix() {
       )}
 
       <div className="matrix-toolbar">
-        <h2>{t('Communication matrix')} <span className="muted small">{t('(row = source, column = destination)')}</span></h2>
+        <h2>{t('Communication matrix')} <HelpLink topic="zones" label={t('How zones and the matrix work')} /> <span className="muted small">{t('(row = source, column = destination)')}</span></h2>
         {canEdit && !editMode && (
           <button className="btn btn-primary" onClick={startEdit}>{t('Change matrix')}</button>
         )}

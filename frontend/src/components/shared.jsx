@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { useLang } from '../i18n'
 import { api } from '../api'
@@ -26,6 +27,16 @@ export function Modal({ title, onClose, children }) {
 /* In workflow order. The keys are English like every other dictionary key -
    with German ones the labels stayed German on an English instance, because a
    key that is not in the dictionary falls back to itself. */
+/* A "?" that lands on the paragraph explaining the feature it sits next to.
+   Help that has to be searched for answers a different, easier question than
+   the one being asked. */
+export function HelpLink({ topic, label }) {
+  return (
+    <Link to={`/help#${topic}`} className="help-link"
+      title={label} aria-label={label}>?</Link>
+  )
+}
+
 export const STATUS_LABELS = {
   draft: 'Draft',
   in_review: 'In review',

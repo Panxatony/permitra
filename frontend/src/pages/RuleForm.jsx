@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { HelpLink } from '../components/shared'
 import { useLang } from '../i18n'
 import { api } from '../api'
 
@@ -256,7 +257,7 @@ export default function RuleForm() {
     <form className="rule-form" onSubmit={submit}>
       <h1>
         {isEdit ? `${t('Edit')}: ${id}`
-          : isEmergency ? t('Document an emergency change') : t('Create new rule')}
+          : isEmergency ? <>{t('Document an emergency change')} <HelpLink topic="emergency" label={t('How the emergency path works')} /></> : t('Create new rule')}
       </h1>
       {error && <div className="error">{error}</div>}
       {isEmergency && (

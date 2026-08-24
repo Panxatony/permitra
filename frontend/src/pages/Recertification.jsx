@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, getToken, getUser } from '../api'
-import { ComponentBadges, ServiceList } from '../components/shared'
+import { ComponentBadges, HelpLink, ServiceList } from '../components/shared'
 import { useLang } from '../i18n'
 
 function plusMonths(n) {
@@ -300,7 +300,7 @@ export default function Recertification() {
       {notice && <div className="okbox">{notice}</div>}
 
       <section>
-        <h2>{t('Campaigns')}</h2>
+        <h2>{t('Campaigns')} <HelpLink topic="recert" label={t('How campaigns work')} /></h2>
         <p className="muted small">
           {t('Extending a date is a decision about a calendar. A campaign asks the actual question, rule by rule: still needed, still correct, still owned – and its report shows who answered and what is outstanding.')}
         </p>

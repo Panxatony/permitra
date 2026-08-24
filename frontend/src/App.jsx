@@ -5,7 +5,8 @@ import { useLang } from './i18n'
 import { useTheme } from './theme'
 import Components from './pages/Components'
 import Dashboard from './pages/Dashboard'
-import Gateways from './pages/Gateways'
+import Help from './pages/Help'
+import Reports from './pages/Reports'
 import Networks from './pages/Networks'
 import ObjectCatalog from './pages/ObjectCatalog'
 import Recertification from './pages/Recertification'
@@ -33,6 +34,12 @@ function Layout({ children }) {
   const { t } = useLang()
   const { theme, cycle: cycleTheme } = useTheme()
   const [vrfs, setVrfs] = useState([])
+  // The backend's version, not the bundle's: the number on screen should be
+  // the number of the code that is actually answering.
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    api.publicSettings().then((s) => setVersion(s.version || '')).catch(() => {})
+  }, [])
   useEffect(() => {
     api.vrfs().then(setVrfs).catch(() => setVrfs([]))
   }, [])
@@ -111,14 +118,27 @@ function Layout({ children }) {
               <Link to="/zones">{t('Security zones')}</Link>
               <Link to="/networks">{t('Networks')}</Link>
               <Link to="/components">{t('Components')}</Link>
-              <Link to="/gateways">{t('ACI gateways')}</Link>
               <Link to="/objects">{t('Objects')}</Link>
               <Link to="/export">{t('Export')}</Link>
+              <Link to="/reports">{t('Reports')}</Link>
             </>
           )}
+          <Link to="/help" className="nav-help">{t('Help')}</Link>
         </nav>
       </header>
       <main>{children}</main>
+      <footer className="app-footer">
+        <span>Permitra {version && <code>{version}</code>}</span>
+        <span>
+          <Link to="/help">{t('Help')}</Link>
+          {' · '}
+          <a href="https://github.com/Panxatony/permitra" target="_blank"
+            rel="noopener noreferrer">GitHub</a>
+          {' · '}
+          <a href="https://permitra.de" target="_blank" rel="noopener noreferrer">permitra.de</a>
+        </span>
+        <span className="muted">Apache-2.0 · © 2026 Lars Vonhof-Hunold</span>
+      </footer>
     </div>
   )
 }
@@ -147,12 +167,16 @@ export default function App() {
       <Route path="/rules/:id/edit" element={<Layout><RuleForm /></Layout>} />
       <Route path="/search" element={<Layout><Search /></Layout>} />
       <Route path="/path" element={<Navigate to="/search" replace />} />
+      {/* The gateways moved onto the components page - an ACI gateway is a
+          property of the fabric, not a domain of its own. Old links keep working. */}
+      <Route path="/gateways" element={<Navigate to="/components" replace />} />
       <Route path="/zones" element={<Layout><ZoneMatrix /></Layout>} />
       <Route path="/networks" element={<Layout><Networks /></Layout>} />
       <Route path="/components" element={<Layout><Components /></Layout>} />
-      <Route path="/gateways" element={<Layout><Gateways /></Layout>} />
       <Route path="/objects" element={<Layout><ObjectCatalog /></Layout>} />
       <Route path="/export" element={<Layout><ExportPage /></Layout>} />
+      <Route path="/help" element={<Layout><Help /></Layout>} />
+      <Route path="/reports" element={<Layout><Reports /></Layout>} />
     </Routes>
   )
 }

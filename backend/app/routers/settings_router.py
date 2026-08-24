@@ -9,6 +9,7 @@ from ..database import get_db
 from ..messages import _
 from ..models import Role, User
 from ..settings import KNOWN_SETTINGS, all_settings, get_setting, set_setting
+from ..version import VERSION
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -21,7 +22,9 @@ def read_public_settings(db: Session = Depends(get_db)):
     settings endpoint requires authentication. Only the language is exposed
     here - nothing about it is sensitive, and keeping the response minimal
     avoids leaking configuration to unauthenticated callers."""
-    return {"ui_language": get_setting(db, "ui_language")}
+    # The version is public by design: it is on every login screen of every
+    # self-hosted product, and the footer has to know it before sign-in too.
+    return {"ui_language": get_setting(db, "ui_language"), "version": VERSION}
 
 
 @router.get("")
