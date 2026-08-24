@@ -204,6 +204,23 @@ CATALOG: dict[str, dict[str, str]] = {
             "Permitra: Regel {rule_id} an dich übergeben",
         "Hello {name},\n\n{rule_line} has been proposed for you to take over as requestor. Confirm the takeover in Permitra - until you do, the requestor does not change.\n\n  {link}\n\nPermitra":
             "Hallo {name},\n\n{rule_line} wurde dir zur Übernahme als Requestor vorgeschlagen. Bitte bestätige die Übernahme in Permitra – bis dahin ändert sich der Requestor nicht.\n\n  {link}\n\nPermitra",
+        "The rule logs nothing, into a zone with protection level '{level}' – an access nobody recorded cannot be reconstructed afterwards":
+            "Die Regel protokolliert nichts, in eine Zone mit Schutzbedarf '{level}' – ein nicht protokollierter Zugriff lässt sich nachträglich nicht rekonstruieren",
+        "The rule logs nothing, into a zone with protection level 'high' or 'very high'":
+            "Die Regel protokolliert nichts, in eine Zone mit Schutzbedarf 'hoch' oder 'sehr hoch'",
+        "An access nobody recorded cannot be reconstructed afterwards":
+            "Ein nicht protokollierter Zugriff lässt sich nachträglich nicht rekonstruieren",
+        "Contract {contract}, filter {filter}: the rules behind it disagree about logging – the subject logs, because a missing log entry cannot be reconstructed later":
+            "Contract {contract}, Filter {filter}: die dahinterliegenden Regeln sind bei der Protokollierung uneins – das Subject protokolliert, weil ein fehlender Log-Eintrag später nicht rekonstruierbar ist",
+        "'{host}' is not an allowed target": "'{host}' ist kein erlaubtes Ziel",
+        "NetBox redirected to {url} – not followed":
+            "NetBox hat auf {url} umgeleitet – nicht gefolgt",
+        "NetBox referred to a different host ({host}) – ignored":
+            "NetBox verwies auf einen anderen Host ({host}) – ignoriert",
+        "Only http:// and https:// are allowed": "Nur http:// und https:// sind erlaubt",
+        "The address has no host": "Die Adresse hat keinen Host",
+        "Only {checked} entries accounted for, the checkpoint records {count}":
+            "Nur {checked} Einträge nachweisbar, der Prüfpunkt verzeichnet {count}",
         "Description updated": "Beschreibung aktualisiert",
         "Destination": "Ziel",
         "EPG not found": "EPG nicht gefunden",

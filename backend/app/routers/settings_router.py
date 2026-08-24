@@ -22,9 +22,20 @@ def read_public_settings(db: Session = Depends(get_db)):
     settings endpoint requires authentication. Only the language is exposed
     here - nothing about it is sensitive, and keeping the response minimal
     avoids leaking configuration to unauthenticated callers."""
+    lang = get_setting(db, "ui_language")
+    # Self-heal the cached language. Messages cache the instance language rather
+    # than reading it per request, so a change made in another process - the
+    # nightly demo reseed sets it in a separate python process - can leave the
+    # running server's cache stale (the symptom: German UI, an English backend
+    # message). The interface fetches this on every page load, so refreshing the
+    # cache here corrects any drift at the next load, cheaply, off a read that
+    # was already happening.
+    from .. import messages
+    if messages.current_language() != ("de" if lang == "de" else "en"):
+        messages.set_language(lang)
     # The version is public by design: it is on every login screen of every
     # self-hosted product, and the footer has to know it before sign-in too.
-    return {"ui_language": get_setting(db, "ui_language"), "version": VERSION}
+    return {"ui_language": lang, "version": VERSION}
 
 
 @router.get("")

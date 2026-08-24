@@ -331,6 +331,8 @@ const DE = {
   'A rule is waiting for you to take it over': 'Eine Regel wartet auf deine Übernahme',
   'Rules are waiting for you to take them over': 'Regeln warten auf deine Übernahme',
   'from': 'von',
+  'Zone matrix forbids rules {from} → {to} (Block)': 'Zonen-Matrix verbietet Regeln {from} → {to} (Block)',
+  'Zone matrix: rules {from} → {to} allowed (firewall)': 'Zonen-Matrix: Regeln {from} → {to} erlaubt (Firewall)',
   'Wider than approved': 'Weiter als freigegeben',
   'On the device carrying an approved rule ID, but permitting more than that rule was approved for – a rule opened up beyond its justification.': 'Auf dem Gerät mit einer freigegebenen Regel-ID, erlaubt aber mehr als diese Regel freigegeben war – eine über ihre Begründung hinaus geöffnete Regel.',
   'The rule contents on this device are not compared to what was approved (format not parsed to that depth) – only presence and coverage are checked.': 'Die Regelinhalte auf diesem Gerät werden nicht mit der Freigabe verglichen (Format nicht so tief geparst) – nur Vorhandensein und Deckung werden geprüft.',
