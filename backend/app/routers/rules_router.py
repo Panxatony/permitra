@@ -831,7 +831,11 @@ def propose_requestor_handover(
     payload: RequestorHandover,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(Role.architect, Role.admin)),
+    # Operations is here because an emergency change is requested by the ops
+    # account that opened it (#36) - so an ops account can be a requestor, and a
+    # requestor must be able to hand their own rule on to the architect who owns
+    # the application. The real gate is is_current below, not the role.
+    user: User = Depends(require_roles(Role.architect, Role.operations, Role.admin)),
 ):
     """Propose a new requestor for a rule - the successor still has to confirm.
 
