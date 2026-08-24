@@ -67,21 +67,28 @@ def setup_status(db: Session = Depends(get_db), _user: User = Depends(get_curren
     approvers = active(Role.change_approver)
     accounts_done = architects >= 1 and operations >= 1 and approvers >= 2
 
+    # Two phases, because two different people act. The admin prepares the
+    # instance - language, accounts - and then hands over: everything from the
+    # zones on is the architects' work, which is exactly why the accounts come
+    # before the domain steps rather than after them. An admin working the list
+    # top to bottom reaches "create accounts" while it is still their move.
     steps = [
-        # (id, done, count-or-None, who acts, where)
-        ("language", language_chosen, None, "admin", "/admin"),
-        ("zones", zones > 0, zones, "architect", "/zones"),
-        ("networks", networks > 0, networks, "architect", "/networks"),
-        ("components", components > 0, components, "architect", "/components"),
-        # The matrix step is done when either relations are maintained or the
-        # default-deny decision was made explicitly - both are the deliberate
-        # act the step asks for; an untouched legacy default is neither.
-        ("matrix", policies > 0 or matrix_default_chosen, policies, "approver", "/zones"),
-        ("accounts", accounts_done, None, "admin", "/admin"),
+        # (id, done, count-or-None, phase, who acts, where)
+        ("language", language_chosen, None, "admin", "admin", "/admin"),
+        ("accounts", accounts_done, None, "admin", "admin", "/admin"),
+        ("zones", zones > 0, zones, "architect", "architect", "/zones"),
+        ("networks", networks > 0, networks, "architect", "architect", "/networks"),
+        ("components", components > 0, components, "architect", "architect", "/components"),
+        # Done when either relations are maintained or the default-deny decision
+        # was made explicitly - both are the deliberate act the step asks for;
+        # an untouched legacy default is neither. Maintained by architects,
+        # approved by two change approvers.
+        ("matrix", policies > 0 or matrix_default_chosen, policies,
+         "architect", "architect", "/zones"),
         # The proof step: the first rule exercises zone derivation and the
         # address mapping (the form asks once per new address), so reaching it
         # means the steps above actually fit together.
-        ("first_rule", rules > 0, rules, "architect", "/rules/new"),
+        ("first_rule", rules > 0, rules, "architect", "architect", "/rules/new"),
     ]
 
     warnings = []
@@ -94,8 +101,9 @@ def setup_status(db: Session = Depends(get_db), _user: User = Depends(get_curren
     return {
         "complete": all(done for _, done, *_ in steps),
         "steps": [
-            {"id": sid, "done": done, "count": count, "role": role, "route": route}
-            for sid, done, count, role, route in steps
+            {"id": sid, "done": done, "count": count, "phase": phase,
+             "role": role, "route": route}
+            for sid, done, count, phase, role, route in steps
         ],
         "mappings": mappings,
         "approvers_active": approvers,

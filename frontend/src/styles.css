@@ -540,7 +540,11 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 /* First-run checklist (#67) */
 .setup-card { border-left: 3px solid var(--accent); }
 .setup-steps { list-style: none; padding: 0; margin: .6rem 0 0; display: flex; flex-direction: column; gap: .45rem; }
-.setup-steps li { display: flex; gap: .55rem; align-items: baseline; font-size: .93rem; }
+.setup-steps li { font-size: .93rem; }
+.setup-row { display: flex; gap: .55rem; align-items: baseline; }
+.setup-phase { font-size: .78rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--muted); margin: .5rem 0 .2rem; }
+.setup-steps li:first-child .setup-phase { margin-top: 0; }
 .setup-mark { color: var(--accent); font-weight: 700; width: 1rem; text-align: center; flex-shrink: 0; }
 .setup-done { color: var(--muted); }
 .setup-done .setup-mark { color: var(--green); }
