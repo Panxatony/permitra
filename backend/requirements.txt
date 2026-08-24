@@ -8,6 +8,6 @@ psycopg2-binary>=2.9; platform_system != "Windows"
 PyYAML>=6.0
 openpyxl>=3.1.5
 
-alembic>=1.13
+alembic>=1.19.1
 aerleon>=1.17.0
 webauthn>=3.0.0
