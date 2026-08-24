@@ -51,7 +51,15 @@ from datetime import timezone
 from sqlalchemy.orm import Session
 
 from .messages import _, render
-from .models import AuditCheckpoint, AuditEvent, Rule, RuleVersion, ZonePolicyChange, utcnow
+from .models import (
+    AuditCheckpoint,
+    AuditEvent,
+    AuditRetentionSeal,
+    Rule,
+    RuleVersion,
+    ZonePolicyChange,
+    utcnow,
+)
 
 log = logging.getLogger("permitra.audit")
 
@@ -193,7 +201,15 @@ def record(db: Session, category: str, event: str, actor: str = "", object: str 
         try:
             _advisory_lock(db)
             last = db.query(AuditEvent).order_by(AuditEvent.id.desc()).first()
-            prev_hash = last.hash if (last and last.hash) else GENESIS
+            if last and last.hash:
+                prev_hash = last.hash
+            else:
+                # No event to chain from - but if retention has collapsed the
+                # whole surviving tail away, the chain does not restart at
+                # genesis: it continues from the newest seal's boundary hash,
+                # or verification would break across the seal.
+                seal = latest_seal(db)
+                prev_hash = seal.boundary_hash if seal else GENESIS
             h = event_hash(ts, category, event, actor, object, detail,
                            source_ip, extra, prev_hash)
             db.add(AuditEvent(
@@ -210,6 +226,103 @@ def record(db: Session, category: str, event: str, actor: str = "", object: str 
 
 def latest_checkpoint(db: Session) -> AuditCheckpoint | None:
     return db.query(AuditCheckpoint).order_by(AuditCheckpoint.id.desc()).first()
+
+
+def latest_seal(db: Session):
+    """The newest retention seal, or None. Its boundary_hash is where the
+    surviving chain begins - verification starts from there instead of genesis."""
+    return db.query(AuditRetentionSeal).order_by(AuditRetentionSeal.id.desc()).first()
+
+
+def _collapsed_total(db: Session) -> int:
+    """How many events all seals together have removed - needed to make the
+    surviving count add up against the end-checkpoint's total."""
+    from sqlalchemy import func
+    return db.query(func.coalesce(func.sum(AuditRetentionSeal.collapsed_count), 0)).scalar() or 0
+
+
+def retention_days(db: Session) -> int:
+    from .settings import get_setting
+    try:
+        return int(get_setting(db, "audit_retention_days"))
+    except (ValueError, TypeError):
+        return 0
+
+
+def collapse_expired(db: Session) -> dict:
+    """Deletes the audit prefix past the retention period, behind a seal.
+
+    The boundary is the newest event that is older than the retention period AND
+    - if a SIEM is configured - has been delivered to it. Delivery is in order
+    and stops at the first failure, so the delivered events form a contiguous
+    prefix; taking the newest delivered-and-expired one keeps the collapse to a
+    provable prefix. Refusing to collapse an undelivered event is the line
+    between externalising evidence and destroying it: without it, retention
+    would quietly delete records the SIEM never received.
+
+    Returns a small summary. Does nothing when retention is disabled (0), which
+    is the default - deletion of personal data is an operator decision, never a
+    surprise.
+    """
+    from datetime import timedelta
+
+    days = retention_days(db)
+    if days <= 0:
+        return {"collapsed": 0, "reason": "retention disabled"}
+
+    cutoff = utcnow() - timedelta(days=days)
+    siem = push_enabled()
+
+    # Walk the remaining events oldest-first and advance the boundary while each
+    # is both expired and (if a SIEM is configured) delivered. No id watermark:
+    # previously collapsed events are already deleted, so the oldest remaining
+    # one is exactly where the surviving chain begins - and not depending on ids
+    # keeps this correct even where they are reused (SQLite after a full delete).
+    boundary = None
+    collapsed = 0
+    q = db.query(AuditEvent).order_by(AuditEvent.id.asc()).yield_per(500)
+    for ev in q:
+        ts = _aware(ev.ts)
+        if ts >= cutoff:
+            break  # reached events still within the retention window
+        if siem and ev.siem_status == "pending":
+            break  # not yet externalised - would destroy evidence, so stop here
+        boundary = ev
+        collapsed += 1
+
+    if boundary is None or collapsed == 0:
+        return {"collapsed": 0, "reason": "nothing expired and deliverable"}
+
+    # Snapshot before the delete: after commit the boundary row is gone, so
+    # reading its attributes back would raise.
+    boundary_id = boundary.id
+    boundary_hash = boundary.hash or ""
+
+    new_seal = AuditRetentionSeal(
+        sealed_at=utcnow(),
+        boundary_event_id=boundary_id,
+        boundary_hash=boundary_hash,
+        collapsed_count=collapsed,
+        delivered_at=None if siem else utcnow(),
+    )
+    db.add(new_seal)
+    db.flush()
+    seal_id = new_seal.id
+    deleted = (db.query(AuditEvent)
+               .filter(AuditEvent.id <= boundary_id)
+               .delete(synchronize_session=False))
+    db.commit()
+    # The bulk delete bypasses the session, so any collapsed rows still held in
+    # the identity map are now stale - drop them, or the next access raises
+    # ObjectDeletedError.
+    db.expire_all()
+    log.info("Audit retention: collapsed %d event(s) up to id %d behind seal %d",
+             deleted, boundary_id, seal_id)
+    return {"collapsed": deleted, "boundary_event_id": boundary_id, "seal_id": seal_id}
+
+
+def _aware(dt):
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def create_checkpoint(db: Session) -> AuditCheckpoint | None:
@@ -242,8 +355,18 @@ def _check_against_checkpoint(db: Session, checked: int) -> dict | None:
     cp = latest_checkpoint(db)
     if cp is None:
         return None
+    seal = latest_seal(db)
     anchor = db.get(AuditEvent, cp.last_event_id)
     if anchor is None:
+        # A missing anchor is truncation - unless it was legitimately collapsed
+        # behind a seal, in which case only the count still has to add up.
+        if seal and cp.last_event_id <= seal.boundary_event_id:
+            if checked < cp.event_count:
+                return {"ok": False, "checked": checked, "broken_at_id": None,
+                        "reason": _("Only {checked} entries accounted for, the "
+                                    "checkpoint records {count}",
+                                    checked=checked, count=cp.event_count)}
+            return None
         return {"ok": False, "checked": checked, "broken_at_id": cp.last_event_id,
                 "reason": _("Anchored entry {event_id} is missing – the chain was "
                             "truncated after the checkpoint of {ts:%Y-%m-%d %H:%M}",
@@ -264,7 +387,12 @@ def verify_chain(db: Session) -> dict:
     """Verifies the complete hash chain. Returns ok=True only if every entry is
     unchanged in content, links seamlessly to its predecessor AND the most
     recent checkpoint is still covered (protection against truncation)."""
-    prev = GENESIS
+    # A retention seal moves the start of the provable chain forward: the events
+    # before it are gone, but the seal records the hash the first survivor links
+    # back to, so verification begins there instead of at genesis.
+    seal = latest_seal(db)
+    prev = seal.boundary_hash if seal else GENESIS
+    collapsed = _collapsed_total(db)
     checked = 0
     for ev in db.query(AuditEvent).order_by(AuditEvent.id.asc()).yield_per(500):
         checked += 1
@@ -277,7 +405,7 @@ def verify_chain(db: Session) -> dict:
                     "reason": _("Hash does not match the content (entry modified)")}
         prev = ev.hash
 
-    broken = _check_against_checkpoint(db, checked)
+    broken = _check_against_checkpoint(db, checked + collapsed)
     if broken:
         return broken
 
@@ -285,7 +413,8 @@ def verify_chain(db: Session) -> dict:
     return {
         "ok": True,
         "checked": checked,
-        "head_hash": prev if checked else GENESIS,
+        "collapsed": collapsed,
+        "head_hash": prev if checked else (seal.boundary_hash if seal else GENESIS),
         "anchor": {
             "event_count": cp.event_count,
             "ts": _iso(cp.ts),
@@ -482,6 +611,40 @@ def deliver_pending_checkpoints(db: Session, batch: int = 20) -> dict:
     return {"sent": sent, "pending": remaining}
 
 
+def deliver_pending_seals(db: Session, batch: int = 20) -> dict:
+    """Delivers retention seals to the SIEM.
+
+    A seal is the anchor for a segment whose individual events have been
+    deleted, so its copy at the SIEM is the only remaining proof the collapsed
+    prefix ever linked up. Same durable outbox as events and checkpoints."""
+    if not push_enabled():
+        return {"sent": 0, "pending": 0}
+    rows = (db.query(AuditRetentionSeal)
+            .filter(AuditRetentionSeal.delivered_at.is_(None))
+            .order_by(AuditRetentionSeal.id.asc()).limit(batch).all())
+    sent = 0
+    for seal in rows:
+        payload = {
+            "type": "audit", "event": "audit.retention_seal",
+            "actor": "permitra", "object": f"seal#{seal.id}",
+            "detail": "Audit prefix collapsed under the retention period",
+            "collapsed_count": seal.collapsed_count,
+            "boundary_event_id": seal.boundary_event_id,
+            "boundary_hash": seal.boundary_hash, "timestamp": _iso(seal.sealed_at),
+        }
+        seal.attempts = (seal.attempts or 0) + 1
+        if deliver(payload):
+            seal.delivered_at = utcnow()
+            db.commit()
+            sent += 1
+        else:
+            db.commit()
+            break
+    remaining = (db.query(AuditRetentionSeal)
+                 .filter(AuditRetentionSeal.delivered_at.is_(None)).count())
+    return {"sent": sent, "pending": remaining}
+
+
 def siem_status(db: Session) -> dict:
     """Overview of the delivery state for the admin view."""
     def _count(status):
@@ -499,4 +662,11 @@ def siem_status(db: Session) -> dict:
         } if cp else None,
         "anchors_pending": db.query(AuditCheckpoint).filter(
             AuditCheckpoint.delivered_at.is_(None)).count(),
+        # Retention: how far the chain has been collapsed, and whether the seals
+        # that prove the collapsed segments still owe delivery to the SIEM.
+        "retention_days": retention_days(db),
+        "events_collapsed": _collapsed_total(db),
+        "seals": db.query(AuditRetentionSeal).count(),
+        "seals_pending": db.query(AuditRetentionSeal).filter(
+            AuditRetentionSeal.delivered_at.is_(None)).count(),
     }

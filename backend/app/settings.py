@@ -26,6 +26,11 @@ KNOWN_SETTINGS = {
     # after the fact. Short on purpose: the window is what keeps the fast path
     # from becoming an ordinary Tuesday. First value is the default.
     "emergency_window_hours": ("24", "8", "48", "72"),
+    # How long an audit event is kept before its segment is collapsed behind a
+    # retention seal (days). "0" keeps everything forever, which is the current
+    # behaviour and the safe default - retention deletes personal data, so it is
+    # an operator decision, never a surprise on upgrade. See audit.collapse_expired.
+    "audit_retention_days": ("0", "90", "180", "365", "730", "1095"),
 }
 
 

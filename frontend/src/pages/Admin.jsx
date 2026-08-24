@@ -158,6 +158,22 @@ export default function Admin() {
         <p className="muted small">
           {t('With default-deny, new rules for zone relationships without a matrix entry are rejected until the relationship is set to Allow via a matrix request (two approvals).')}
         </p>
+        <label style={{ maxWidth: '640px', marginTop: '1rem', display: 'block' }}>
+          {t('Audit log: retention period for personal data')}
+          <select value={settings.audit_retention_days || '0'}
+            onChange={(e) => act(() => api.updateSettings({ audit_retention_days: e.target.value })
+              .then((s) => { setSettings(s); return { detail: t('Setting saved') } }))}>
+            <option value="0">{t('Keep forever (no deletion)')}</option>
+            <option value="90">90 {t('days')}</option>
+            <option value="180">180 {t('days')}</option>
+            <option value="365">365 {t('days')}</option>
+            <option value="730">730 {t('days')}</option>
+            <option value="1095">1095 {t('days')}</option>
+          </select>
+        </label>
+        <p className="muted small">
+          {t('Audit events hold usernames and source IPs. Beyond this age, the oldest segment is deleted and replaced by a sealed anchor, so the hash chain stays verifiable while the personal data is removed (GDPR Art. 5(1)(e), BSI CON.6). With a SIEM configured, nothing is deleted until it has been delivered there – retention externalises evidence, it does not destroy it.')}
+        </p>
         <h4 style={{ margin: '1rem 0 .4rem' }}>{t('Mandatory fields for rules')}</h4>
         <p className="muted small">
           {t('Active by default (BSI documentation duties) – they can be deactivated here if needed.')}
