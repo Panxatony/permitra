@@ -27,6 +27,29 @@ const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 
 const ROLE_LABELS = { architect: 'Architect', operations: 'Operations', change_approver: 'Change approver', admin: 'Administrator' }
 
+/* Which routes a role may open - mirroring the navigation, but enforced.
+   The navigation only hides links, and hiding is worth exactly nothing against
+   a typed URL: an admin following /zones landed on the zones page. The real
+   enforcement is the backend (require_roles admits exactly the roles named);
+   this guard is the visible half, so a role never stands on a page whose every
+   action would 403. Admin and approver carry allowlists because their views
+   are deliberately narrow; the working roles carry denylists. */
+const ROLE_ROUTES = {
+  admin: { allow: ['/admin', '/recertification', '/reports', '/help', '/account'], home: '/admin' },
+  change_approver: { allow: ['/approvals', '/rules', '/recertification', '/reports',
+    '/zones', '/networks', '/help', '/account'], home: '/approvals' },
+  architect: { deny: ['/admin', '/approvals'], home: '/' },
+  operations: { deny: ['/admin', '/approvals'], home: '/' },
+}
+
+function routeAllowed(role, path) {
+  const spec = ROLE_ROUTES[role]
+  if (!spec) return true
+  const matches = (p) => path === p || path.startsWith(p + '/')
+  if (spec.allow) return path === '/' ? spec.home === '/' : spec.allow.some(matches)
+  return !spec.deny.some(matches)
+}
+
 function Layout({ children }) {
   const user = getUser()
   const navigate = useNavigate()
@@ -43,6 +66,11 @@ function Layout({ children }) {
   useEffect(() => {
     api.vrfs().then(setVrfs).catch(() => setVrfs([]))
   }, [])
+  useEffect(() => {
+    if (user && !routeAllowed(user.role, location.pathname)) {
+      navigate(ROLE_ROUTES[user.role].home, { replace: true })
+    }
+  }, [user, location.pathname, navigate])
   const currentVrf = getVrfName() || (vrfs[0]?.name ?? '')
   const switchVrf = (name) => {
     setVrfName(name)

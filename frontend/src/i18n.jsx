@@ -307,6 +307,8 @@ const DE = {
   'The admin prepares the instance': 'Der Admin bereitet die Instanz vor',
   'Then the architects take over': 'Dann übernehmen die Architekten',
   'Two phases: the admin sets language and accounts, then the architect accounts do the domain work. Nothing here blocks anything – the list disappears once the essentials exist.': 'Zwei Phasen: der Admin legt Sprache und Konten fest, die fachliche Arbeit machen dann die Architekten-Konten. Nichts hier blockiert etwas – die Liste verschwindet, sobald das Wesentliche existiert.',
+  'the admin does this': 'macht der Admin',
+  'the architects do this': 'machen die Architekten',
   'Change': 'Änderung',
   'Change note (for the version history)': 'Änderungsnotiz (für die Versionshistorie)',
   'Change password': 'Passwort ändern',
