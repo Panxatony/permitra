@@ -707,6 +707,25 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
    the buttons off screen - the scope is meant to be read, not scrolled past. */
 .retire-preview { margin: .75rem 0; }
 .retire-preview .table-wrap { max-height: 15rem; overflow-y: auto; }
+
+/* Evidence report (#86): a document, so it is laid out to be read top to bottom
+   and printed - the print stylesheet below already turns it into the PDF that
+   gets emailed to an auditor. */
+.evidence { margin-top: 1rem; }
+.evidence h3 { margin: 1.4rem 0 .5rem; padding-bottom: .3rem;
+  border-bottom: 1px solid var(--border); }
+.evidence h4 { margin: 0 0 .2rem; font-size: .95rem; }
+.evidence-rule { margin: 0 0 1.1rem; padding-left: .75rem;
+  border-left: 3px solid var(--border-soft); }
+.evidence-rule p { margin: .15rem 0; }
+/* The integrity statement: what the report can vouch for, said rather than
+   implied. Green when it can, amber when part of the window is uncorroborated -
+   never silently absent. */
+.evidence-integrity { display: flex; flex-direction: column; gap: .3rem;
+  margin: .75rem 0; padding: .6rem .8rem; border-radius: 6px;
+  border: 1px solid var(--green-border); background: var(--green-bg-2);
+  font-size: .88rem; }
+.evidence-integrity.warn { border-color: var(--amber-border); background: var(--amber-bg-2); }
 .role-option input:disabled + * , .role-option input:disabled { cursor: not-allowed; }
 .approval-box { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; padding: .9rem 1rem; }
 .row-actions .btn { padding: .2rem .5rem; font-size: .8rem; }
@@ -807,6 +826,9 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 /* Print/PDF view (analysis and others): only the content, not the chrome */
 .print-only { display: none; }
 @media print {
+  /* Keep a rule's changes with their heading rather than split across a page. */
+  .evidence-rule { break-inside: avoid; }
+
   /* Always the light theme on paper - otherwise dark mode would print dark
      surfaces. Resetting the tokens is enough; the components access nothing
      but those anyway. */

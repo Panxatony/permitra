@@ -570,6 +570,37 @@ const DE = {
   'Risk': 'Risiko',
   'Role': 'Rolle',
   'Roles': 'Rollen',
+  'Evidence report': 'Nachweisbericht',
+  'From': 'Von',
+  'To': 'Bis',
+  'all zones': 'alle Zonen',
+  'all applications': 'alle Anwendungen',
+  'Create report': 'Bericht erstellen',
+  'Print / PDF': 'Drucken / PDF',
+  'Period': 'Zeitraum',
+  'Created': 'Erstellt',
+  'Rule changes': 'Regeländerungen',
+  'Zone and matrix changes': 'Zonen- und Matrixänderungen',
+  'No rule was changed in this period.': 'In diesem Zeitraum wurde keine Regel geändert.',
+  'No zone or matrix change in this period.': 'In diesem Zeitraum gab es keine Zonen- oder Matrixänderung.',
+  '1st approval': '1. Freigabe',
+  '2nd approval': '2. Freigabe',
+  'Date': 'Datum',
+  'Person': 'Person',
+  'Note:': 'Hinweis:',
+  'deleted': 'gelöscht',
+  'Every change in a period, with who requested it, who approved it and why – the document an audit asks for, instead of an API to query one record at a time.':
+    'Jede Änderung in einem Zeitraum, mit Antragsteller, Freigeber und Begründung – das Dokument, nach dem eine Prüfung fragt, statt einer API, die man Datensatz für Datensatz abfragt.',
+  'Audit chain verified – unbroken and unchanged.':
+    'Audit-Kette geprüft – lückenlos und unverändert.',
+  'Audit chain NOT verified – the log has been altered or truncated.':
+    'Audit-Kette NICHT bestätigt – das Log wurde verändert oder gekürzt.',
+  '{n} older entries were removed under the retention policy and are covered by a seal.':
+    '{n} ältere Einträge wurden gemäß Aufbewahrungsfrist entfernt und sind durch ein Siegel abgedeckt.',
+  'The period reaches back beyond the audit log retention. The change history below is complete – the corroborating log entries for the earliest part are not.':
+    'Der Zeitraum reicht über die Aufbewahrungsfrist des Audit-Logs hinaus. Die Änderungshistorie unten ist vollständig – die belegenden Log-Einträge für den frühesten Teil nicht.',
+  'Rule and matrix change records are not subject to retention and are complete for the period.':
+    'Regel- und Matrixänderungen unterliegen keiner Aufbewahrungsfrist und sind für den Zeitraum vollständig.',
   'Retire application': 'Anwendung außer Betrieb nehmen',
   'Application': 'Anwendung',
   'Preview': 'Vorschau',

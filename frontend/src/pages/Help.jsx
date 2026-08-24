@@ -190,6 +190,23 @@ const SECTIONS = [
     },
   },
   {
+    id: 'evidence',
+    de: {
+      title: 'Nachweisbericht für Prüfungen',
+      body: [
+        'Eine Prüfung fragt nach einem **Dokument**: alle Änderungen an Zone Z im Zeitraum T, mit Antragsteller, Freigeber, Begründung und Datum. Unter **Berichte → Nachweisbericht** wird genau das erzeugt — Zeitraum wählen, optional auf eine Zone oder Anwendung eingrenzen. Über „Drucken / PDF" entsteht daraus das Dokument zum Weitergeben, per CSV die sortierbare Fassung.',
+        'Der Bericht sagt außerdem, wofür er einstehen kann: das Ergebnis der **Hash-Kettenprüfung**, und ob das Audit-Log den Zeitraum noch abdeckt. Regel- und Matrixänderungen unterliegen keiner Aufbewahrungsfrist und sind immer vollständig; das Audit-Log kann durch die Aufbewahrungsfrist gekürzt worden sein (siehe Rezertifizierung/Aufbewahrung). Reicht der Zeitraum dahinter zurück, steht das als Hinweis im Bericht — ein Dokument, das eine Lücke verschweigt, wäre schlechter als keines.',
+      ],
+    },
+    en: {
+      title: 'Evidence report for audits',
+      body: [
+        'An audit asks for a **document**: every change to zone Z in period T, with requester, approver, justification and date. Under **Reports → Evidence report** that is what you get — pick the period, optionally narrow it to a zone or an application. "Print / PDF" turns it into the document to hand over; CSV is the sortable version.',
+        'The report also states what it can vouch for: the result of the **hash-chain verification**, and whether the audit log still covers the period. Rule and matrix changes are not subject to retention and are always complete; the audit log may have been shortened by the retention policy. If the period reaches back beyond it, the report says so — a document that hides a gap would be worse than no document.',
+      ],
+    },
+  },
+  {
     id: 'retirement',
     de: {
       title: 'Anwendung außer Betrieb nehmen',

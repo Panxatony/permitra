@@ -162,6 +162,9 @@ export const api = {
   settings: () => request('/api/settings'),
   publicSettings: () => request('/api/settings/public'),
   requestorReport: () => request('/api/reports/requestors'),
+  evidenceReport: (params) =>
+    request(`/api/reports/evidence?${new URLSearchParams(params)}`),
+  evidenceCsvUrl: (params) => `/api/reports/evidence.csv?${new URLSearchParams(params)}`,
   architects: () => request('/api/users/architects'),
   proposeHandover: (id, newRequestor) => request(`/api/rules/${id}/requestor-handover`, { method: 'POST', body: { new_requestor: newRequestor } }),
   confirmHandover: (id) => request(`/api/rules/${id}/requestor-handover/confirm`, { method: 'POST', body: {} }),
