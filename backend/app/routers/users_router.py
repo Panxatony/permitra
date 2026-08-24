@@ -14,7 +14,7 @@ from .. import audit, mailer
 from ..auth import hash_password, require_roles
 from ..database import get_db
 from ..messages import _
-from ..models import AuthToken, Passkey, Role, User, utcnow
+from ..models import AuthToken, Passkey, Role, User, UserRole, apply_roles, utcnow
 from ..schemas import UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -63,7 +63,8 @@ def list_architects(db: Session = Depends(get_db),
     can be a requestor), no email or status - an architect may choose a
     successor without being handed the whole user table."""
     rows = (db.query(User)
-            .filter(User.role == Role.architect, User.is_active.is_(True))
+            .filter(User.role_rows.any(UserRole.role == Role.architect),
+                    User.is_active.is_(True))
             .order_by(User.username).all())
     return [{"username": u.username, "full_name": u.full_name} for u in rows]
 
@@ -89,14 +90,15 @@ def create_user(
         password_hash=hash_password(payload.password or secrets.token_urlsafe(24)),
         full_name=payload.full_name,
         email=payload.email,
-        role=payload.role,
         is_active=with_password,
     )
+    apply_roles(user, payload.roles or [payload.role])
     db.add(user)
     db.commit()
     db.refresh(user)
     audit.record(db, "admin", "user.created", actor=admin.username, object=user.username,
-                 detail="Role {role}", detail_values={"role": user.role.value},
+                 detail="Role {role}",
+                 detail_values={"role": ", ".join(r.value for r in user.roles)},
                  source_ip=audit.client_ip(request))
 
     result = {"user": UserOut.model_validate(user).model_dump()}
@@ -123,16 +125,23 @@ def update_user(
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _("User not found"))
-    if username == admin.username and payload.role not in (None, Role.admin):
+    incoming = payload.roles if payload.roles is not None else (
+        [payload.role] if payload.role is not None else None)
+    if username == admin.username and incoming is not None and Role.admin not in incoming:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("You cannot remove your own admin role"))
     if username == admin.username and payload.is_active is False:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("You cannot deactivate your own account"))
-    for field in ("full_name", "email", "role", "is_active"):
+    for field in ("full_name", "email", "is_active"):
         value = getattr(payload, field)
         if value is not None:
             setattr(user, field, value)
+    if incoming is not None:
+        if not incoming:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                _("An account must hold at least one role"))
+        apply_roles(user, incoming)
     # Deactivation and role changes revoke existing tokens immediately
-    if payload.is_active is False or payload.role is not None:
+    if payload.is_active is False or incoming is not None:
         user.token_valid_from = utcnow()
     # Reactivation by the admin lifts an account lock
     if payload.is_active is True:
@@ -140,8 +149,10 @@ def update_user(
         user.locked_until = None
     db.commit()
     db.refresh(user)
-    changed = {f: getattr(payload, f) for f in ("role", "is_active", "email", "full_name")
+    changed = {f: getattr(payload, f) for f in ("is_active", "email", "full_name")
                if getattr(payload, f) is not None}
+    if incoming is not None:
+        changed["roles"] = ", ".join(r.value for r in user.roles)
     audit.record(db, "admin", "user.updated", actor=admin.username, object=username,
                  detail=str({k: (v.value if hasattr(v, "value") else v) for k, v in changed.items()}),
                  source_ip=audit.client_ip(request))

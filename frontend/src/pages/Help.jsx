@@ -194,14 +194,16 @@ const SECTIONS = [
     de: {
       title: 'Rollen und Vier-Augen-Prinzip',
       body: [
-        '**Architekten** legen Regeln an und reichen sie ein. **Change Approver** entscheiden: eine Freigabe je Regel-Review, **zwei verschiedene Approver** je Zonen-, Netz- oder Matrixantrag. Wer eine Regel eingereicht oder erstellt hat, kann sie nicht selbst freigeben — auch Admins nicht. **Betrieb** pflegt den Umsetzungsstatus je Komponente, exportiert und lädt Gerätekonfigurationen für den Abgleich. **Admins** verwalten Benutzer und Einstellungen.',
+        '**Architekten** legen Regeln an und reichen sie ein. **Change Approver** entscheiden: eine Freigabe je Regel-Review, **zwei verschiedene Approver** je Zonen-, Netz- oder Matrixantrag; sie starten und schließen außerdem die Rezertifizierungs-Kampagnen. **Betrieb** pflegt den Umsetzungsstatus je Komponente, exportiert und lädt Gerätekonfigurationen für den Abgleich. **Admins** sind ausschließlich für Installation und Verwaltung zuständig — bewusst kein Superuser: keine Regelansichten, keine Freigaben, keine Rezertifizierung.',
+        'Ein Konto kann **mehrere Rollen** haben; seine Rechte sind deren Vereinigung — kleine Teams haben nicht vier Personen für vier Rollen. Das Vier-Augen-Prinzip bleibt davon unberührt, denn die Prüfungen hängen am **handelnden Konto**, nicht an der Rolle: Wer eine Regel beantragt, erstellt oder eingereicht hat, kann sie nicht selbst freigeben — auch nicht, wenn dasselbe Konto zusätzlich Approver ist. Und die zwei Freigaben eines Zonen-, Netz- oder Matrixantrags müssen von **zwei verschiedenen Konten** kommen. Zwei Hüte auf einer Person bleiben ein Augenpaar.',
         'Das Audit-Log hält jede Anmeldung, jede Verwaltungsaktion und jeden Datenzugriff fest, verkettet mit SHA-256-Hashes und auf Wunsch an ein SIEM zugestellt. Einträge erscheinen in der Sprache der Instanz — auch rückwirkend nach einem Sprachwechsel.',
       ],
     },
     en: {
       title: 'Roles and the four-eyes principle',
       body: [
-        '**Architects** create rules and submit them. **Change approvers** decide: one approval per rule review, **two different approvers** per zone, network or matrix request. Whoever submitted or created a rule cannot approve it — admins included. **Operations** maintains the implementation status per component, exports, and uploads device configurations for the drift comparison. **Admins** manage users and settings.',
+        '**Architects** create rules and submit them. **Change approvers** decide: one approval per rule review, **two different approvers** per zone, network or matrix request; they also start and close the recertification campaigns. **Operations** maintains the implementation status per component, exports, and uploads device configurations for the drift comparison. **Admins** are responsible for installation and administration only — deliberately not a superuser: no rule views, no approvals, no recertification.',
+        'An account can hold **several roles**, and its permission is their union — small teams do not have four people for four roles. This leaves the four-eyes principle intact, because the checks key on the **acting account**, not on a role: whoever requested, created or submitted a rule cannot approve it, not even when the same account also holds the approver role. And the two approvals on a zone, network or matrix request must come from **two different accounts**. Two hats on one person is still one pair of eyes.',
         'The audit log records every sign-in, administrative action and data access, chained with SHA-256 hashes and delivered to a SIEM if configured. Entries render in the instance\'s language — retroactively, after a language switch.',
       ],
     },

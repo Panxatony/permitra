@@ -173,6 +173,82 @@ def test_closing_a_campaign_is_change_approver_only(client):
     assert r.status_code != 403, f"the change approver was blocked from closing: {r.text}"
 
 
+def test_the_admin_does_not_reach_recertification_or_reports(client):
+    """An admin installs and administers Permitra; running the recertification
+    cycle and reading the operational reports belong to the working roles and
+    the change approver. The navigation hides these from the admin - this is the
+    half that holds when the URL is typed instead."""
+    for path in ("/api/recertification/campaigns", "/api/reports/requestors"):
+        r = client.get(path, headers=auth(client, "adm"))
+        assert r.status_code == 403, f"the admin reached {path}: {r.status_code}"
+    # counter-check: the roles that own these pages still get through
+    for path in ("/api/recertification/campaigns", "/api/reports/requestors"):
+        for user in ("appr", "arch", "ops"):
+            r = client.get(path, headers=auth(client, user))
+            assert r.status_code == 200, f"{user} cannot read {path}: {r.text}"
+
+
+# ---------- Multi-role accounts (#78) ---------------------------------------
+
+def _grant(client, username, roles):
+    r = client.put(f"/api/users/{username}", json={"roles": roles},
+                   headers=auth(client, "adm"))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_an_account_reaches_endpoints_through_any_of_its_roles(client):
+    """The union in practice: an architect who is also a change approver reaches
+    the approver's endpoint without losing the architect's."""
+    before = client.get("/api/recertification/campaigns", headers=auth(client, "arch"))
+    assert before.status_code == 200          # architect already reads campaigns
+
+    _grant(client, "arch", ["architect", "change_approver"])
+    # starting a campaign is change-approver-only - now reachable for this account
+    r = client.post("/api/recertification/campaigns",
+                    json={"name": "Q3", "due_date": "2027-06-30", "scope": "all"},
+                    headers=auth(client, "arch"))
+    assert r.status_code != 403, f"the second role did not take effect: {r.text}"
+
+
+def test_taking_a_role_away_takes_the_access_with_it(client):
+    """The set is replaced, not added to - otherwise a role could never be
+    withdrawn and the control would only ever loosen."""
+    _grant(client, "arch", ["architect", "change_approver"])
+    _grant(client, "arch", ["architect"])
+    r = client.post("/api/recertification/campaigns",
+                    json={"name": "Q3", "due_date": "2027-06-30", "scope": "all"},
+                    headers=auth(client, "arch"))
+    assert r.status_code == 403, "the withdrawn role still granted access"
+
+
+def test_an_account_cannot_be_left_with_no_roles(client):
+    r = client.put("/api/users/arch", json={"roles": []}, headers=auth(client, "adm"))
+    assert r.status_code == 422
+
+
+def test_an_admin_cannot_drop_their_own_admin_role(client):
+    """Locking yourself out of administration is not a permission decision, it
+    is an accident - and with no admin left, nobody can undo it."""
+    r = client.put("/api/users/adm", json={"roles": ["architect"]},
+                   headers=auth(client, "adm"))
+    assert r.status_code == 400
+    # keeping admin while adding a second hat is fine
+    r = client.put("/api/users/adm", json={"roles": ["admin", "architect"]},
+                   headers=auth(client, "adm"))
+    assert r.status_code == 200, r.text
+
+
+def test_the_login_reports_every_role_the_account_holds(client):
+    """The interface builds its navigation from this, so it has to carry the
+    whole set and not just the primary."""
+    _grant(client, "arch", ["architect", "operations"])
+    r = client.post("/api/auth/login",
+                    data={"username": "arch", "password": "arch-pw-123"})
+    assert r.status_code == 200, r.text
+    assert set(r.json()["user"]["roles"]) == {"architect", "operations"}
+
+
 # ---------- Read-only API tokens --------------------------------------------
 
 def _create_pat(client) -> str:

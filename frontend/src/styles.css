@@ -691,6 +691,17 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 /* Components */
 .component-form { max-width: 100%; margin-top: 1rem; }
 .row-actions { white-space: nowrap; }
+
+/* Role sets (#78): an account holds several roles, so the control is a set of
+   checkboxes rather than one select. Laid out with gap so the boxes and their
+   labels keep a steady rhythm at any width. */
+.role-set { border: 1px solid var(--border); border-radius: 6px; padding: .5rem .75rem; }
+.role-set legend { padding: 0 .35rem; font-size: .85rem; color: var(--muted); }
+.role-set, .role-set-inline { display: flex; flex-wrap: wrap; gap: .35rem .9rem; }
+.role-option { display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .85rem; white-space: nowrap; }
+.role-option input { margin: 0; }
+.role-option input:disabled + * , .role-option input:disabled { cursor: not-allowed; }
 .approval-box { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; padding: .9rem 1rem; }
 .row-actions .btn { padding: .2rem .5rem; font-size: .8rem; }
 

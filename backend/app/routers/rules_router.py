@@ -818,10 +818,11 @@ def _active_architect(db: Session, username: str) -> User:
     if not user:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             _("'{username}' is not an active account", username=username))
-    if user.role != Role.architect:
+    if not user.has_role(Role.architect):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             _("A requestor is an architect account - '{username}' is {role}",
-                              username=username, role=user.role.value))
+                              username=username,
+                              role=", ".join(r.value for r in user.roles)))
     return user
 
 
@@ -851,7 +852,7 @@ def propose_requestor_handover(
     requestor_active = (db.query(User)
                         .filter(User.username == rule.requestor,
                                 User.is_active.is_(True)).first() is not None)
-    if not is_current and not (user.role == Role.admin and not requestor_active):
+    if not is_current and not (user.has_role(Role.admin) and not requestor_active):
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             _("Only the current requestor may hand a rule over "
                               "(an admin may, once the requestor's account is gone)"))
@@ -929,7 +930,7 @@ def cancel_requestor_handover(
     if not rule.pending_requestor:
         raise HTTPException(status.HTTP_409_CONFLICT, _("No handover is pending for this rule"))
     allowed = {rule.handover_proposed_by, rule.pending_requestor}
-    if user.username not in allowed and user.role != Role.admin:
+    if user.username not in allowed and not user.has_role(Role.admin):
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             _("Only the two sides of the handover, or an admin, can end it"))
     declined_by = user.username
@@ -1130,16 +1131,21 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     rule = get_rule_or_404(db, rule_id)
     if new_status in (RuleStatus.approved, RuleStatus.rejected) and rule.status != RuleStatus.in_review:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("The rule is not in review"))
-    # Four-eyes principle: whoever submitted or created the rule must not approve it
-    # themselves (admins included) – BSI separation of duties
+    # Four-eyes principle: whoever requested, submitted or created the rule must
+    # not approve it themselves (admins included) – BSI separation of duties.
+    #
+    # The check is on the acting *account*, which is what makes it survive
+    # multi-role accounts (#78): one person holding architect and change_approver
+    # still cannot approve their own rule, because it is the same account on both
+    # sides. They may approve everyone else's.
     if new_status == RuleStatus.approved:
         last_version = max(rule.versions, key=lambda v: v.version, default=None)
         submitter = last_version.changed_by if last_version else rule.created_by
-        if user.username in {submitter, rule.created_by}:
+        if user.username in {submitter, rule.created_by, rule.requestor}:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
-                _("Separation of duties: you cannot approve a rule you created or "
-                  "submitted yourself"),
+                _("Separation of duties: you cannot approve a rule you requested, "
+                  "created or submitted yourself"),
             )
     # If the rule's zone relation is set to block (e.g. after a change to the zone
     # matrix), "approve" means approving its removal: the rule is deactivated and

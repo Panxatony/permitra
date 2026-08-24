@@ -46,7 +46,11 @@ def create_token(user: User) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user.username,
+        # Informational only - authorisation re-reads the account from the
+        # database on every request, so a role change takes effect at once
+        # instead of lingering in an already-issued token.
         "role": user.role.value,
+        "roles": [r.value for r in user.roles],
         "iat": int(now.timestamp()),
         "exp": now + timedelta(hours=TOKEN_LIFETIME_HOURS),
     }
@@ -123,13 +127,18 @@ def require_roles(*roles: Role):
     little when a fifth role can slip past it. Separation of duties is a
     property of the checks, not of the documentation; an endpoint that wants
     the admin says Role.admin.
+
+    An account holds a set of roles and is admitted when it holds any of the
+    named ones. That widens who reaches an endpoint, never what happens once
+    they are in: the four-eyes checks key on the acting account, so holding two
+    roles does not let one account fill both halves of an approval.
     """
     def dependency(user: User = Depends(get_current_user)) -> User:
-        if user.role not in roles:
+        if not user.has_role(*roles):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 _("Role '{role}' is not permitted to perform this action",
-                  role=user.role.value),
+                  role=", ".join(r.value for r in user.roles)),
             )
         return user
 

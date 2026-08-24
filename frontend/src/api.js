@@ -34,6 +34,21 @@ export function getUser() {
   return raw ? JSON.parse(raw) : null
 }
 
+/* Every role the account holds (#78). Falls back to the single `role` so a
+   session stored before multi-role - one already in somebody's browser - keeps
+   working until the next sign-in instead of reading as an account with none. */
+export function rolesOf(user) {
+  if (!user) return []
+  return user.roles?.length ? user.roles : (user.role ? [user.role] : [])
+}
+
+/* True when the account holds any of the named roles - the shape the backend's
+   require_roles(...) uses, so both sides ask the same question. */
+export function hasRole(user, ...roles) {
+  const held = rolesOf(user)
+  return roles.some((r) => held.includes(r))
+}
+
 export function setSession(token, user) {
   localStorage.setItem(TOKEN_KEY, token)
   localStorage.setItem(USER_KEY, JSON.stringify(user))

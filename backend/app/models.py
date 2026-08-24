@@ -14,7 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from .database import Base
 from .domain_values import IMPL_STATUSES  # noqa: F401  (re-exported for importers)
@@ -416,6 +416,10 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(256))
     full_name: Mapped[str] = mapped_column(String(128), default="")
     email: Mapped[str] = mapped_column(String(128), default="")
+    # The account's primary role, kept for display (the badge, the home route)
+    # and derived from `roles` on every write. Authorisation never reads it -
+    # it asks `has_role`, which consults the full set. One source of truth for
+    # permission, one readable label for the interface.
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.architect)
     is_active: Mapped[bool] = mapped_column(default=True)
     # Two-factor (TOTP): the secret is set during setup, it only counts once
@@ -440,6 +444,100 @@ class User(Base):
 
     passkeys: Mapped[list["Passkey"]] = relationship(back_populates="user",
                                                     cascade="all, delete-orphan")
+
+    role_rows: Mapped[list["UserRole"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", lazy="selectin")
+
+    @property
+    def roles(self) -> list[Role]:
+        """Every role the account holds - the authoritative set for permission.
+
+        Falls back to the primary column when no rows exist, so an account
+        written by older code (or a fixture that sets only `role`) still
+        authorises as itself instead of as nobody.
+        """
+        held = [r.role for r in self.role_rows]
+        return held or [self.role]
+
+    def has_role(self, *roles: Role) -> bool:
+        """True when the account holds any of the named roles."""
+        return bool(set(self.roles) & set(roles))
+
+    @validates("role")
+    def _seed_role_set(self, _key, value):
+        """An account written with only `role` still lands in the set.
+
+        Permission lookups ask the set in SQL, where the Python-side fallback in
+        `roles` cannot reach. Without this, `User(role=admin)` - how fixtures,
+        scripts and older code build accounts - would authorise correctly
+        in-process yet be invisible to every "who holds role X" query.
+
+        It fires when the attribute is assigned, not during flush (mutating a
+        relationship mid-flush is unsupported), and only while the set is empty,
+        so `apply_roles` - which writes the rows first and the primary after -
+        stays the one writer of a multi-role set.
+        """
+        if value is not None and not self.role_rows:
+            self.role_rows.append(UserRole(role=value))
+        return value
+
+
+# Highest first: the primary role shown on the badge and used for the landing
+# route when an account holds several.
+ROLE_PRECEDENCE = (Role.admin, Role.change_approver, Role.architect, Role.operations)
+
+
+def primary_role(roles) -> Role:
+    for candidate in ROLE_PRECEDENCE:
+        if candidate in roles:
+            return candidate
+    return Role.architect
+
+
+def apply_roles(user: "User", roles) -> None:
+    """Sets the account's role set and derives the primary from it.
+
+    The single writer for both, so the badge can never drift away from what the
+    account is actually permitted to do. An empty set is refused rather than
+    silently stored - an account with no roles can sign in and reach nothing,
+    which reads as a broken account instead of a deliberate one.
+    """
+    wanted = list(dict.fromkeys(roles))
+    if not wanted:
+        raise ValueError("an account must hold at least one role")
+    # Only the difference, never a wholesale replacement: rebuilding the list
+    # would delete and re-insert the rows that stay, and SQLAlchemy issues the
+    # insert before the delete - which trips the (user_id, role) unique
+    # constraint on every role the account keeps.
+    current = {row.role: row for row in user.role_rows}
+    for role, row in current.items():
+        if role not in wanted:
+            user.role_rows.remove(row)
+    for role in wanted:
+        if role not in current:
+            user.role_rows.append(UserRole(role=role))
+    user.role = primary_role(wanted)
+
+
+class UserRole(Base):
+    """One role an account holds; several rows make a multi-role account.
+
+    Small deployments do not have four people for four roles - the same person
+    is architect and operations, or an approver who also writes rules. The set
+    is a union of permissions, never a loosening of the four-eyes checks: those
+    key on the acting *account*, so one account cannot fill both halves of an
+    approval by wearing two hats.
+    """
+
+    __tablename__ = "user_roles"
+    __table_args__ = (UniqueConstraint("user_id", "role", name="uq_user_roles_user_role"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"),
+                                         index=True)
+    role: Mapped[Role] = mapped_column(Enum(Role))
+
+    user: Mapped["User"] = relationship(back_populates="role_rows")
 
 
 class Setting(Base):

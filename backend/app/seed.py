@@ -27,22 +27,28 @@ from pathlib import Path
 from .auth import hash_password
 from .database import SessionLocal
 from .messages import _
-from .models import Role, User
+from .models import Role, User, apply_roles
 
 log = logging.getLogger("permitra.seed")
 
 # Two accounts per role, so the demo can show the flows that need a second
 # person: the four-eyes approval (two change approvers), and the requestor
 # handover between two architects. Password is always the username + 123.
+# Two accounts per role, so every four-eyes path can be walked in the demo.
+# The last one deliberately holds two roles (#78): small teams run that way, and
+# it shows the union working without weakening anything - Iris can approve other
+# people's rules but not the ones she requested herself.
 DEMO_USERS = [
-    ("admin", "admin123", "Alex Admin", Role.admin),
-    ("admin2", "admin2123", "Bea Admin", Role.admin),
-    ("architekt", "architekt123", "Carla Architekt", Role.architect),
-    ("architekt2", "architekt2123", "David Architekt", Role.architect),
-    ("betrieb", "betrieb123", "Erol Betrieb", Role.operations),
-    ("betrieb2", "betrieb2123", "Frida Betrieb", Role.operations),
-    ("approver", "approver123", "Gustav Approver", Role.change_approver),
-    ("approver2", "approver2123", "Hana Approver", Role.change_approver),
+    ("admin", "admin123", "Alex Admin", [Role.admin]),
+    ("admin2", "admin2123", "Bea Admin", [Role.admin]),
+    ("architekt", "architekt123", "Carla Architekt", [Role.architect]),
+    ("architekt2", "architekt2123", "David Architekt", [Role.architect]),
+    ("betrieb", "betrieb123", "Erol Betrieb", [Role.operations]),
+    ("betrieb2", "betrieb2123", "Frida Betrieb", [Role.operations]),
+    ("approver", "approver123", "Gustav Approver", [Role.change_approver]),
+    ("approver2", "approver2123", "Hana Approver", [Role.change_approver]),
+    ("doppelrolle", "doppelrolle123", "Iris Doppelrolle",
+     [Role.architect, Role.change_approver]),
 ]
 
 # A path, not a secret - the whole point is that the value lives in the file
@@ -99,10 +105,12 @@ def seed_users():
         existing = {u.username for u in db.query(User).all()}
         if os.environ.get("PERMITRA_DEMO") == "1":
             # Demo/test operation: create the well-known accounts (missing ones only)
-            for username, password, full_name, role in DEMO_USERS:
+            for username, password, full_name, roles in DEMO_USERS:
                 if username not in existing:
-                    db.add(User(username=username, password_hash=hash_password(password),
-                                full_name=full_name, role=role, is_active=True))
+                    user = User(username=username, password_hash=hash_password(password),
+                                full_name=full_name, is_active=True)
+                    apply_roles(user, roles)
+                    db.add(user)
             db.commit()
             return
 

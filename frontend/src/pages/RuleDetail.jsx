@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api, getUser } from '../api'
+import { api, getUser, hasRole } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
 import { AddressList, ComponentBadges, Modal, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
@@ -37,7 +37,7 @@ export default function RuleDetail() {
   const [handover, setHandover] = useState(false)
   const [architects, setArchitects] = useState([])
   const [successor, setSuccessor] = useState('')
-  const canHandOver = rule && (user.username === rule.requestor || user.role === 'admin')
+  const canHandOver = rule && (user.username === rule.requestor || hasRole(user, 'admin'))
   const [risk, setRisk] = useState(null)
   const [comment, setComment] = useState('')
   const [reviewComment, setReviewComment] = useState('')
@@ -58,9 +58,9 @@ export default function RuleDetail() {
   if (error) return <div className="error">{error}</div>
   if (!rule) return <p className="muted">{t('Loading')}…</p>
 
-  const isArchitect = user.role === 'architect' || user.role === 'admin'
-  const isOps = user.role === 'operations' || user.role === 'admin'
-  const isApprover = user.role === 'change_approver' || user.role === 'admin'
+  const isArchitect = hasRole(user, 'architect')
+  const isOps = hasRole(user, 'operations')
+  const isApprover = hasRole(user, 'change_approver')
 
   const act = (fn) => async () => {
     setError('')
@@ -224,7 +224,7 @@ export default function RuleDetail() {
               {rule.pending_requestor && (
                 <div className="muted small">
                   {t('Handover to')} <strong>{rule.pending_requestor}</strong> {t('awaiting confirmation')}
-                  {(user.username === rule.handover_proposed_by || user.role === 'admin') && (
+                  {(user.username === rule.handover_proposed_by || hasRole(user, 'admin')) && (
                     <> · <button className="linklike" onClick={cancelHandover}>{t('Withdraw')}</button></>
                   )}
                 </div>

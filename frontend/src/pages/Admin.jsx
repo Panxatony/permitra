@@ -1,6 +1,6 @@
 import SetupChecklist from '../components/SetupChecklist'
 import { useEffect, useState } from 'react'
-import { api, getUser } from '../api'
+import { api, getUser, hasRole } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
 import { dateLocale, useLang } from '../i18n'
 
@@ -13,7 +13,7 @@ export default function Admin() {
   const { lang, t } = useLang()
   const me = getUser()
   const [users, setUsers] = useState([])
-  const [form, setForm] = useState({ username: '', full_name: '', email: '', role: 'architect' })
+  const [form, setForm] = useState({ username: '', full_name: '', email: '', roles: ['architect'] })
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [link, setLink] = useState('')
@@ -59,7 +59,7 @@ export default function Admin() {
   const create = async (e) => {
     e.preventDefault()
     const ok = await act(() => api.createUser(form))
-    if (ok) setForm({ username: '', full_name: '', email: '', role: form.role })
+    if (ok) setForm({ username: '', full_name: '', email: '', roles: form.roles })
   }
 
   const remove = (u) => {
@@ -90,7 +90,7 @@ export default function Admin() {
           <thead>
             <tr>
               <th>{t('Username')}</th><th>{t('Name')}</th><th>E-Mail</th>
-              <th>{t('Role')}</th><th>{t('Status')}</th><th>2FA</th><th></th>
+              <th>{t('Roles')}</th><th>{t('Status')}</th><th>2FA</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -100,10 +100,30 @@ export default function Admin() {
                 <td>{u.full_name}</td>
                 <td>{u.email}</td>
                 <td>
-                  <select value={u.role} disabled={u.username === me.username}
-                    onChange={(e) => act(() => api.updateUser(u.username, { role: e.target.value }), t('Role changed'))}>
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  <div className="role-set-inline">
+                    {ROLES.map((r) => {
+                      const held = (u.roles?.length ? u.roles : [u.role]).includes(r)
+                      // An admin cannot take the admin role off their own
+                      // account - the backend refuses it too, and a control
+                      // that only fails on submit is worse than one that is off.
+                      const locked = u.username === me.username && r === 'admin'
+                      return (
+                        <label key={r} className="role-option" title={r}>
+                          <input type="checkbox" checked={held} disabled={locked}
+                            onChange={(e) => {
+                              const current = u.roles?.length ? u.roles : [u.role]
+                              const next = e.target.checked
+                                ? [...current, r]
+                                : current.filter((x) => x !== r)
+                              if (!next.length) return
+                              act(() => api.updateUser(u.username, { roles: next }),
+                                t('Role changed'))
+                            }} />
+                          {r}
+                        </label>
+                      )
+                    })}
+                  </div>
                 </td>
                 <td>
                   <span className={`badge ${u.is_active ? 'status-approved' : 'status-deactivated'}`}>
@@ -208,11 +228,25 @@ export default function Admin() {
               onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </label>
         </div>
-        <label>{t('Role')}
-          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </label>
+        <fieldset className="role-set">
+          <legend>{t('Roles')}</legend>
+          {/* An account may hold several roles; its permission is their union.
+              This does not weaken the four-eyes checks - those key on the
+              account, so one person cannot approve their own rule by also
+              holding the approver role. */}
+          {ROLES.map((r) => (
+            <label key={r} className="role-option">
+              <input type="checkbox" checked={form.roles.includes(r)}
+                onChange={(e) => setForm({
+                  ...form,
+                  roles: e.target.checked
+                    ? [...form.roles, r]
+                    : form.roles.filter((x) => x !== r),
+                })} />
+              {r}
+            </label>
+          ))}
+        </fieldset>
         <div className="actions">
           <button className="btn btn-primary" type="submit">{t('Create user')}</button>
         </div>
@@ -271,7 +305,7 @@ export default function Admin() {
           component because an approver has to be able to look them up too. */}
       <section className="card" style={{ marginTop: '1rem' }}>
         <h3>{t('Risk criteria')} <span className="muted small">{t('(basis of the automatic assessment)')}</span></h3>
-        <RiskCriteria editable={me?.role === 'admin'} />
+        <RiskCriteria editable={hasRole(me, 'admin')} />
       </section>
 
       <section className="card" style={{ marginTop: '1rem' }}>

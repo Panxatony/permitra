@@ -18,14 +18,14 @@ from sqlalchemy.orm import Session
 
 from . import mailer
 from .messages import _
-from .models import Role, User
+from .models import Role, User, UserRole
 
 log = logging.getLogger("permitra.notifications")
 
 
 def _recipients_by_role(db: Session, *roles: Role) -> list[User]:
     return [
-        u for u in db.query(User).filter(User.role.in_(roles)).all()
+        u for u in db.query(User).filter(User.role_rows.any(UserRole.role.in_(roles))).all()
         if u.is_active and u.notify_email and (u.email or "").strip()
     ]
 

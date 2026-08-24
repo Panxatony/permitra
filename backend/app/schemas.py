@@ -479,7 +479,9 @@ class UserOut(BaseModel):
     username: str
     full_name: str
     email: str
+    # The primary role, for the badge; `roles` is what the account may actually do.
     role: Role
+    roles: list[Role] = []
     is_active: bool = True
     totp_enabled: bool = False
     notify_email: bool = True
@@ -491,13 +493,17 @@ class UserCreate(BaseModel):
     password: str | None = Field(None, min_length=8)
     full_name: str = ""
     email: str = ""
+    # `roles` is authoritative when given; `role` remains accepted so an older
+    # client (or a script) that sends a single role keeps working.
     role: Role = Role.architect
+    roles: list[Role] | None = None
 
 
 class UserUpdate(BaseModel):
     full_name: str | None = None
     email: str | None = None
     role: Role | None = None
+    roles: list[Role] | None = None
     is_active: bool | None = None
 
 

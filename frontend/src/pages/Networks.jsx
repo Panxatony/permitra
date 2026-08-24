@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, getUser, getVrfName } from '../api'
+import { api, getUser, getVrfName, hasRole } from '../api'
 import { Modal } from '../components/shared'
 import { useLang } from '../i18n'
 
@@ -9,7 +9,7 @@ const SOURCE_LABELS = { manual: 'manuell', netbox: 'NetBox' }
 export default function Networks() {
   const { t } = useLang()
   const user = getUser()
-  const canEdit = ['architect', 'operations', 'admin'].includes(user.role)
+  const canEdit = hasRole(user, 'architect', 'operations')
   const [networks, setNetworks] = useState([])
   const [zones, setZones] = useState([])
   const [changes, setChanges] = useState([])
