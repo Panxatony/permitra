@@ -225,7 +225,7 @@ export default function Recertification() {
   const [notice, setNotice] = useState('')
   const [campaigns, setCampaigns] = useState([])
   const [newCampaign, setNewCampaign] = useState({ name: '', due_date: plusMonths(3), scope: 'all' })
-  const canManage = ['admin', 'change_approver'].includes(user.role)
+  const canManage = user.role === 'change_approver'
 
   const loadCampaigns = useCallback(() => {
     api.recertCampaigns().then(setCampaigns).catch(() => {})

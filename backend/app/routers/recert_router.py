@@ -153,9 +153,14 @@ def create_campaign(
     payload: CampaignCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(Role.admin, Role.change_approver)),
+    user: User = Depends(require_roles(Role.change_approver)),
 ):
     """Starts a campaign over every rule the scope covers right now.
+
+    Only the change approver runs the recert cycle - not the admin. An admin
+    keeps the system running; deciding when rules are re-examined, and closing
+    the review, is the change approver's job, kept separate from operating the
+    tool so the same hand does not both run the process and administer it.
 
     Membership is fixed at creation. A worklist that grows and shrinks under
     the people working through it cannot be finished, only abandoned - a rule
@@ -390,7 +395,7 @@ def close_campaign(
     campaign_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_roles(Role.admin, Role.change_approver)),
+    user: User = Depends(require_roles(Role.change_approver)),
 ):
     """Closes the campaign as it stands - open items stay open, on the record.
 
