@@ -294,6 +294,7 @@ const DE = {
   'Matches no active user': 'Entspricht keinem aktiven Benutzer',
   'no active user': 'kein aktiver Benutzer',
   'rule(s) carry no requestor at all – nobody can be asked about them.': 'Regel(n) tragen gar keinen Requestor – zu ihnen kann niemand gefragt werden.',
+  'These topics are also on the website, linkable and printable:': 'Diese Themen stehen auch auf der Webseite, verlinkbar und druckbar:',
   'Change': 'Änderung',
   'Change note (for the version history)': 'Änderungsnotiz (für die Versionshistorie)',
   'Change password': 'Passwort ändern',

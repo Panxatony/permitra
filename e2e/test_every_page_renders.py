@@ -27,6 +27,11 @@ ROUTES = [
     ("/search", "architekt"),
     ("/export", "architekt"),
     ("/recertification", "betrieb"),
+    # The approver reaches recertification through their slimmed navigation -
+    # the backend allowed it while the link was missing, which is how a feature
+    # hides from exactly the role that starts campaigns.
+    ("/recertification", "approver"),
+    ("/reports", "approver"),
     ("/approvals", "approver"),
     ("/help", "architekt"),
     ("/reports", "betrieb"),

@@ -89,13 +89,23 @@ function Layout({ children }) {
         </div>
         <nav>
           {user.role === 'admin' ? (
-            /* Focused view: admins manage Permitra, no rule views */
-            <Link to="/admin">{t('Administration')}</Link>
+            <>
+              {/* Focused view: admins manage Permitra, no rule views - but
+                  campaigns are started and closed by admins and approvers, and
+                  a page a role may use but cannot reach is a trap. This one
+                  was: the backend allowed it, the form existed, the link did not. */}
+              <Link to="/admin">{t('Administration')}</Link>
+              <Link to="/recertification">{t('Recertification')}</Link>
+              <Link to="/reports">{t('Reports')}</Link>
+            </>
           ) : user.role === 'change_approver' ? (
             <>
-              {/* Slimmed-down view: approvers only see what they need to decide */}
+              {/* Slimmed-down view: approvers see what they need to decide -
+                  and campaigns ARE decisions, so recertification belongs here. */}
               <Link to="/approvals">{t('Approvals')}</Link>
               <Link to="/rules">{t('Rules')}</Link>
+              <Link to="/recertification">{t('Recertification')}</Link>
+              <Link to="/reports">{t('Reports')}</Link>
               <Link to="/zones">{t('Security zones')}</Link>
               <Link to="/networks">{t('Networks')}</Link>
             </>
