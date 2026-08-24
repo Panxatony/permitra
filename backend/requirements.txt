@@ -1,7 +1,7 @@
 fastapi>=0.141.1
 uvicorn[standard]>=0.52.4
 sqlalchemy>=2.0.52
-pydantic>=2.9
+pydantic>=2.13.4
 PyJWT>=2.13.0
 python-multipart>=0.0.32
 psycopg2-binary>=2.9; platform_system != "Windows"
