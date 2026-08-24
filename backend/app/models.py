@@ -669,6 +669,14 @@ class Rule(Base):
     # approved again once the inadmissibility has been resolved.
     removal_reason: Mapped[str] = mapped_column(String(255), default="")
 
+    # When somebody last deliberately confirmed this rule is still needed, and
+    # who (#35). This is the auditor's question, answered on the rule itself -
+    # "last extended" is a different question, and one a well-meaning operator
+    # answers in bulk the week before everything expires.
+    last_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    last_confirmed_by: Mapped[str] = mapped_column(String(64), default="")
+
     # Whether this rule logs, and how much (#37). "Are accesses into the zone
     # with very high protection requirement logged?" is a question Permitra
     # could not answer, although it knows the zone, its protection level and
@@ -749,6 +757,64 @@ class RuleVersion(Base):
     changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     rule: Mapped[Rule] = relationship(back_populates="versions")
+
+
+class RecertCampaign(Base):
+    """One recertification pass over a defined part of the ruleset (#35).
+
+    Extending a date is a decision about a calendar; recertification is a
+    decision about a rule. The campaign is what turns the second into a process:
+    a scope, a cut-off, a worklist per owner, and a report of who confirmed what
+    - which is the deliverable an auditor actually asks for.
+
+    Membership is fixed at creation: the items are the rules that were in force
+    when the campaign started. A worklist that silently grows and shrinks under
+    the people working through it cannot be finished, only abandoned.
+    """
+
+    __tablename__ = "recert_campaigns"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+    # What the campaign covers, kept as evidence: "all", "zone:Z040", "component:3"
+    scope: Mapped[str] = mapped_column(String(128), default="all")
+    due_date: Mapped[str] = mapped_column(String(10))          # ISO date, like valid_until
+    created_by: Mapped[str] = mapped_column(String(64), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_by: Mapped[str] = mapped_column(String(64), default="")
+
+    items: Mapped[list["RecertItem"]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan")
+
+
+class RecertItem(Base):
+    """One rule inside a campaign, and the decision somebody made about it.
+
+    The decision is its own recorded act, distinct from extending a date:
+    confirmed (still required), rework (still needed but wrong - back into
+    review), or retired (no longer needed - deactivated). Exactly one decision
+    per item; a second one is refused rather than overwritten, because the
+    record of who decided is the point of the exercise.
+    """
+
+    __tablename__ = "recert_items"
+    __table_args__ = (UniqueConstraint("campaign_id", "rule_pk"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(
+        ForeignKey("recert_campaigns.id", ondelete="CASCADE"), index=True)
+    rule_pk: Mapped[int] = mapped_column(ForeignKey("rules.id", ondelete="CASCADE"), index=True)
+    # The owner as it stood at campaign start - the worklist key. Snapshotted,
+    # because reassigning a rule mid-campaign must not silently move open work.
+    owner: Mapped[str] = mapped_column(String(128), default="")
+    decision: Mapped[str | None] = mapped_column(String(16), nullable=True)  # confirmed | rework | retired
+    decided_by: Mapped[str] = mapped_column(String(64), default="")
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    comment: Mapped[str] = mapped_column(Text, default="")
+
+    campaign: Mapped[RecertCampaign] = relationship(back_populates="items")
+    rule: Mapped["Rule"] = relationship()
 
 
 class CoverageSnapshot(Base):

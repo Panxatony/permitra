@@ -21,6 +21,7 @@ from .routers import (
     export_router,
     netbox_router,
     objects_router,
+    recert_router,
     risk_router,
     rules_router,
     settings_router,
@@ -76,6 +77,7 @@ app.include_router(netbox_router.router)
 app.include_router(objects_router.router)
 app.include_router(epgs_router.router)
 app.include_router(risk_router.router)
+app.include_router(recert_router.router)
 app.include_router(vrfs_router.router)
 
 

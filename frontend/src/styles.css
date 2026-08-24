@@ -501,6 +501,15 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .emergency-banner li { margin-bottom: .2rem; }
 .emergency-overdue { color: var(--red); font-weight: 600; }
 
+/* Recertification campaigns (#35) */
+.recert-campaign { margin-bottom: .8rem; }
+.recert-head { display: flex; justify-content: space-between; align-items: center;
+  gap: 1rem; cursor: pointer; flex-wrap: wrap; }
+.recert-progress { display: flex; align-items: center; gap: .5rem; min-width: 180px; }
+.recert-progress .barrow-track { flex: 1; }
+.recert-overdue { border-left: 3px solid var(--red); }
+.btn.small { padding: .15rem .5rem; font-size: .8rem; }
+
 .coverage-gap {
   margin: 0 0 .9rem; padding: .55rem .75rem; font-size: .9rem;
   border-left: 3px solid var(--amber); background: var(--panel-alt-2); border-radius: 4px;
