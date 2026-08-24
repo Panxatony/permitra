@@ -63,11 +63,20 @@ export default function SetupChecklist() {
   if (!data) return null
   const de = lang === 'de'
   const fewApprovers = data.warnings.some((w) => w.code === 'too-few-approvers')
+  const noBaseUrl = data.warnings.some((w) => w.code === 'base-url-not-set')
 
-  if (data.complete && !fewApprovers) return null
+  if (data.complete && !fewApprovers && !noBaseUrl) return null
 
   return (
     <>
+      {noBaseUrl && (
+        <section className="emergency-banner">
+          <h2>{t('PERMITRA_BASE_URL is not set')}</h2>
+          <p className="small" style={{ margin: 0 }}>
+            {t('Activation and password-reset links are built from it and currently point at localhost – a colleague cannot open the link they were sent. Set it in .env to the address users reach this instance under, then restart the stack.')}
+          </p>
+        </section>
+      )}
       {fewApprovers && (
         <section className="emergency-banner overdue">
           <h2>

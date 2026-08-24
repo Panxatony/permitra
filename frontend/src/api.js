@@ -130,8 +130,15 @@ async function request(path, options = {}) {
     // backendMessages.js). One place covers every caller that shows an error.
     throw new Error(translate(detail, uiLanguage()))
   }
+  // Read the body as text first and only then decide: FastAPI stamps
+  // application/json even onto a 204 with an empty body, and res.json() on
+  // nothing throws - in Safari as the baffling "The string did not match the
+  // expected pattern", shown to a user who had just successfully deleted an
+  // account. Empty is a valid answer and parses to null, not to an error.
   const contentType = res.headers.get('content-type') || ''
-  return contentType.includes('application/json') ? res.json() : res.text()
+  const text = await res.text()
+  if (!text) return null
+  return contentType.includes('application/json') ? JSON.parse(text) : text
 }
 
 export const api = {

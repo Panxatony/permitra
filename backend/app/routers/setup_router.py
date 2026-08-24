@@ -13,6 +13,8 @@ anything, every step links to the normal page, and everything written on the
 way goes through the normal endpoints into the audit log. A wizard with its
 own forms would be a second implementation of six pages that already exist.
 """
+import os
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -92,6 +94,14 @@ def setup_status(db: Session = Depends(get_db), _user: User = Depends(get_curren
     ]
 
     warnings = []
+    # Links in mails - activation, password reset - are built from
+    # PERMITRA_BASE_URL and fall back to localhost when it is unset, which the
+    # user discovers only when a colleague cannot open the link they were sent.
+    # Deliberately an environment variable and never derived from the request's
+    # Host header: a password-reset link built from an attacker-controlled Host
+    # is an account-takeover vector, not a convenience.
+    if not os.environ.get("PERMITRA_BASE_URL", "").strip():
+        warnings.append({"code": "base-url-not-set"})
     # The matrix workflow needs two DIFFERENT approvers; with fewer it cannot
     # complete, and today you find that out when the second approval never
     # comes. Warned permanently, not only during setup - approvers leave.

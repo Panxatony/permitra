@@ -53,6 +53,12 @@ def step(db, sid):
     return next(s for s in status(db)["steps"] if s["id"] == sid)
 
 
+def approver_warnings(db):
+    """Only the approver warning - the base-URL warning depends on the test
+    process's environment and is asserted in its own test, not incidentally."""
+    return [w for w in status(db)["warnings"] if w["code"] == "too-few-approvers"]
+
+
 def test_a_fresh_instance_has_everything_open(db):
     result = status(db)
     assert result["complete"] is False
@@ -106,12 +112,12 @@ def test_accounts_need_two_approvers_not_one(db):
     db.add(User(username="ap1", password_hash="x", role=Role.change_approver, is_active=True))
     db.commit()
     assert step(db, "accounts")["done"] is False
-    assert status(db)["warnings"] == [{"code": "too-few-approvers", "count": 1}]
+    assert approver_warnings(db) == [{"code": "too-few-approvers", "count": 1}]
 
     db.add(User(username="ap2", password_hash="x", role=Role.change_approver, is_active=True))
     db.commit()
     assert step(db, "accounts")["done"] is True
-    assert status(db)["warnings"] == []
+    assert approver_warnings(db) == []
 
 
 def test_a_deactivated_approver_does_not_count(db):
@@ -125,7 +131,7 @@ def test_a_deactivated_approver_does_not_count(db):
 
     db.query(User).filter(User.username == "ap2").first().is_active = False
     db.commit()
-    assert status(db)["warnings"] == [{"code": "too-few-approvers", "count": 1}]
+    assert approver_warnings(db) == [{"code": "too-few-approvers", "count": 1}]
 
 
 def test_the_steps_come_in_handover_order(db):
@@ -138,3 +144,15 @@ def test_the_steps_come_in_handover_order(db):
     assert [s["id"] for s in steps] == ["language", "accounts", "zones", "networks",
                                         "components", "matrix", "first_rule"]
     assert [s["phase"] for s in steps] == ["admin"] * 2 + ["architect"] * 5
+
+
+def test_an_unset_base_url_is_a_standing_warning(db, monkeypatch):
+    """Activation and reset links fall back to localhost while it is unset -
+    discovered only when a colleague cannot open the link they were sent. And
+    deliberately never derived from the request Host header: a reset link built
+    from an attacker-controlled Host is an account-takeover vector."""
+    monkeypatch.delenv("PERMITRA_BASE_URL", raising=False)
+    assert any(w["code"] == "base-url-not-set" for w in status(db)["warnings"])
+
+    monkeypatch.setenv("PERMITRA_BASE_URL", "https://permitra.example.org")
+    assert not any(w["code"] == "base-url-not-set" for w in status(db)["warnings"])

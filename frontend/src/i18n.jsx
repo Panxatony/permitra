@@ -309,6 +309,8 @@ const DE = {
   'Two phases: the admin sets language and accounts, then the architect accounts do the domain work. Nothing here blocks anything – the list disappears once the essentials exist.': 'Zwei Phasen: der Admin legt Sprache und Konten fest, die fachliche Arbeit machen dann die Architekten-Konten. Nichts hier blockiert etwas – die Liste verschwindet, sobald das Wesentliche existiert.',
   'the admin does this': 'macht der Admin',
   'the architects do this': 'machen die Architekten',
+  'PERMITRA_BASE_URL is not set': 'PERMITRA_BASE_URL ist nicht gesetzt',
+  'Activation and password-reset links are built from it and currently point at localhost – a colleague cannot open the link they were sent. Set it in .env to the address users reach this instance under, then restart the stack.': 'Aktivierungs- und Passwort-Reset-Links werden daraus gebaut und zeigen derzeit auf localhost – ein Kollege kann den zugeschickten Link nicht öffnen. In der .env auf die Adresse setzen, unter der die Nutzer diese Instanz erreichen, dann den Stack neu starten.',
   'Change': 'Änderung',
   'Change note (for the version history)': 'Änderungsnotiz (für die Versionshistorie)',
   'Change password': 'Passwort ändern',
