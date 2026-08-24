@@ -128,9 +128,13 @@ def test_a_deactivated_approver_does_not_count(db):
     assert status(db)["warnings"] == [{"code": "too-few-approvers", "count": 1}]
 
 
-def test_the_steps_come_in_dependency_order(db):
-    """The order is the point: each step is why the next one works. A reader
-    works top to bottom and never hits a step whose prerequisite is below it."""
-    ids = [s["id"] for s in status(db)["steps"]]
-    assert ids == ["language", "zones", "networks", "components",
-                   "matrix", "accounts", "first_rule"]
+def test_the_steps_come_in_handover_order(db):
+    """Two phases, because two different people act: the admin prepares the
+    instance (language, accounts) and hands over - everything from the zones on
+    is the architects' work. Accounts before the domain steps, or the admin
+    working top to bottom reaches "create accounts" after the steps that needed
+    those accounts to exist."""
+    steps = status(db)["steps"]
+    assert [s["id"] for s in steps] == ["language", "accounts", "zones", "networks",
+                                        "components", "matrix", "first_rule"]
+    assert [s["phase"] for s in steps] == ["admin"] * 2 + ["architect"] * 5

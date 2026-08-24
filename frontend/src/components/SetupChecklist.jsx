@@ -41,8 +41,8 @@ const STEP_TEXT = {
   },
   accounts: {
     title: ['Konten für die Rollen anlegen', 'Create accounts for the roles'],
-    why: ['Mindestens ein Architekt, ein Betrieb – und zwei Change Approver, denn das Vier-Augen-Prinzip braucht zwei verschiedene.',
-          'At least one architect, one operations – and two change approvers, because four eyes means two different people.'],
+    why: ['Mindestens ein Architekt, ein Betrieb – und zwei Change Approver, denn das Vier-Augen-Prinzip braucht zwei verschiedene. Damit ist der Admin-Teil abgeschlossen: alles Weitere machen die Architekten.',
+          'At least one architect, one operations – and two change approvers, because four eyes means two different people. This closes the admin part: everything from here on is the architects\u0027 work.'],
   },
   first_rule: {
     title: ['Die erste Regel anlegen', 'Create the first rule'],
@@ -91,21 +91,31 @@ export default function SetupChecklist() {
             </span>
           </h2>
           <p className="muted small">
-            {t('In this order, because each step is why the next one works. Nothing here blocks anything – the list disappears once the essentials exist.')}
+            {t('Two phases: the admin sets language and accounts, then the architect accounts do the domain work. Nothing here blocks anything – the list disappears once the essentials exist.')}
           </p>
           <ol className="setup-steps">
-            {data.steps.map((s) => {
+            {data.steps.map((s, i) => {
               const text = STEP_TEXT[s.id]
+              const newPhase = i === 0 || data.steps[i - 1].phase !== s.phase
               return (
                 <li key={s.id} className={s.done ? 'setup-done' : ''}>
-                  <span className="setup-mark">{s.done ? '✓' : '○'}</span>
-                  <span>
-                    <Link to={s.route}>{text.title[de ? 0 : 1]}</Link>
-                    {s.count > 0 && <span className="muted small"> ({s.count})</span>}
-                    {!s.done && (
-                      <span className="muted small setup-why"> — {text.why[de ? 0 : 1]}</span>
-                    )}
-                  </span>
+                  {newPhase && (
+                    <div className="setup-phase">
+                      {s.phase === 'admin'
+                        ? t('The admin prepares the instance')
+                        : t('Then the architects take over')}
+                    </div>
+                  )}
+                  <div className="setup-row">
+                    <span className="setup-mark">{s.done ? '✓' : '○'}</span>
+                    <span>
+                      <Link to={s.route}>{text.title[de ? 0 : 1]}</Link>
+                      {s.count > 0 && <span className="muted small"> ({s.count})</span>}
+                      {!s.done && (
+                        <span className="muted small setup-why"> — {text.why[de ? 0 : 1]}</span>
+                      )}
+                    </span>
+                  </div>
                 </li>
               )
             })}
