@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, getUser } from '../api'
+import { api, getUser, hasRole } from '../api'
 import { HelpLink, Modal } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
@@ -349,7 +349,7 @@ function ZoneReachability({ overview }) {
 export default function ZoneMatrix() {
   const { lang, t } = useLang()
   const user = getUser()
-  const canEdit = user.role === 'architect' || user.role === 'admin'
+  const canEdit = hasRole(user, 'architect')
   const [zones, setZones] = useState([])
   const [overview, setOverview] = useState(null)
   const [fwComponents, setFwComponents] = useState([])
@@ -369,7 +369,7 @@ export default function ZoneMatrix() {
   const [draft, setDraft] = useState({})        // "from|to" -> new policy
   const [draftZones, setDraftZones] = useState([])  // [{name, pap_level}]
 
-  const isApprover = ['change_approver', 'admin'].includes(user.role)
+  const isApprover = hasRole(user, 'change_approver')
   const pendingMap = {}
   changes.filter((c) => c.status === 'pending' && c.change_type === 'policy')
     .forEach((c) => { pendingMap[`${c.from_zone}|${c.to_zone}`] = c })

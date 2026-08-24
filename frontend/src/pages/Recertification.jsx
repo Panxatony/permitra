@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, getToken, getUser } from '../api'
+import { api, getToken, getUser, hasRole } from '../api'
 import { ComponentBadges, HelpLink, ServiceList } from '../components/shared'
 import { useLang } from '../i18n'
 
@@ -218,14 +218,14 @@ function Campaign({ c, onChanged, canDecide, canManage, me }) {
 export default function Recertification() {
   const { t } = useLang()
   const user = getUser()
-  const canAct = ['architect', 'operations', 'admin'].includes(user.role)
+  const canAct = hasRole(user, 'architect', 'operations')
   const [days, setDays] = useState(30)
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [campaigns, setCampaigns] = useState([])
   const [newCampaign, setNewCampaign] = useState({ name: '', due_date: plusMonths(3), scope: 'all' })
-  const canManage = user.role === 'change_approver'
+  const canManage = hasRole(user, 'change_approver')
 
   const loadCampaigns = useCallback(() => {
     api.recertCampaigns().then(setCampaigns).catch(() => {})
@@ -319,7 +319,7 @@ export default function Recertification() {
         )}
         {campaigns.map((c) => (
           <Campaign key={c.id} c={c} me={user.username}
-            canDecide={canAct || user.role === 'change_approver'} canManage={canManage}
+            canDecide={canAct || canManage} canManage={canManage}
             onChanged={loadCampaigns} />
         ))}
         {!campaigns.length && <p className="muted">{t('No campaigns yet.')}</p>}

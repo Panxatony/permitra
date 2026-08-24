@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { api, clearSession, getUser, getVrfName, setVrfName } from './api'
+import { api, clearSession, getUser, getVrfName, rolesOf, setVrfName } from './api'
 import { useLang } from './i18n'
 import { useTheme } from './theme'
 import Components from './pages/Components'
@@ -33,22 +33,70 @@ const ROLE_LABELS = { architect: 'Architect', operations: 'Operations', change_a
    enforcement is the backend (require_roles admits exactly the roles named);
    this guard is the visible half, so a role never stands on a page whose every
    action would 403. Admin and approver carry allowlists because their views
-   are deliberately narrow; the working roles carry denylists. */
+   are deliberately narrow; the working roles carry denylists.
+
+   The admin list is short on purpose: an admin installs and administers
+   Permitra. Running the recertification cycle belongs to the change approver
+   (#81), so the admin no longer reaches those pages either - the menu and the
+   permission now say the same thing. */
 const ROLE_ROUTES = {
-  admin: { allow: ['/admin', '/recertification', '/reports', '/help', '/account'], home: '/admin' },
+  admin: { allow: ['/admin', '/help', '/account'], home: '/admin' },
   change_approver: { allow: ['/approvals', '/rules', '/recertification', '/reports',
     '/zones', '/networks', '/help', '/account'], home: '/approvals' },
   architect: { deny: ['/admin', '/approvals'], home: '/' },
   operations: { deny: ['/admin', '/approvals'], home: '/' },
 }
 
-function routeAllowed(role, path) {
-  const spec = ROLE_ROUTES[role]
-  if (!spec) return true
+/* An account holds a set of roles and its permission is their union (#78), so a
+   path is open when ANY held role opens it. Written as "some role allows" and
+   not "no role denies": a denylist role must never veto what an allowlist role
+   grants, or holding a second role would take access away instead of adding it. */
+function routeAllowed(roles, path) {
   const matches = (p) => path === p || path.startsWith(p + '/')
-  if (spec.allow) return path === '/' ? spec.home === '/' : spec.allow.some(matches)
-  return !spec.deny.some(matches)
+  return roles.some((role) => {
+    const spec = ROLE_ROUTES[role]
+    if (!spec) return true
+    if (spec.allow) return path === '/' ? spec.home === '/' : spec.allow.some(matches)
+    return !spec.deny.some(matches)
+  })
 }
+
+/* The landing page of the highest-precedence role held, matching the primary
+   role the backend derives for the badge. */
+const HOME_PRECEDENCE = ['admin', 'change_approver', 'architect', 'operations']
+
+function homeFor(roles) {
+  const primary = HOME_PRECEDENCE.find((r) => roles.includes(r))
+  return ROLE_ROUTES[primary]?.home || '/'
+}
+
+/* Every entry names the roles that may see it; an account holding several sees
+   the union, each link once and in this order. Additive by construction - the
+   if/else chain this replaced could only ever render one role's menu. */
+const NAV = [
+  { to: '/admin', label: 'Administration', roles: ['admin'] },
+  { to: '/', label: 'Dashboard', roles: ['architect', 'operations'] },
+  { to: '/approvals', label: 'Approvals', roles: ['change_approver'] },
+  { to: '/rules', label: 'Rules', roles: ['architect', 'operations', 'change_approver'] },
+  { to: '/rules/new', label: 'New rule', roles: ['architect'] },
+  // Reachable by operations too - they are the ones at the firewall at three in
+  // the morning, and a fast path they cannot find is none. Deliberately not
+  // styled as a primary action: it should be available, not inviting.
+  { to: '/rules/new?emergency=1', label: 'Emergency change',
+    roles: ['architect', 'operations'], className: 'nav-emergency' },
+  { to: '/search', label: 'Analysis', roles: ['architect', 'operations'] },
+  { to: '/recertification', label: 'Recertification',
+    roles: ['architect', 'operations', 'change_approver'] },
+  { to: '/zones', label: 'Security zones',
+    roles: ['architect', 'operations', 'change_approver'] },
+  { to: '/networks', label: 'Networks',
+    roles: ['architect', 'operations', 'change_approver'] },
+  { to: '/components', label: 'Components', roles: ['architect', 'operations'] },
+  { to: '/objects', label: 'Objects', roles: ['architect', 'operations'] },
+  { to: '/export', label: 'Export', roles: ['architect', 'operations'] },
+  { to: '/reports', label: 'Reports',
+    roles: ['architect', 'operations', 'change_approver'] },
+]
 
 function Layout({ children }) {
   const user = getUser()
@@ -67,8 +115,8 @@ function Layout({ children }) {
     api.vrfs().then(setVrfs).catch(() => setVrfs([]))
   }, [])
   useEffect(() => {
-    if (user && !routeAllowed(user.role, location.pathname)) {
-      navigate(ROLE_ROUTES[user.role].home, { replace: true })
+    if (user && !routeAllowed(rolesOf(user), location.pathname)) {
+      navigate(homeFor(rolesOf(user)), { replace: true })
     }
   }, [user, location.pathname, navigate])
   const currentVrf = getVrfName() || (vrfs[0]?.name ?? '')
@@ -106,7 +154,9 @@ function Layout({ children }) {
             <Link to="/account" className="account-link" title="Konto & Sicherheit">
               {user.full_name || user.username}
             </Link>
-            <span className={`badge role-${user.role}`}>{t(ROLE_LABELS[user.role])}</span>
+            {rolesOf(user).map((r) => (
+              <span key={r} className={`badge role-${r}`}>{t(ROLE_LABELS[r])}</span>
+            ))}
             <button className="btn btn-topbar btn-theme" onClick={cycleTheme}
               title={`${t('Colour scheme')}: ${t(THEME_LABELS[theme])} – ${t('click to switch')}`}
               aria-label={`${t('Colour scheme')}: ${t(THEME_LABELS[theme])}`}>
@@ -116,51 +166,12 @@ function Layout({ children }) {
           </div>
         </div>
         <nav>
-          {user.role === 'admin' ? (
-            <>
-              {/* Focused view: admins manage Permitra, no rule views - but
-                  campaigns are started and closed by admins and approvers, and
-                  a page a role may use but cannot reach is a trap. This one
-                  was: the backend allowed it, the form existed, the link did not. */}
-              <Link to="/admin">{t('Administration')}</Link>
-              <Link to="/recertification">{t('Recertification')}</Link>
-              <Link to="/reports">{t('Reports')}</Link>
-            </>
-          ) : user.role === 'change_approver' ? (
-            <>
-              {/* Slimmed-down view: approvers see what they need to decide -
-                  and campaigns ARE decisions, so recertification belongs here. */}
-              <Link to="/approvals">{t('Approvals')}</Link>
-              <Link to="/rules">{t('Rules')}</Link>
-              <Link to="/recertification">{t('Recertification')}</Link>
-              <Link to="/reports">{t('Reports')}</Link>
-              <Link to="/zones">{t('Security zones')}</Link>
-              <Link to="/networks">{t('Networks')}</Link>
-            </>
-          ) : (
-            <>
-              <Link to="/">{t('Dashboard')}</Link>
-              <Link to="/rules">{t('Rules')}</Link>
-              {user.role === 'architect' && <Link to="/rules/new">{t('New rule')}</Link>}
-              {/* Reachable by operations too - they are the ones at the firewall at
-                  three in the morning, and a fast path they cannot find is none.
-                  Deliberately not styled as a primary action: it should be
-                  available, not inviting. */}
-              {['architect', 'operations'].includes(user.role) && (
-                <Link to="/rules/new?emergency=1" className="nav-emergency">
-                  {t('Emergency change')}
-                </Link>
-              )}
-              <Link to="/search">{t('Analysis')}</Link>
-              <Link to="/recertification">{t('Recertification')}</Link>
-              <Link to="/zones">{t('Security zones')}</Link>
-              <Link to="/networks">{t('Networks')}</Link>
-              <Link to="/components">{t('Components')}</Link>
-              <Link to="/objects">{t('Objects')}</Link>
-              <Link to="/export">{t('Export')}</Link>
-              <Link to="/reports">{t('Reports')}</Link>
-            </>
-          )}
+          {NAV.filter((item) => item.roles.some((r) => rolesOf(user).includes(r)))
+            .map((item) => (
+              <Link key={item.to} to={item.to} className={item.className}>
+                {t(item.label)}
+              </Link>
+            ))}
           <Link to="/help" className="nav-help">{t('Help')}</Link>
         </nav>
       </header>
@@ -182,10 +193,12 @@ function Layout({ children }) {
 }
 
 function Home() {
-  // Change approvers start focused on the approvals page
+  // The landing page of the highest-precedence role held: an admin starts in
+  // administration, a change approver on the approvals page, everyone else on
+  // the dashboard.
   const user = getUser()
-  if (user?.role === 'admin') return <Navigate to="/admin" replace />
-  if (user?.role === 'change_approver') return <Navigate to="/approvals" replace />
+  const home = homeFor(rolesOf(user))
+  if (user && home !== '/') return <Navigate to={home} replace />
   return <Dashboard />
 }
 

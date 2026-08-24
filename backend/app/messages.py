@@ -192,6 +192,7 @@ CATALOG: dict[str, dict[str, str]] = {
         "A requestor is an architect account - '{username}' is {role}":
             "Ein Requestor ist ein Architekten-Konto – '{username}' ist {role}",
         "That is already the requestor": "Das ist bereits der Requestor",
+        "An account must hold at least one role": "Ein Konto muss mindestens eine Rolle haben",
         "Only the current requestor may hand a rule over (an admin may, once the requestor's account is gone)":
             "Nur der aktuelle Requestor darf eine Regel übergeben (ein Admin, sobald dessen Konto fort ist)",
         "No handover is pending for this rule":
@@ -319,8 +320,9 @@ CATALOG: dict[str, dict[str, str]] = {
         "Rule set to deleted": "Regel auf gelöscht gesetzt",
         "SECRET_KEY is not set – startup refused (fail-secure). Set SECRET_KEY (e.g. `openssl rand -hex 32`) or PERMITRA_DEV=1 for local development.":
             "SECRET_KEY ist nicht gesetzt – Start verweigert (fail-secure). Setze SECRET_KEY (z.B. `openssl rand -hex 32`) oder PERMITRA_DEV=1 für lokale Entwicklung.",
-        "Separation of duties: you cannot approve a rule you created or submitted yourself":
-            "Vier-Augen-Prinzip: eigene bzw. selbst eingereichte Regeln können nicht selbst freigegeben werden",
+        "Separation of duties: you cannot approve a rule you requested, created or submitted yourself":
+            "Vier-Augen-Prinzip: selbst beantragte, angelegte oder eingereichte Regeln "
+            "können nicht selbst freigegeben werden",
         "Separation of duties: you cannot approve your own request":
             "Vier-Augen-Prinzip: eigene Anträge können nicht selbst freigegeben werden",
         "Service 'any' on a cross-zone rule": "Dienst 'any' bei zonenübergreifender Regel",

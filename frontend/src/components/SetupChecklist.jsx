@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, getUser } from '../api'
+import { api, getUser, hasRole } from '../api'
 import { useLang } from '../i18n'
 
 /* The first-run checklist (#67): what a fresh instance still needs, in the
@@ -86,7 +86,7 @@ export default function SetupChecklist() {
           </h2>
           <p className="small" style={{ margin: 0 }}>
             {t('Matrix, zone and network changes need approval by two different change approvers – with fewer, those requests can never complete, and the second approval simply never comes.')}
-            {user.role === 'admin' && <> <Link to="/admin">{t('Create accounts')}</Link></>}
+            {hasRole(user, 'admin') && <> <Link to="/admin">{t('Create accounts')}</Link></>}
           </p>
         </section>
       )}
@@ -123,7 +123,7 @@ export default function SetupChecklist() {
                           page - a page whose every action now 403s for them.
                           Showing the step without the link keeps the handover
                           visible and the trap closed. */}
-                      {s.role === user.role
+                      {hasRole(user, s.role)
                         ? <Link to={s.route}>{text.title[de ? 0 : 1]}</Link>
                         : <>
                             {text.title[de ? 0 : 1]}{' '}

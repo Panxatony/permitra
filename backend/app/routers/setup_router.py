@@ -27,6 +27,7 @@ from ..models import (
     SecurityComponent,
     Setting,
     User,
+    UserRole,
     Zone,
     ZoneNetwork,
     ZonePolicy,
@@ -62,7 +63,8 @@ def setup_status(db: Session = Depends(get_db), _user: User = Depends(get_curren
 
     def active(role: Role) -> int:
         return (db.query(User)
-                .filter(User.role == role, User.is_active.is_(True)).count())
+                .filter(User.role_rows.any(UserRole.role == role),
+                        User.is_active.is_(True)).count())
 
     architects = active(Role.architect)
     operations = active(Role.operations)

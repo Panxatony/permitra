@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 @router.get("/requestors")
 def requestor_summary(db: Session = Depends(get_db),
                       user: User = Depends(require_roles(
-                          Role.admin, Role.change_approver, Role.architect, Role.operations))):
+                          Role.change_approver, Role.architect, Role.operations))):
     """Rules per requestor: how many, how many in force, and whether the person
     still exists.
 

@@ -202,7 +202,7 @@ def create_campaign(
 @router.get("")
 def list_campaigns(db: Session = Depends(get_db),
                    user: User = Depends(require_roles(
-                       Role.admin, Role.change_approver, Role.architect, Role.operations))):
+                       Role.change_approver, Role.architect, Role.operations))):
     campaigns = db.query(RecertCampaign).order_by(RecertCampaign.created_at.desc()).all()
     return [_campaign_out(c, db) for c in campaigns]
 
@@ -210,7 +210,7 @@ def list_campaigns(db: Session = Depends(get_db),
 @router.get("/{campaign_id}")
 def campaign_detail(campaign_id: int, db: Session = Depends(get_db),
                     user: User = Depends(require_roles(
-                        Role.admin, Role.change_approver, Role.architect, Role.operations))):
+                        Role.change_approver, Role.architect, Role.operations))):
     campaign = db.get(RecertCampaign, campaign_id)
     if not campaign:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _("Campaign not found"))
@@ -247,7 +247,7 @@ def confirm_item(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.architect, Role.operations,
-                                       Role.change_approver, Role.admin)),
+                                       Role.change_approver)),
 ):
     """Reviewed, still required - the act the whole feature exists to record."""
     item = _get_open_item(db, campaign_id, item_id)
@@ -302,7 +302,7 @@ def rework_item(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.architect, Role.operations,
-                                       Role.change_approver, Role.admin)),
+                                       Role.change_approver)),
 ):
     """Still needed, but wrong - back into review.
 
@@ -350,7 +350,7 @@ def retire_item(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(Role.architect, Role.operations,
-                                       Role.change_approver, Role.admin)),
+                                       Role.change_approver)),
 ):
     """No longer needed - deactivated, and operations is told to remove it."""
     if len(payload.comment.strip()) < 5:
@@ -426,7 +426,7 @@ def campaign_report(
     format: str = "json",
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(
-        Role.admin, Role.change_approver, Role.architect, Role.operations)),
+        Role.change_approver, Role.architect, Role.operations)),
 ):
     """Who confirmed what, when - and what is still outstanding.
 

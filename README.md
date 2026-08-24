@@ -40,8 +40,19 @@ Project website: https://permitra.de · Live demo: https://demo.permitra.de
 |---|---|
 | `architect` | Create/edit rules, submit for review, comment |
 | `operations` | Maintain implementation status per component, export, drift comparison |
-| `change_approver` | Approvals: rule reviews (one approval) and zone/network/matrix requests (two approvals by different approvers); focused approvals start page |
-| `admin` | Permitra administration (user management, settings); focused admin start page |
+| `change_approver` | Approvals: rule reviews (one approval) and zone/network/matrix requests (two approvals by different approvers); runs the recertification cycle (starts and closes campaigns); focused approvals start page |
+| `admin` | Permitra administration only — installation, user management, settings. Deliberately not a superuser: no rule views, no approvals, no recertification |
+
+An account can hold **several roles**, and its permission is their union — small
+teams do not have four people for four roles. This does not soften separation of
+duties, because the four-eyes checks key on the acting *account*, not on a role:
+
+- an account holding both `architect` and `change_approver` still cannot approve
+  a rule it requested, created or submitted (it may approve everyone else's), and
+- the two approvals on a zone, network or matrix change must come from two
+  different accounts, so one multi-role account cannot supply both.
+
+Two hats on one person is still one pair of eyes.
 
 ## What it does
 

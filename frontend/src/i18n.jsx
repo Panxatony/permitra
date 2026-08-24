@@ -569,6 +569,7 @@ const DE = {
   'revoked': 'widerrufen',
   'Risk': 'Risiko',
   'Role': 'Rolle',
+  'Roles': 'Rollen',
   'Role changed': 'Rolle geändert',
   'Rule': 'Regel',
   'Rule ID': 'Rule-ID',
