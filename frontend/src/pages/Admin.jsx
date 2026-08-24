@@ -1,3 +1,4 @@
+import SetupChecklist from '../components/SetupChecklist'
 import { useEffect, useState } from 'react'
 import { api, getUser } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
@@ -72,6 +73,8 @@ export default function Admin() {
         <h1>{t('Administration')}</h1>
         <span className="muted">{t('User management – more Permitra settings will follow here.')}</span>
       </div>
+
+      <SetupChecklist />
 
       {error && <div className="error">{error}</div>}
       {notice && <div className="infobox">{notice}</div>}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
+import SetupChecklist from '../components/SetupChecklist'
 import { HelpLink, STATUS_LABELS } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
@@ -174,6 +175,8 @@ export default function Dashboard() {
           </span>
         )}
       </div>
+
+      <SetupChecklist />
 
       {data.emergency && data.emergency.pending > 0 && (
         <section className={`emergency-banner ${data.emergency.overdue ? 'overdue' : ''}`}>

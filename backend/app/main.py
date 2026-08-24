@@ -26,6 +26,7 @@ from .routers import (
     risk_router,
     rules_router,
     settings_router,
+    setup_router,
     users_router,
     vrfs_router,
     zones_router,
@@ -81,6 +82,7 @@ app.include_router(epgs_router.router)
 app.include_router(risk_router.router)
 app.include_router(recert_router.router)
 app.include_router(reports_router.router)
+app.include_router(setup_router.router)
 app.include_router(vrfs_router.router)
 
 
