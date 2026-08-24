@@ -269,9 +269,9 @@ export default function Help() {
       )}
 
       <p className="muted small">
-        {t('More depth – data model, exports, audit, deployment – is in the docs folder of the repository:')}{' '}
-        <a href="https://github.com/Panxatony/permitra/tree/main/docs" target="_blank" rel="noopener noreferrer">
-          github.com/Panxatony/permitra
+        {t('These topics are also on the website, linkable and printable:')}{' '}
+        <a href="https://permitra.de/hilfe.html" target="_blank" rel="noopener noreferrer">
+          permitra.de/hilfe
         </a>
       </p>
     </div>
