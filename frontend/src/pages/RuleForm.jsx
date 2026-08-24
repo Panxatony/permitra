@@ -21,8 +21,6 @@ const EMPTY = {
   justification: '',
   business_context: '',
   info: '',
-  requestor: '',
-  owner: '',
   change_id: '',
   valid_from: '',
   valid_until: '',
@@ -425,10 +423,10 @@ export default function RuleForm() {
             required={reqSettings.require_justification === 'yes'} /></label>
         <label>{t('Description')}<textarea rows={2} value={form.description} onChange={set('description')} /></label>
         <div className="grid-3">
-          <label>Requestor{reqSettings.require_requestor === 'yes' && ' *'}
-            <input value={form.requestor} onChange={set('requestor')}
-              required={reqSettings.require_requestor === 'yes'} /></label>
-          <label>{t('Handler / owner')}<input value={form.owner} onChange={set('owner')} /></label>
+          {/* Requestor and owner are recorded, not entered: the requestor is
+              the signed-in account that creates the rule, the owner is whoever
+              last maintains the implementation status. A typed name can be
+              misspelled and matches nobody in the reports; an account cannot. */}
           <label>{t('Change ID')}<input value={form.change_id} onChange={set('change_id')} placeholder={t('e.g. CHN0000273')} /></label>
           <label>{t('Business context')}<input value={form.business_context} onChange={set('business_context')} /></label>
           <label>{t('Valid from')}<input type="date" value={form.valid_from} onChange={set('valid_from')} /></label>

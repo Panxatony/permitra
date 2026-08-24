@@ -197,8 +197,6 @@ def enforce_required_fields(db: Session, payload):
     missing = []
     if get_setting(db, "require_justification") == "yes" and not (payload.justification or "").strip():
         missing.append(_("Justification"))
-    if get_setting(db, "require_requestor") == "yes" and not (payload.requestor or "").strip():
-        missing.append(_("Requestor (responsible person)"))
     if get_setting(db, "require_valid_until") == "yes" and not (payload.valid_until or "").strip():
         missing.append(_("Valid until (expiry date)"))
     if missing:
@@ -708,12 +706,21 @@ def _create_rule(db: Session, payload, user: User, *,
             if not verdict.allowed:
                 matrix_violation = "; ".join(verdict.messages)
 
-        data = payload.model_dump(exclude={"component_ids", "vrf", "emergency_reason"})
+        # requestor and owner are derived, never entered (see below); whatever a
+        # client sends for them is ignored rather than trusted.
+        data = payload.model_dump(exclude={"component_ids", "vrf", "emergency_reason",
+                                           "requestor", "owner"})
         data["services"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in payload.services]
         if status_ is not None:
             data["status"] = status_
+        # The requestor is the account that created the rule in Permitra - not a
+        # free-text name. A name somebody typed cannot be signed in, notified or
+        # matched against the user list; an account can. The owner (Bearbeiter)
+        # stays empty until operations first touches the implementation status,
+        # because that is what it records: who last worked the rule on the
+        # components, not who somebody expects to.
         rule = Rule(rule_id=next_rule_id(db), vrf_id=vrf.id, created_by=user.username,
-                    components=components, **data)
+                    requestor=user.username, components=components, **data)
         db.add(rule)
         try:
             db.flush()
@@ -826,7 +833,8 @@ def update_rule(
     )
     # impl_status is maintained by operations through its own endpoint – an edit must
     # not reset it (approval sets already implemented components to "to change")
-    data = payload.model_dump(exclude={"change_note", "component_ids", "vrf", "impl_status"})
+    data = payload.model_dump(exclude={"change_note", "component_ids", "vrf", "impl_status",
+                                       "requestor", "owner"})
     data["services"] = [s.model_dump() if hasattr(s, "model_dump") else s for s in payload.services]
     for key, value in data.items():
         setattr(rule, key, value)
@@ -917,9 +925,12 @@ def restore_version(
         db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
     )
 
+    # requestor and owner are deliberately not restored: the creator does not
+    # change because content was rolled back, and the owner records who last
+    # worked the rule on the devices - also unaffected by a content rollback.
     for field in ("name", "application", "source", "destination", "services",
                   "description", "justification", "business_context", "info",
-                  "requestor", "owner", "change_id", "valid_from", "valid_until"):
+                  "change_id", "valid_from", "valid_until"):
         if field in snap:
             setattr(rule, field, snap[field])
     if snap.get("action") in (a.value for a in RuleAction):
@@ -1156,6 +1167,9 @@ def set_impl_status(
                                   "(allowed: {allowed})",
                                   value=value, allowed=", ".join(sorted(allowed_status))))
     rule.impl_status = {**(rule.impl_status or {}), **impl_status}
+    # The owner is the operations account that last worked the rule on the
+    # components - recorded from the act itself, not maintained by hand.
+    rule.owner = user.username
     rule.version += 1
     add_version(db, rule, user, "Implementation status: {impl_status}", impl_status=impl_status)
     _sync_active_status(db, rule, user)

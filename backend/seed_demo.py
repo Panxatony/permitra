@@ -533,7 +533,10 @@ def seed(wipe: bool):
         # Components as the automatic resolution would pick them: intra-zone -> ACI, otherwise FW cluster
         rule_components_list = resolve_seed_components(src_zone, dst_zone)
         app = random.choice(APPLICATIONS)
-        requestor, owner = random.choice(PEOPLE), random.choice(PEOPLE)
+        # requestor/owner are accounts now: the creator, and the operations
+        # account that maintains the implementation status. The fictional
+        # PEOPLE stay as comment authors and zone owners only.
+        owner = random.choice(PEOPLE)
         status = statuses[i - 1]
         created = start + timedelta(days=random.randint(0, 200))
 
@@ -561,14 +564,14 @@ def seed(wipe: bool):
             description=f"{'Intra-Zonen-' if intra else ''}Freischaltung für {app}",
             justification=justification,
             business_context=random.choice(BUSINESS),
-            requestor=requestor[0],
-            owner=owner[1],
+            requestor="architekt",
+            owner="betrieb" if impl_status else "",
             change_id=f"CHN{2026000 + i}",
             valid_from=created.isoformat(),
             valid_until=(created + timedelta(days=365)).isoformat() if random.random() < 0.25 else None,
             status=status,
             impl_status=impl_status,
-            created_by="demo-seed",
+            created_by="architekt",
         )
         db.add(rule)
         db.flush()
@@ -602,9 +605,9 @@ def seed(wipe: bool):
             destination=[{"ip": "10.10.80.10", "alias": "jump01.demo.local"}],
             services=[{"protocol": "TCP", "port": "22"}], action=RuleAction.permit,
             justification="Demo: absichtlich überlappende Regel für Konflikt-Warnung",
-            requestor="Max Bauer", owner="mbauer", change_id="CHN2026999",
+            requestor="architekt", owner="betrieb", change_id="CHN2026999",
             status=RuleStatus.approved, impl_status={fw_ber.name: "implemented"},
-            created_by="demo-seed",
+            created_by="architekt",
         )
         db.add(rule)
         db.flush()
@@ -626,11 +629,11 @@ def seed(wipe: bool):
         description="Standortübergreifender Admin-Zugriff: Umsetzung auf allen drei Komponenten",
         justification="Administration der PROD-APP-Server vom zentralen Jump-Host (BER -> FFM, "
                       "Transit über beide FW-Cluster, ACI Contract im Ziel-Segment)",
-        business_context="Interne IT", requestor="Max Bauer", owner="mbauer",
+        business_context="Interne IT", requestor="architekt", owner="betrieb",
         change_id="CHN2027001", status=RuleStatus.approved,
         impl_status={"FW-Cluster-BER": "implemented", "FW-Cluster-FFM": "implemented",
                      "ACI-Fabric-FFM": "new"},
-        created_by="demo-seed",
+        created_by="architekt",
     )
     db.add(rule)
     db.flush()
