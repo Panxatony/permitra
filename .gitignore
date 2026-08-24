@@ -6,6 +6,7 @@ permitra.db
 node_modules/
 frontend/dist/
 .env
+.env.setup-test
 .pytest_cache/
 data/
 backups/
