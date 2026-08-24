@@ -56,7 +56,7 @@ def consume_token(db: Session, raw: str) -> tuple[User, str]:
 
 @router.get("/architects")
 def list_architects(db: Session = Depends(get_db),
-                    user: User = Depends(require_roles(Role.architect, Role.admin))):
+                    user: User = Depends(require_roles(Role.architect, Role.operations, Role.admin))):
     """Active architect accounts, for picking a handover successor.
 
     Deliberately narrow: username and name only, architects (the accounts that
