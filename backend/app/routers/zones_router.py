@@ -376,8 +376,17 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
 
     if not items:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("No changes included"))
+    # A zone created in this same batch counts as existing for the rest of it:
+    # the zones are applied first, then the cells. It has to answer to both its
+    # name AND its code, because everything that references a zone - matrix
+    # cells, network assignments - does so by `code or name`, and the interface
+    # sends the code. Collecting only the name made "new zone plus its matrix
+    # relations in one request" fail with "Zone 'Z130' not found".
     new_zone_names = {
-        (i.get("name") or "").strip().upper() for i in items if i.get("type") == "zone_create"
+        value.strip().upper()
+        for i in items if i.get("type") == "zone_create"
+        for value in (i.get("name") or "", i.get("code") or "")
+        if value.strip()
     }
     batch_id = str(uuid.uuid4())
     rows = []
@@ -399,7 +408,7 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                                     _("pap_level must be one of {levels}",
                                       levels=", ".join(PAP_LEVELS)))
             # to_zone carries the zone ID (otherwise unused for zone_create);
-            # the protection level (CIA) goes into extra
+            # everything else a zone has goes into extra
             cia = {}
             for f in ("cia_c", "cia_i", "cia_a"):
                 v = (item.get(f) or "normal").strip().lower()
@@ -408,6 +417,19 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                                         _("Protection level must be one of {levels}",
                                           levels=", ".join(PROTECTION_LEVELS)))
                 cia[f] = v
+            # The owner and the firewall attachment belong to the request, not to
+            # a follow-up edit: a zone that comes into being without them needs a
+            # second change nobody reviewed, and an unattached zone is invisible
+            # to the drift comparison until somebody notices.
+            cia["owner"] = (item.get("owner") or "").strip()[:128]
+            requested_components = item.get("component_ids") or []
+            known = {c.id for c in db.query(SecurityComponent).all()}
+            unknown = [c for c in requested_components if c not in known]
+            if unknown:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    _("Unknown component: {ids}",
+                                      ids=", ".join(str(c) for c in unknown)))
+            cia["component_ids"] = requested_components
             rows.append(ZonePolicyChange(
                 batch_id=batch_id, change_type="zone_create",
                 from_zone=name, to_zone=code, old_policy=None, new_policy=level,
@@ -923,10 +945,18 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
         for item in batch:
             if item.change_type == "zone_create" and not find_zone(db, item.from_zone):
                 cia = item.extra or {}
-                db.add(Zone(name=item.from_zone, code=item.to_zone, pap_level=item.new_policy,
+                zone = Zone(name=item.from_zone, code=item.to_zone, pap_level=item.new_policy,
                             description=item.comment, sort_order=db.query(Zone).count(),
+                            owner=cia.get("owner", ""),
                             cia_c=cia.get("cia_c", "normal"), cia_i=cia.get("cia_i", "normal"),
-                            cia_a=cia.get("cia_a", "normal")))
+                            cia_a=cia.get("cia_a", "normal"))
+                # The attachment was part of what was approved, so it is applied
+                # here rather than left for someone to add afterwards.
+                ids = cia.get("component_ids") or []
+                if ids:
+                    zone.components = (db.query(SecurityComponent)
+                                       .filter(SecurityComponent.id.in_(ids)).all())
+                db.add(zone)
             elif item.change_type == "zone_delete":
                 zone = find_zone(db, item.from_zone)
                 if zone:

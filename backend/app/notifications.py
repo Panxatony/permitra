@@ -24,6 +24,14 @@ log = logging.getLogger("permitra.notifications")
 
 
 def _recipients_by_role(db: Session, *roles: Role) -> list[User]:
+    """The accounts holding any of these roles, who want mail and can receive it.
+
+    Deliberately not "and the admins too". An admin installs and administers
+    Permitra; it reaches neither the reviews nor the recertification (#81, #82),
+    so mailing them about a rule waiting for approval would point them at a page
+    that answers 403. Someone who does both jobs holds both roles and is found
+    through the working one - the role set is what decides, not the job title.
+    """
     return [
         u for u in db.query(User).filter(User.role_rows.any(UserRole.role.in_(roles))).all()
         if u.is_active and u.notify_email and (u.email or "").strip()
@@ -60,7 +68,7 @@ def rule_submitted(db: Session, rule) -> None:
         return
     link = f"{mailer.base_url()}/rules/{rule.rule_id}"
     _send_each(
-        _recipients_by_role(db, Role.change_approver, Role.admin),
+        _recipients_by_role(db, Role.change_approver),
         _("Permitra: rule {rule_id} is waiting for approval", rule_id=rule.rule_id),
         lambda g: _("Hello {g},\n\n{rule_line} has been submitted for review "
                     "and is waiting for your approval.\n\n  {link}\n\nPermitra",
@@ -93,7 +101,7 @@ def rule_implementation_pending(db: Session, rule, reason: str) -> None:
         return
     link = f"{mailer.base_url()}/rules/{rule.rule_id}"
     _send_each(
-        _recipients_by_role(db, Role.operations, Role.admin),
+        _recipients_by_role(db, Role.operations),
         _("Permitra: rule {rule_id} needs to be implemented", rule_id=rule.rule_id),
         lambda g: _("Hello {g},\n\n{rule_line}: {reason}\n"
                     "Roll the rule out on the components or remove it, and update the "
@@ -133,7 +141,7 @@ def recertification_due(db: Session, expired: list, expiring: list) -> None:
     body = "\n".join(lines)
     link = f"{mailer.base_url()}/recertification"
     _send_each(
-        _recipients_by_role(db, Role.operations, Role.admin),
+        _recipients_by_role(db, Role.operations),
         _("Permitra: recertification – expired/expiring rules"),
         lambda g: _("Hello {g},\n\n{body}\n\nRecertification:\n  {link}\n\nPermitra",
                     g=g, body=body, link=link),
