@@ -442,14 +442,19 @@ def campaign_report(
 
     buffer = io.StringIO()
     writer = csv.writer(buffer, delimiter=";")
+    from ..exporters.common import csv_safe
+
     writer.writerow(["campaign", "scope", "due_date", "rule_id", "rule_name", "owner",
                      "owner_unknown", "decision", "decided_by", "decided_at", "comment"])
     for item in data["items"]:
-        writer.writerow([campaign.name, campaign.scope, campaign.due_date,
-                         item["rule_id"], item["name"], item["owner"],
-                         "yes" if item["owner_unknown"] else "",
-                         item["decision"] or "OUTSTANDING",
-                         item["decided_by"], item["decided_at"] or "", item["comment"]])
+        # csv_safe on every cell: campaign name, rule name and comment are free
+        # text, and this report is opened in a spreadsheet.
+        writer.writerow([csv_safe(c) for c in
+                         [campaign.name, campaign.scope, campaign.due_date,
+                          item["rule_id"], item["name"], item["owner"],
+                          "yes" if item["owner_unknown"] else "",
+                          item["decision"] or "OUTSTANDING",
+                          item["decided_by"], item["decided_at"] or "", item["comment"]]])
     from fastapi.responses import PlainTextResponse
     return PlainTextResponse(buffer.getvalue(), media_type="text/csv", headers={
         "Content-Disposition":

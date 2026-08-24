@@ -42,7 +42,7 @@ delivery; soft deletion so nothing is destroyed; encrypted secrets at rest
 (NetBox token, TOTP seed); **encrypted backups** — the dump holds password
 hashes, TOTP seeds, API token hashes and the whole audit chain, so as plain SQL
 it would be as good as the database itself, and `scripts/backup.sh` also refuses
-a passphrase stored inside the directory it protects; no forgeable source IPs;
+a passphrase stored inside the directory it protects; source IPs that a client cannot forge (X-Forwarded-For is believed only from a proxy listed in PERMITRA_TRUSTED_PROXIES, and the peer address otherwise);
 single-use TOTP codes; a sign-in that does not confirm whether an account exists.
 
 Encryption of a backup can be waived with `PERMITRA_BACKUP_PLAINTEXT=1`, for

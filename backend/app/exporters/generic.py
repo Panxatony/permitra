@@ -5,6 +5,7 @@ import json
 
 from ..models import Rule
 from ..validation import format_entry
+from .common import csv_safe
 
 CSV_COLUMNS = [
     "Rule-ID", "Application", "APP-ID", "Platform", "Components", "Source SZ",
@@ -62,7 +63,7 @@ def export_csv(rules: list[Rule]) -> str:
     writer = csv.writer(buf, delimiter=";")
     writer.writerow(CSV_COLUMNS)
     for r in rules:
-        writer.writerow(
+        writer.writerow([csv_safe(c) for c in
             [
                 r.rule_id,
                 r.application,
@@ -84,6 +85,5 @@ def export_csv(rules: list[Rule]) -> str:
                 r.updated_at.date().isoformat() if r.updated_at else "",
                 r.info,
                 r.business_context,
-            ]
-        )
+            ]])
     return buf.getvalue()
