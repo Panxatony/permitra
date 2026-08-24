@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, getUser } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
-import { AddressList, ComponentBadges, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
+import { AddressList, ComponentBadges, Modal, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
 const IMPL_OPTIONS = ['open', 'new', 'to change', 'to remove', 'implemented', 'deactivated']
@@ -18,8 +18,25 @@ export default function RuleDetail() {
   const navigate = useNavigate()
   const { lang, t } = useLang()
   const zoneLabel = useZoneLabels()
+  const openHandover = () => {
+    api.architects().then(setArchitects).catch(() => setArchitects([]))
+  }
+  const submitHandover = async () => {
+    setError('')
+    try {
+      const updated = await api.proposeHandover(id, successor)
+      setRule(updated); setHandover(false); setSuccessor('')
+    } catch (e) { setError(e.message) }
+  }
+  const cancelHandover = async () => {
+    try { setRule(await api.cancelHandover(id)) } catch (e) { setError(e.message) }
+  }
   const [rule, setRule] = useState(null)
   const [conflicts, setConflicts] = useState([])
+  const [handover, setHandover] = useState(false)
+  const [architects, setArchitects] = useState([])
+  const [successor, setSuccessor] = useState('')
+  const canHandOver = rule && (user.username === rule.requestor || user.role === 'admin')
   const [risk, setRisk] = useState(null)
   const [comment, setComment] = useState('')
   const [reviewComment, setReviewComment] = useState('')
@@ -63,12 +80,49 @@ export default function RuleDetail() {
     load()
   }
 
+  const confirmHandover = async () => {
+    try { setRule(await api.confirmHandover(id)) } catch (e) { setError(e.message) }
+  }
+
   return (
     <div className="rule-detail">
       <div className="page-head">
         <h1>{rule.rule_id} <span className="muted">{rule.name}</span></h1>
         <StatusBadge status={rule.status} />
       </div>
+
+      {rule.pending_requestor === user.username && (
+        <div className="infobox">
+          <strong>{t('This rule has been handed over to you')}</strong>
+          <p style={{ margin: '.3rem 0 .6rem' }}>
+            {t('Proposed by')} {rule.handover_proposed_by}. {t('The requestor changes only once you confirm - you become accountable for whether this rule is still needed.')}
+          </p>
+          <button className="btn btn-approve" onClick={confirmHandover}>{t('Confirm takeover')}</button>{' '}
+          <button className="btn btn-ghost" onClick={cancelHandover}>{t('Decline')}</button>
+        </div>
+      )}
+
+      {handover && (
+        <Modal title={t('Hand over the requestor')} onClose={() => setHandover(false)}>
+          <p className="muted small">
+            {t('Pick the architect who takes this rule over. They must confirm before the requestor changes.')}
+          </p>
+          <select value={successor} onChange={(e) => setSuccessor(e.target.value)}>
+            <option value="">{t('– select –')}</option>
+            {architects.filter((a) => a.username !== rule.requestor).map((a) => (
+              <option key={a.username} value={a.username}>
+                {a.full_name ? `${a.full_name} (${a.username})` : a.username}
+              </option>
+            ))}
+          </select>
+          <div className="actions" style={{ marginTop: '.8rem' }}>
+            <button className="btn btn-primary" disabled={!successor} onClick={submitHandover}>
+              {t('Propose handover')}
+            </button>
+            <button className="btn btn-ghost" onClick={() => setHandover(false)}>{t('Cancel')}</button>
+          </div>
+        </Modal>
+      )}
 
       {rule.emergency_declared_at && (
         <div className={rule.emergency_approval_due ? 'error' : 'infobox'}>
@@ -162,7 +216,19 @@ export default function RuleDetail() {
             <dt>{t('Description')}</dt><dd>{rule.description || '–'}</dd>
             <dt>Requestor</dt>
             <dd>{rule.requestor || '–'}
-              <span className="muted small"> ({t('created the rule')})</span></dd>
+              <span className="muted small"> ({t('created the rule')})</span>
+              {canHandOver && !rule.pending_requestor && (
+                <> · <button className="linklike" onClick={() => { openHandover(); setHandover(true) }}>{t('Hand over')}</button></>
+              )}
+              {rule.pending_requestor && (
+                <div className="muted small">
+                  {t('Handover to')} <strong>{rule.pending_requestor}</strong> {t('awaiting confirmation')}
+                  {(user.username === rule.handover_proposed_by || user.role === 'admin') && (
+                    <> · <button className="linklike" onClick={cancelHandover}>{t('Withdraw')}</button></>
+                  )}
+                </div>
+              )}
+            </dd>
             <dt>{t('Handler')}</dt>
             <dd>{rule.owner
               ? <>{rule.owner} <span className="muted small">({t('last maintained the rollout')})</span></>

@@ -707,6 +707,16 @@ class Rule(Base):
     # approved again once the inadmissibility has been resolved.
     removal_reason: Mapped[str] = mapped_column(String(255), default="")
 
+    # A requestor handover awaiting the new requestor's confirmation (an
+    # architect who changes department or company hands their rules over). The
+    # requestor does not change until the proposed account confirms taking the
+    # rule - an accountable person cannot be assigned one without their consent.
+    # Empty pending_requestor means no handover is in flight.
+    pending_requestor: Mapped[str] = mapped_column(String(128), default="")
+    handover_proposed_by: Mapped[str] = mapped_column(String(64), default="")
+    handover_proposed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+
     # When somebody last deliberately confirmed this rule is still needed, and
     # who (#35). This is the auditor's question, answered on the rule itself -
     # "last extended" is a different question, and one a well-meaning operator

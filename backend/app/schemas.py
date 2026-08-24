@@ -248,6 +248,9 @@ class RuleOut(RuleFields):
     # The auditor's question, answered on the rule rather than through a join.
     last_confirmed_at: datetime | None = None
     last_confirmed_by: str = ""
+    # A requestor handover awaiting the successor's confirmation (#requestor).
+    pending_requestor: str = ""
+    handover_proposed_by: str = ""
     # Emergency change (#36). declared_at is permanent - it is what keeps "how
     # often do we do this?" answerable. approval_due is non-null only while the
     # after-the-fact approval is still outstanding.

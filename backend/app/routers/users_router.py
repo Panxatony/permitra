@@ -54,6 +54,20 @@ def consume_token(db: Session, raw: str) -> tuple[User, str]:
     return token.user, token.purpose
 
 
+@router.get("/architects")
+def list_architects(db: Session = Depends(get_db),
+                    user: User = Depends(require_roles(Role.architect, Role.admin))):
+    """Active architect accounts, for picking a handover successor.
+
+    Deliberately narrow: username and name only, architects (the accounts that
+    can be a requestor), no email or status - an architect may choose a
+    successor without being handed the whole user table."""
+    rows = (db.query(User)
+            .filter(User.role == Role.architect, User.is_active.is_(True))
+            .order_by(User.username).all())
+    return [{"username": u.username, "full_name": u.full_name} for u in rows]
+
+
 @router.get("", response_model=list[UserOut])
 def list_users(db: Session = Depends(get_db), _user: User = Depends(require_roles(Role.admin))):
     return db.query(User).order_by(User.username).all()
