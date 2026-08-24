@@ -244,6 +244,10 @@ class RuleOut(RuleFields):
     # Non-empty when the rule is proposed for removal (e.g. after a network was
     # moved to another zone and the relation has become inadmissible)
     removal_reason: str = ""
+    # When somebody last deliberately confirmed the rule is still needed (#35).
+    # The auditor's question, answered on the rule rather than through a join.
+    last_confirmed_at: datetime | None = None
+    last_confirmed_by: str = ""
     # Emergency change (#36). declared_at is permanent - it is what keeps "how
     # often do we do this?" answerable. approval_due is non-null only while the
     # after-the-fact approval is still outstanding.

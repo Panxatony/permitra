@@ -4,6 +4,13 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Recertification is a review, not just expiry control.** Campaigns ask the
+  actual question rule by rule — still needed, still correct, still owned — with
+  a fixed scope, a cut-off, a per-owner worklist and three recorded decisions
+  (confirm / rework / retire). The report shows who confirmed what and what is
+  outstanding; a decision is refused rather than overwritten; owners matching no
+  active user are flagged. "When did somebody last deliberately confirm this
+  rule?" is answered on the rule itself (`last_confirmed_at`/`by`).
 - **The drift comparison counts what is on the device, not just what it
   recognises.** It only ever looked for SR IDs, which answers "did my rules
   arrive?" and misses the question Permitra exists for. A rule somebody opened by

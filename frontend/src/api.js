@@ -201,6 +201,13 @@ export const api = {
   pathSearch: (src, dst) => request(`/api/rules/path-search?${new URLSearchParams({ src, dst, vrf: getVrfName() })}`),
   pathAnalysis: (params) => { params.set('vrf', getVrfName()); return request(`/api/rules/path-analysis?${params}`) },
   expiring: (days = 30) => request(`/api/rules/expiring?days=${days}`),
+  // Recertification campaigns (#35)
+  recertCampaigns: () => request('/api/recertification/campaigns'),
+  recertCampaign: (id) => request(`/api/recertification/campaigns/${id}`),
+  createRecertCampaign: (payload) => request('/api/recertification/campaigns', { method: 'POST', body: payload }),
+  closeRecertCampaign: (id) => request(`/api/recertification/campaigns/${id}/close`, { method: 'POST', body: {} }),
+  recertDecide: (cid, itemId, decision, payload) =>
+    request(`/api/recertification/campaigns/${cid}/items/${itemId}/${decision}`, { method: 'POST', body: payload }),
   extendRule: (id, validUntil, comment = '') =>
     request(`/api/rules/${id}/extend`, { method: 'POST', body: { valid_until: validUntil, comment } }),
   dashboard: () => request('/api/dashboard'),

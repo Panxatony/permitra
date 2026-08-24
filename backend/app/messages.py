@@ -140,6 +140,46 @@ CATALOG: dict[str, dict[str, str]] = {
             "Die Notfall-Änderung wurde nicht innerhalb des Zeitfensters freigegeben. Bitte die Regel auf den Komponenten entfernen oder erneut regulär zum Review einreichen.",
         "Describe what happened - this is the evidence, and a year from now it is all there will be":
             "Bitte beschreiben, was passiert ist – das ist der Nachweis, und in einem Jahr ist es alles, was übrig bleibt",
+        "Recertified in campaign '{campaign}': still required":
+            "Rezertifiziert in Kampagne '{campaign}': weiterhin erforderlich",
+        "Recertified in campaign '{campaign}': still required, validity extended until {valid_until}":
+            "Rezertifiziert in Kampagne '{campaign}': weiterhin erforderlich, Gültigkeit verlängert bis {valid_until}",
+        "Recertification '{campaign}': still needed but wrong - back into review: {reason}":
+            "Rezertifizierung '{campaign}': weiterhin nötig, aber fehlerhaft – zurück ins Review: {reason}",
+        "Recertification '{campaign}': no longer required - deactivated: {reason}":
+            "Rezertifizierung '{campaign}': nicht mehr erforderlich – deaktiviert: {reason}",
+        "Recertification campaign over {count} rule(s), scope {scope}, due {due}":
+            "Rezertifizierungs-Kampagne über {count} Regel(n), Umfang {scope}, fällig {due}",
+        "Closed with {open} of {total} item(s) still undecided":
+            "Geschlossen mit {open} von {total} Einträgen unentschieden",
+        "Campaign '{campaign}'": "Kampagne '{campaign}'",
+        "Campaign '{campaign}': {reason}": "Kampagne '{campaign}': {reason}",
+        "Campaign not found": "Kampagne nicht gefunden",
+        "Item not found": "Eintrag nicht gefunden",
+        "The campaign is closed - its record does not change any more":
+            "Die Kampagne ist geschlossen – ihr Protokoll ändert sich nicht mehr",
+        "The campaign is already closed": "Die Kampagne ist bereits geschlossen",
+        "Already decided by {user} ({decision})":
+            "Bereits entschieden von {user} ({decision})",
+        "The rule is no longer in force - there is nothing to confirm (status '{status}')":
+            "Die Regel ist nicht mehr in Kraft – es gibt nichts zu bestätigen (Status '{status}')",
+        "The cut-off date must not lie in the past":
+            "Der Stichtag darf nicht in der Vergangenheit liegen",
+        "'{value}' is not a valid date (YYYY-MM-DD)":
+            "'{value}' ist kein gültiges Datum (JJJJ-MM-TT)",
+        "The scope covers no rules in force - nothing to recertify":
+            "Der Umfang enthält keine Regel in Kraft – nichts zu rezertifizieren",
+        "Unknown scope '{scope}' (use 'all', 'zone:<name>' or 'component:<id>')":
+            "Unbekannter Umfang '{scope}' (erlaubt: 'all', 'zone:<Name>' oder 'component:<ID>')",
+        "Say what is wrong with the rule - the next reviewer starts from this comment":
+            "Bitte beschreiben, was an der Regel falsch ist – der nächste Reviewer beginnt mit diesem Kommentar",
+        "Say why the rule is no longer needed - retiring it is a decision, and the reason is the evidence":
+            "Bitte begründen, warum die Regel nicht mehr benötigt wird – die Stilllegung ist eine Entscheidung, und die Begründung ist der Nachweis",
+        "Retired in recertification - remove the rule on the components":
+            "In der Rezertifizierung stillgelegt – Regel auf den Komponenten entfernen",
+        "confirmed": "bestätigt",
+        "rework": "Überarbeitung",
+        "retired": "stillgelegt",
         "Description updated": "Beschreibung aktualisiert",
         "Destination": "Ziel",
         "EPG not found": "EPG nicht gefunden",
