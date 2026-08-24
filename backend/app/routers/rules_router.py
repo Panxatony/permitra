@@ -962,6 +962,113 @@ def incoming_handovers(
     return {"total": len(rules), "items": rules}
 
 
+class ApplicationRetirement(BaseModel):
+    reason: str = ""
+    # A run that only reports. The list of what would be touched has to be
+    # readable before it is touched - "this proposes 34 rules for removal" is
+    # the difference between a usable feature and a frightening one.
+    dry_run: bool = True
+
+
+@router.get("/applications/summary")
+def application_summary(db: Session = Depends(get_db),
+                        _user: User = Depends(get_current_user)):
+    """The applications rules were opened for, and how many are in force.
+
+    The starting point for a retirement: you cannot retire what you cannot see,
+    and an app_id typed from memory is an app_id that quietly matches nothing.
+    """
+    rows = (active_rules(db)
+            .filter(Rule.app_id != "")
+            .filter(Rule.status.in_(IN_FORCE))
+            .all())
+    counts: dict[str, int] = {}
+    for rule in rows:
+        counts[rule.app_id] = counts.get(rule.app_id, 0) + 1
+    return {"items": [{"app_id": app_id, "in_force": n}
+                      for app_id, n in sorted(counts.items())]}
+
+
+@router.post("/applications/{app_id}/retire")
+def retire_application(
+    app_id: str,
+    payload: ApplicationRetirement,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect)),
+):
+    """Proposes every in-force rule of a retired application for removal (#85).
+
+    Rules outliving the application they were opened for is one of the most
+    common ways a ruleset rots: the application is gone, the holes it needed are
+    not. Retirement is a decision about the application, which is why it sits
+    with the architect - but it is deliberately *not* a mass deactivation. Each
+    rule is only put back into review carrying a removal reason, and is then
+    decided one at a time on the existing path (`_decide` deactivates it and
+    sets every component to "to remove" on approval).
+
+    Four eyes survive that by construction: proposing writes a version in the
+    acting account's name, which makes it the submitter - and a submitter cannot
+    approve. Whoever retires the application cannot wave its rules out alone.
+    """
+    reason = (payload.reason or "").strip()
+    if not reason:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("A retirement needs a reason - it becomes the "
+                              "removal reason on every rule"))
+
+    candidates = (active_rules(db)
+                  .filter(Rule.app_id == app_id)
+                  .order_by(Rule.rule_id).all())
+    if not candidates:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            _("No rules carry the application '{app_id}'", app_id=app_id))
+
+    # Only rules in force stand on a device and can be removed from one. The
+    # rest are reported rather than silently dropped: a draft for a retired
+    # application is not a removal, but it is something somebody should see.
+    proposed = [r for r in candidates if r.status in IN_FORCE]
+    skipped = [{"rule_id": r.rule_id, "status": r.status.value}
+               for r in candidates if r.status not in IN_FORCE]
+
+    result = {
+        "app_id": app_id,
+        "dry_run": payload.dry_run,
+        "proposed": [{"rule_id": r.rule_id, "name": r.name,
+                      "source_zone": r.source_zone, "destination_zone": r.destination_zone,
+                      "requestor": r.requestor} for r in proposed],
+        "skipped": skipped,
+        "total": len(proposed),
+    }
+    if payload.dry_run:
+        return result
+
+    if not proposed:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("No rule of '{app_id}' is in force", app_id=app_id))
+
+    template = ("Application {app_id} retired: {reason} - proposed for removal")
+    values = {"app_id": app_id, "reason": reason}
+    for rule in proposed:
+        rule.removal_reason = f"{app_id}: {reason}"[:255]
+        rule.status = RuleStatus.in_review
+        rule.version += 1
+        add_version(db, rule, user, template, **values)
+        db.add(Comment(rule_pk=rule.id, author=user.username,
+                       text=render(template, values)))
+    db.commit()
+
+    audit.record(db, "rule", "application.retired", actor=user.username, object=app_id,
+                 detail="{count} rule(s) proposed for removal: {reason}",
+                 detail_values={"count": str(len(proposed)), "reason": reason},
+                 source_ip=audit.client_ip(request))
+
+    from .. import notifications
+    for rule in proposed:
+        notifications.rule_submitted(db, rule)
+    return result
+
+
 @router.get("/{rule_id}", response_model=RuleDetail)
 def get_rule(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     # Readable even once deleted - the record is the evidence. Every endpoint
