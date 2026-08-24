@@ -16,7 +16,6 @@ KNOWN_SETTINGS = {
     # Mandatory rule fields (BSI documentation requirements):
     # ACTIVE by default (first value = default), admins may turn them off
     "require_justification": ("yes", "no"),   # justification
-    "require_requestor": ("yes", "no"),       # responsible person / requestor
     "require_valid_until": ("yes", "no"),     # enforce an expiry date
     # Interface language of this instance, chosen by the administrator. English
     # is the source language of the application; German is a translation. The

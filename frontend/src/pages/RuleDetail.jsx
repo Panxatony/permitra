@@ -160,8 +160,13 @@ export default function RuleDetail() {
             <dt>APP-ID</dt><dd>{rule.app_id || '–'}</dd>
             <dt>{t('Reason')}</dt><dd>{rule.justification || '–'}</dd>
             <dt>{t('Description')}</dt><dd>{rule.description || '–'}</dd>
-            <dt>Requestor</dt><dd>{rule.requestor || '–'}</dd>
-            <dt>{t('Handler')}</dt><dd>{rule.owner || '–'}</dd>
+            <dt>Requestor</dt>
+            <dd>{rule.requestor || '–'}
+              <span className="muted small"> ({t('created the rule')})</span></dd>
+            <dt>{t('Handler')}</dt>
+            <dd>{rule.owner
+              ? <>{rule.owner} <span className="muted small">({t('last maintained the rollout')})</span></>
+              : <span className="muted">{t('not worked on the components yet')}</span>}</dd>
             <dt>{t('Change ID')}</dt><dd>{rule.change_id || '–'}</dd>
             <dt>{t('Business context')}</dt><dd>{rule.business_context || '–'}</dd>
             <dt>{t('Validity')}</dt>

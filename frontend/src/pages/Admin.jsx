@@ -160,7 +160,6 @@ export default function Admin() {
           {t('Active by default (BSI documentation duties) – they can be deactivated here if needed.')}
         </p>
         {[['require_justification', t('Justification (reason) is mandatory')],
-          ['require_requestor', t('Requestor (owner) is mandatory')],
           ['require_valid_until', t('Enforce expiry date (valid until)')]].map(([key, label]) => (
           <label key={key} className="checkbox">
             <input type="checkbox" checked={settings[key] === 'yes'}
