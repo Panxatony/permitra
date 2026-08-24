@@ -114,8 +114,18 @@ def get_current_user(request: Request = None, token: str = Depends(oauth2_scheme
 
 
 def require_roles(*roles: Role):
+    """Admits exactly the roles named - the admin is not one unless listed.
+
+    There used to be an implicit bypass here: `user.role != Role.admin` let
+    admins through every check in the application. That quietly contradicted
+    everything the product says about itself - the role table promises the
+    admin manages Permitra, not rules, and the four-eyes principle is worth
+    little when a fifth role can slip past it. Separation of duties is a
+    property of the checks, not of the documentation; an endpoint that wants
+    the admin says Role.admin.
+    """
     def dependency(user: User = Depends(get_current_user)) -> User:
-        if user.role not in roles and user.role != Role.admin:
+        if user.role not in roles:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 _("Role '{role}' is not permitted to perform this action",

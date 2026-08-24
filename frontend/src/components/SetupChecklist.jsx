@@ -109,7 +109,19 @@ export default function SetupChecklist() {
                   <div className="setup-row">
                     <span className="setup-mark">{s.done ? '✓' : '○'}</span>
                     <span>
-                      <Link to={s.route}>{text.title[de ? 0 : 1]}</Link>
+                      {/* A link only for the role whose move it is. The admin
+                          following an architect step's link landed on the zones
+                          page - a page whose every action now 403s for them.
+                          Showing the step without the link keeps the handover
+                          visible and the trap closed. */}
+                      {s.role === user.role
+                        ? <Link to={s.route}>{text.title[de ? 0 : 1]}</Link>
+                        : <>
+                            {text.title[de ? 0 : 1]}{' '}
+                            <span className="muted small">
+                              ({s.role === 'admin' ? t('the admin does this') : t('the architects do this')})
+                            </span>
+                          </>}
                       {s.count > 0 && <span className="muted small"> ({s.count})</span>}
                       {!s.done && (
                         <span className="muted small setup-why"> — {text.why[de ? 0 : 1]}</span>
