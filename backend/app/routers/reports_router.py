@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..auth import require_roles
 from ..database import get_db
 from ..models import IN_FORCE, Role, Rule, User
-from .recert_router import _known_owners
+from .recert_router import _known_accounts
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -28,7 +28,7 @@ def requestor_summary(db: Session = Depends(get_db),
     rules are still needed - and a pile of in-force rules whose requester is
     gone is where a ruleset starts to rot.
     """
-    known = _known_owners(db)
+    known = _known_accounts(db)
     rows: dict[str, dict] = {}
     for rule in db.query(Rule).filter(Rule.deleted_at.is_(None)).all():
         name = (rule.requestor or "").strip()

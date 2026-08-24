@@ -4,7 +4,7 @@ Extending a date is a decision about a calendar. Recertification is a decision
 about a rule - is it still needed, still scoped correctly, still owned by
 someone who exists - and a decision has to be asked for, recorded, and
 reportable. The campaign is that process: a scope, a cut-off date, a worklist
-per owner, and a report of who confirmed what, which is the deliverable an
+per requestor, and a report of who confirmed what, which is the deliverable an
 auditor actually asks for.
 
 Three decisions per item, and the vocabulary is deliberately not yes/no:
@@ -86,13 +86,13 @@ def _scope_rules(db: Session, scope: str) -> list[Rule]:
                           "'component:<id>')", scope=scope))
 
 
-def _known_owners(db: Session) -> set[str]:
+def _known_accounts(db: Session) -> set[str]:
     """Every name an active user answers to, lowercased.
 
-    rule.owner is free text, so the match is by username or full name. The
-    point is the inverse: an owner matching nobody is a finding - rules whose
-    owner has left the organisation surface here first, and until now nothing
-    noticed them at all.
+    The requestor is an account username now, so the match is exact; the point
+    is the inverse: a requestor matching no active user is a finding - a rule
+    whose requester has left the organisation is one nobody can be asked to
+    recertify, and this is where that first surfaces.
     """
     names: set[str] = set()
     for user in db.query(User).filter(User.is_active.is_(True)).all():
@@ -108,8 +108,8 @@ def _item_out(item: RecertItem, known: set[str]) -> dict:
         "item_id": item.id,
         "rule_id": rule.rule_id,
         "name": rule.name,
-        "owner": item.owner,
-        "owner_unknown": bool(item.owner) and item.owner.lower() not in known,
+        "requestor": item.requestor,
+        "requestor_unknown": bool(item.requestor) and item.requestor.lower() not in known,
         "rule_status": rule.status.value,
         "valid_until": rule.valid_until,
         "decision": item.decision,
@@ -120,7 +120,7 @@ def _item_out(item: RecertItem, known: set[str]) -> dict:
 
 
 def _campaign_out(campaign: RecertCampaign, db: Session, with_items: bool = False) -> dict:
-    known = _known_owners(db)
+    known = _known_accounts(db)
     items = campaign.items
     open_items = [i for i in items if i.decision is None]
     out = {
@@ -140,8 +140,8 @@ def _campaign_out(campaign: RecertCampaign, db: Session, with_items: bool = Fals
         "overdue": campaign.closed_at is None and campaign.due_date < date.today().isoformat(),
         # Owners who match no active user: their open rules will not be worked
         # on by anybody, and that is the first thing worth knowing.
-        "owners_unknown": sorted({i.owner for i in open_items
-                                  if i.owner and i.owner.lower() not in known}),
+        "requestors_unknown": sorted({i.requestor for i in open_items
+                                      if i.requestor and i.requestor.lower() not in known}),
     }
     if with_items:
         out["items"] = [_item_out(i, known) for i in items]
@@ -181,7 +181,7 @@ def create_campaign(
     db.add(campaign)
     db.flush()
     for rule in rules:
-        db.add(RecertItem(campaign_id=campaign.id, rule_pk=rule.id, owner=rule.owner or ""))
+        db.add(RecertItem(campaign_id=campaign.id, rule_pk=rule.id, requestor=rule.requestor or ""))
 
     audit.record(db, "admin", "recert.campaign_created", actor=user.username,
                  object=campaign.name,
@@ -444,15 +444,15 @@ def campaign_report(
     writer = csv.writer(buffer, delimiter=";")
     from ..exporters.common import csv_safe
 
-    writer.writerow(["campaign", "scope", "due_date", "rule_id", "rule_name", "owner",
-                     "owner_unknown", "decision", "decided_by", "decided_at", "comment"])
+    writer.writerow(["campaign", "scope", "due_date", "rule_id", "rule_name", "requestor",
+                     "requestor_unknown", "decision", "decided_by", "decided_at", "comment"])
     for item in data["items"]:
         # csv_safe on every cell: campaign name, rule name and comment are free
         # text, and this report is opened in a spreadsheet.
         writer.writerow([csv_safe(c) for c in
                          [campaign.name, campaign.scope, campaign.due_date,
-                          item["rule_id"], item["name"], item["owner"],
-                          "yes" if item["owner_unknown"] else "",
+                          item["rule_id"], item["name"], item["requestor"],
+                          "yes" if item["requestor_unknown"] else "",
                           item["decision"] or "OUTSTANDING",
                           item["decided_by"], item["decided_at"] or "", item["comment"]]])
     from fastapi.responses import PlainTextResponse

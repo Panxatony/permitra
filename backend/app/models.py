@@ -843,9 +843,12 @@ class RecertItem(Base):
     campaign_id: Mapped[int] = mapped_column(
         ForeignKey("recert_campaigns.id", ondelete="CASCADE"), index=True)
     rule_pk: Mapped[int] = mapped_column(ForeignKey("rules.id", ondelete="CASCADE"), index=True)
-    # The owner as it stood at campaign start - the worklist key. Snapshotted,
-    # because reassigning a rule mid-campaign must not silently move open work.
-    owner: Mapped[str] = mapped_column(String(128), default="")
+    # The requestor as it stood at campaign start - the worklist key.
+    # Recertification asks "is this rule still needed?", and only the account
+    # that requested it can answer that; the Bearbeiter (owner) merely rolled it
+    # out on the devices. Snapshotted, because reassigning a rule mid-campaign
+    # must not silently move open work.
+    requestor: Mapped[str] = mapped_column(String(128), default="")
     decision: Mapped[str | None] = mapped_column(String(16), nullable=True)  # confirmed | rework | retired
     decided_by: Mapped[str] = mapped_column(String(64), default="")
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

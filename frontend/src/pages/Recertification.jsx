@@ -61,7 +61,7 @@ function RuleRows({ rules, onExtend, onDeactivate, canAct }) {
   )
 }
 
-/* One campaign: progress, the per-owner worklist, and the three decisions.
+/* One campaign: progress, the per-requestor worklist, and the three decisions.
 
    The decision buttons are deliberately three, not two. "Still needed but
    wrong" sends the rule back into review - without that path a reviewer facing
@@ -121,7 +121,7 @@ function Campaign({ c, onChanged, canDecide, canManage, me }) {
 
   const done = c.total - c.open
   const items = (detail?.items || []).filter((i) =>
-    !mineOnly || (i.owner || '').toLowerCase().includes(me.toLowerCase()))
+    !mineOnly || (i.requestor || '').toLowerCase() === me.toLowerCase())
 
   return (
     <div className={`card recert-campaign ${c.overdue ? 'recert-overdue' : ''}`}>
@@ -142,10 +142,10 @@ function Campaign({ c, onChanged, canDecide, canManage, me }) {
         </div>
       </div>
 
-      {c.owners_unknown.length > 0 && (
+      {c.requestors_unknown.length > 0 && (
         <p className="coverage-gap">
-          <strong>{t('Owner matches no active user')}:</strong>{' '}
-          {c.owners_unknown.join(', ')} — {t('their open rules will not be worked on by anybody')}
+          <strong>{t('Requestor matches no active user')}:</strong>{' '}
+          {c.requestors_unknown.join(', ')} — {t('their open rules cannot be recertified by anybody')}
         </p>
       )}
 
@@ -170,7 +170,7 @@ function Campaign({ c, onChanged, canDecide, canManage, me }) {
               <table>
                 <thead>
                   <tr>
-                    <th>{t('Rule')}</th><th>{t('Owner')}</th><th>{t('Valid until')}</th>
+                    <th>{t('Rule')}</th><th>{t('Requestor')}</th><th>{t('Valid until')}</th>
                     <th>{t('Decision')}</th><th>{t('Comment')}</th>
                   </tr>
                 </thead>
@@ -179,8 +179,8 @@ function Campaign({ c, onChanged, canDecide, canManage, me }) {
                     <tr key={i.item_id}>
                       <td><Link to={`/rules/${i.rule_id}`} className="rule-link">{i.rule_id}</Link>
                         <span className="muted small"> {i.name}</span></td>
-                      <td>{i.owner}{i.owner_unknown &&
-                        <span className="emergency-overdue" title={t('Owner matches no active user')}> ⚠</span>}</td>
+                      <td>{i.requestor}{i.requestor_unknown &&
+                        <span className="emergency-overdue" title={t('Requestor matches no active user')}> ⚠</span>}</td>
                       <td><code>{i.valid_until || '–'}</code></td>
                       <td>
                         {i.decision
@@ -318,7 +318,7 @@ export default function Recertification() {
           </form>
         )}
         {campaigns.map((c) => (
-          <Campaign key={c.id} c={c} me={user.full_name || user.username}
+          <Campaign key={c.id} c={c} me={user.username}
             canDecide={canAct || user.role === 'change_approver'} canManage={canManage}
             onChanged={loadCampaigns} />
         ))}

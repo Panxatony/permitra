@@ -314,6 +314,8 @@ const DE = {
   'Audit log: retention period for personal data': 'Audit-Log: Aufbewahrungsfrist für personenbezogene Daten',
   'Keep forever (no deletion)': 'Unbegrenzt aufbewahren (keine Löschung)',
   'Audit events hold usernames and source IPs. Beyond this age, the oldest segment is deleted and replaced by a sealed anchor, so the hash chain stays verifiable while the personal data is removed (GDPR Art. 5(1)(e), BSI CON.6). With a SIEM configured, nothing is deleted until it has been delivered there – retention externalises evidence, it does not destroy it.': 'Audit-Ereignisse enthalten Benutzernamen und Quell-IPs. Jenseits dieses Alters wird das älteste Segment gelöscht und durch einen versiegelten Anker ersetzt, sodass die Hash-Kette prüfbar bleibt, während die personenbezogenen Daten entfernt werden (DSGVO Art. 5(1)(e), BSI CON.6). Mit konfiguriertem SIEM wird nichts gelöscht, bevor es dorthin zugestellt wurde – die Aufbewahrung lagert Beweise aus, sie vernichtet sie nicht.',
+  'Requestor matches no active user': 'Requestor entspricht keinem aktiven Benutzer',
+  'their open rules cannot be recertified by anybody': 'ihre offenen Regeln kann niemand rezertifizieren',
   'Change': 'Änderung',
   'Change note (for the version history)': 'Änderungsnotiz (für die Versionshistorie)',
   'Change password': 'Passwort ändern',

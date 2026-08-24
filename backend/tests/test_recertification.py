@@ -7,7 +7,7 @@ was that nobody was ever asked.
 
 These tests pin what makes the campaign a record rather than a checkbox: every
 decision names who made it and survives unchanged, the report says what is
-outstanding instead of hiding it, an owner who matches no active user is a
+outstanding instead of hiding it, a requestor who matches no active user is a
 finding, and the auditor's question - when did somebody last deliberately
 confirm this rule? - is answerable on the rule itself.
 """
@@ -80,9 +80,9 @@ def ops(db):
     return db.query(User).filter(User.username == "ben").one()
 
 
-def make_rule(db, rule_id, *, status=RuleStatus.approved, owner="Ben Betrieb",
+def make_rule(db, rule_id, *, status=RuleStatus.approved, requestor="ben",
               src_zone="Z010", dst_zone="Z020"):
-    rule = Rule(rule_id=rule_id, vrf_id=1, name=rule_id.lower(), owner=owner,
+    rule = Rule(rule_id=rule_id, vrf_id=1, name=rule_id.lower(), requestor=requestor,
                 components=[db.get(SecurityComponent, 1)],
                 source=[{"ip": "10.0.0.1", "alias": ""}],
                 destination=[{"ip": "10.0.1.1", "alias": ""}],
@@ -279,14 +279,14 @@ def test_the_report_marks_the_outstanding_not_just_the_done(db):
     assert "confirmed" in csv_text
 
 
-def test_an_owner_who_matches_no_active_user_is_a_finding(db):
-    """Rules whose owner has left the organisation surface here first - until
-    now nothing noticed them at all."""
-    make_rule(db, "SR00001", owner="Gerd Gegangen")
-    make_rule(db, "SR00002", owner="Ben Betrieb")
+def test_a_requestor_who_matches_no_active_user_is_a_finding(db):
+    """A rule whose requester has left the organisation is one nobody can be
+    asked to recertify - this is where that first surfaces."""
+    make_rule(db, "SR00001", requestor="gerd-gegangen")
+    make_rule(db, "SR00002", requestor="ben")
 
     result = campaign(db)
-    assert result["owners_unknown"] == ["Gerd Gegangen"]
+    assert result["requestors_unknown"] == ["gerd-gegangen"]
 
 
 def test_a_deactivated_user_does_not_count_as_present(db):
@@ -294,20 +294,20 @@ def test_a_deactivated_user_does_not_count_as_present(db):
     user = ops(db)
     user.is_active = False
     db.commit()
-    make_rule(db, "SR00001", owner="Ben Betrieb")
+    make_rule(db, "SR00001", requestor="ben")
 
-    assert campaign(db)["owners_unknown"] == ["Ben Betrieb"]
+    assert campaign(db)["requestors_unknown"] == ["ben"]
 
 
-def test_the_owner_on_the_item_is_a_snapshot(db):
+def test_the_requestor_on_the_item_is_a_snapshot(db):
     """Reassigning a rule mid-campaign must not silently move open work."""
-    rule = make_rule(db, "SR00001", owner="Ben Betrieb")
+    rule = make_rule(db, "SR00001", requestor="ben")
     c = campaign(db)
-    rule.owner = "Anna Admin"
+    rule.requestor = "anna"
     db.commit()
 
     detail = campaign_detail(c["id"], db, admin(db))
-    assert detail["items"][0]["owner"] == "Ben Betrieb"
+    assert detail["items"][0]["requestor"] == "ben"
 
 
 def test_a_campaign_past_its_cutoff_reports_overdue(db):
