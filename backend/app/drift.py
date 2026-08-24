@@ -20,7 +20,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from . import config_blocks
+from . import config_blocks, config_semantics
 from .models import IN_FORCE, ComponentActualConfig, Rule, SecurityComponent, active_rules
 
 RULE_ID_RE = re.compile(r"\bSR\d{3,6}\b")
@@ -34,6 +34,46 @@ def rule_brief(rule: Rule) -> dict:
         "justification": rule.justification,
         "services": rule.services,
     }
+
+
+def _check_fidelity(content, component, approved, blocks):
+    """Returns (widened findings, fidelity flag).
+
+    fidelity is "checked" when the device rules were parsed and compared,
+    "not_checked" when the platform's format could not be read to this depth -
+    which must not be reported as a pass.
+    """
+    device = config_semantics.parse(content, component.type)
+    if device is None:
+        return [], [], "not_checked"
+
+    # Map each device block's identifier to the SR ID it claims (from the block
+    # scan, which already handled the description/comment lookup).
+    id_by_identifier = {b.identifier: b.rule_id for b in (blocks or []) if b.rule_id}
+
+    widened = []
+    unverified = []
+    for identifier, perm in device.items():
+        rule_id = id_by_identifier.get(identifier)
+        if not rule_id or rule_id not in approved:
+            continue  # unjustified/unknown are the block scan's job, not this one
+        if perm.unresolved:
+            # Names we could not resolve to addresses or services (a missing
+            # address book, a hand-written config). Cannot be compared, so it is
+            # reported as unverified rather than passed or flagged.
+            unverified.append({"rule_id": rule_id, "identifier": identifier,
+                               "unresolved": sorted(set(perm.unresolved))})
+            continue
+        diffs = config_semantics.widening(perm, config_semantics.approved_permission(approved[rule_id]))
+        if diffs:
+            widened.append({"rule_id": rule_id, "identifier": identifier,
+                            "differences": diffs})
+    widened.sort(key=lambda w: w["rule_id"])
+    unverified.sort(key=lambda w: w["rule_id"])
+    # "checked" only when everything claimed was actually compared; "partial"
+    # when some rules could not be resolved - never silently a pass.
+    fidelity = "partial" if unverified else "checked"
+    return widened, unverified, fidelity
 
 
 def analyze_drift(db: Session, component: SecurityComponent) -> dict:
@@ -82,10 +122,18 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
     blocks = config_blocks.scan(config.content, component.type)
     coverage = config_blocks.coverage(blocks)
 
+    # The expensive half (#48): does the rule on the device permit only what was
+    # approved? Coverage proves a rule *claims* an approval; this proves it
+    # matches one. Narrower than approved is fine (operations may implement
+    # less); wider is a finding - a rule opened up during an incident still
+    # carries its SR ID and would otherwise read green.
+    widened, unverified, fidelity = _check_fidelity(config.content, component, approved, blocks)
+
     # A configuration in an unrecognised format cannot disprove compliance, so
     # it must not be allowed to claim it either: in_sync then means only what it
     # meant before, and the report says the coverage is unknown.
-    in_sync = not missing and not stale and not unknown and not coverage["unjustified"]
+    in_sync = (not missing and not stale and not unknown
+               and not coverage["unjustified"] and not widened)
     return {
         "has_config": True,
         "component_id": component.id,
@@ -99,4 +147,12 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
         "stale": stale,
         "unknown": unknown,
         "coverage": coverage,
+        # #48: rules on the device permitting more than they were approved for.
+        "widened": widened,
+        # Rules whose device configuration could not be resolved deeply enough
+        # to compare (missing address book, hand-written names): cannot tell.
+        "unverified": unverified,
+        # "checked" (all compared), "partial" (some unverifiable), or
+        # "not_checked" (format unparseable). Never silently a pass.
+        "fidelity": fidelity,
     }
