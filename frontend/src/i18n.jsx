@@ -570,6 +570,10 @@ const DE = {
   'Risk': 'Risiko',
   'Role': 'Rolle',
   'Roles': 'Rollen',
+  'Zone ID': 'Zonen-ID',
+  'normal': 'normal',
+  'This rule is already on the device (emergency change)':
+    'Diese Regel liegt bereits auf dem Gerät (Notfall-Änderung)',
   'Evidence report': 'Nachweisbericht',
   'From': 'Von',
   'To': 'Bis',

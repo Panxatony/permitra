@@ -1,26 +1,35 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLang } from '../i18n'
 import { api } from '../api'
+import { HelpBody, helpSection, helpTitle } from '../helpContent'
 
 /* Simple overlay: closes on backdrop click or Escape */
-export function Modal({ title, onClose, children }) {
+export function Modal({ title, onClose, children, wide = false }) {
   const { t } = useLang()
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
-  return (
+  /* Rendered into <body> rather than where it was opened. A dialogue is not
+     part of the sentence that opened it: inline, it inherits the typography of
+     its trigger's surroundings, so a "?" inside a heading rendered its whole
+     explanation in bold. The backdrop is position: fixed, so nothing about the
+     layout changes - only what it inherits and which stacking context it is in. */
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal${wide ? ' modal-wide' : ''}`} role="dialog"
+        aria-modal="true" aria-label={title}>
         <div className="modal-head">
           <h2>{title}</h2>
           <button className="btn btn-ghost" onClick={onClose} aria-label={t('Close')}>✕</button>
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -30,10 +39,34 @@ export function Modal({ title, onClose, children }) {
 /* A "?" that lands on the paragraph explaining the feature it sits next to.
    Help that has to be searched for answers a different, easier question than
    the one being asked. */
+/* Explains a feature over the page you are standing on.
+
+   It used to navigate to /help#topic, which answered the question but moved you
+   to the help page to do it - and closing the overlay left you there instead of
+   back where you asked. The explanation belongs on top of the thing being
+   explained. Falls back to the link when the topic is unknown, so a typo in a
+   topic name is a working link rather than a dead control. */
 export function HelpLink({ topic, label }) {
+  const { lang } = useLang()
+  const [open, setOpen] = useState(false)
+  const section = helpSection(topic)
+
+  if (!section) {
+    return (
+      <Link to={`/help#${topic}`} className="help-link"
+        title={label} aria-label={label}>?</Link>
+    )
+  }
   return (
-    <Link to={`/help#${topic}`} className="help-link"
-      title={label} aria-label={label}>?</Link>
+    <>
+      <button type="button" className="help-link" title={label} aria-label={label}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(true) }}>?</button>
+      {open && (
+        <Modal title={helpTitle(section, lang)} onClose={() => setOpen(false)}>
+          <HelpBody section={section} />
+        </Modal>
+      )}
+    </>
   )
 }
 
@@ -157,18 +190,45 @@ export function Highlighted({ text, fmt }) {
 
 /* Resolves a zone reference (ID or name) to the display form "ID-name".
    Fetches the zone list once and returns a label function. */
-export function useZoneLabels() {
+/* A stored zone reference is either the zone's code or its name, in whichever
+   case it was typed. Resolving that to the zone lives here once: the label and
+   the protection-level colouring both need the same rule, and two copies of it
+   is how they drift apart. */
+export function useZoneMap() {
   const [map, setMap] = useState({})
   useEffect(() => {
     api.zones().then((zones) => {
       const m = {}
       zones.forEach((z) => {
-        const label = z.code ? `${z.code}-${z.name}` : z.name
-        m[(z.code || '').toUpperCase()] = label
-        m[z.name.toUpperCase()] = label
+        // Only a real code, or every zone without one would claim the "" key
+        // and the last of them would answer for all the others.
+        if (z.code) m[z.code.toUpperCase()] = z
+        m[z.name.toUpperCase()] = z
       })
       setMap(m)
     }).catch(() => {})
   }, [])
-  return (ref) => map[(ref || '').toUpperCase()] || ref || '–'
+  return (ref) => map[(ref || '').toUpperCase()] || null
+}
+
+export function useZoneLabels() {
+  const zoneOf = useZoneMap()
+  return (ref) => {
+    const zone = zoneOf(ref)
+    if (!zone) return ref || '–'
+    return zone.code ? `${zone.code}-${zone.name}` : zone.name
+  }
+}
+
+/* Protection level as colour, the same three steps as the security zones page:
+   normal is unremarkable, high is amber, very high is red. A zone that cannot
+   be resolved reads as normal rather than inventing a fourth state. */
+export const SB_BADGE = {
+  normal: 'status-draft',
+  high: 'status-in_review',
+  'very high': 'status-rejected',
+}
+
+export function zoneBadgeClass(zone) {
+  return SB_BADGE[zone?.protection_level] || 'status-draft'
 }

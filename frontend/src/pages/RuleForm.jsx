@@ -1,8 +1,34 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
-import { HelpLink } from '../components/shared'
+import { HelpLink, useZoneMap, zoneBadgeClass } from '../components/shared'
 import { useLang } from '../i18n'
-import { api } from '../api'
+import { api, getUser, hasRole } from '../api'
+
+/* A new rule expires in a year unless somebody says otherwise. Recertification
+   asks whether a rule is still needed; an open-ended rule never gets asked, and
+   the ones that quietly outlive their reason are exactly the ones a review is
+   for. Built from local date parts - toISOString() is UTC and would land on the
+   wrong day for anyone east or west of it. */
+function inOneYear() {
+  const d = new Date()
+  d.setFullYear(d.getFullYear() + 1)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/* The zone with its protection level, which is also its colour. The level is
+   in the tooltip because the colour alone is a hint, not a statement - and a
+   colour nobody can name is not evidence. */
+function ZoneBadge({ zone, name }) {
+  const { t } = useLang()
+  const level = zone?.protection_level || 'normal'
+  return (
+    <span className={`badge ${zoneBadgeClass(zone)}`}
+      title={`${t('Protection level')}: ${t(level)}`}>
+      {name}
+    </span>
+  )
+}
 
 const EMPTY = {
   rule_id: '',
@@ -41,17 +67,29 @@ function ZoneSelect({ label, value, onChange, zones }) {
   )
 }
 
-export default function RuleForm() {
+export default function RuleForm({ embedded = false, onClose, onCreated }) {
   const { id } = useParams()
   const isEdit = Boolean(id)
-  /* The rule is already on the firewall; this form is the documentation being
+  const urlEmergency = new URLSearchParams(useLocation().search).has('emergency')
+  /* An emergency change is not a different form, it is an option on this one:
+     the rule is already on the firewall and this is the documentation being
      caught up afterwards. Same fields, same checks - what differs is that the
-     reason is mandatory and the rule lands in review with a clock on it. */
-  const isEmergency = !isEdit && new URLSearchParams(useLocation().search).has('emergency')
+     reason is mandatory and the rule lands in review with a clock on it.
+
+     Operations may only declare emergencies (the backend allows them
+     declare_emergency_rule but not create_rule), so for them the option is on
+     and fixed rather than offered and then refused on submit. */
+  const canCreateNormal = hasRole(getUser(), 'architect')
+  const [isEmergency, setIsEmergency] = useState(
+    !isEdit && (urlEmergency || !canCreateNormal))
   const [emergencyReason, setEmergencyReason] = useState('')
   const navigate = useNavigate()
   const { t } = useLang()
-  const [form, setForm] = useState(EMPTY)
+  // Only for a new rule: editing must not silently push an existing rule's
+  // expiry date out by a year just because the form was opened.
+  const [form, setForm] = useState(
+    isEdit ? EMPTY : { ...EMPTY, valid_until: inOneYear() })
+  const zoneOf = useZoneMap()
   const [zones, setZones] = useState([])
   const [components, setComponents] = useState([])
   const [zoneCheck, setZoneCheck] = useState(null)
@@ -176,7 +214,7 @@ export default function RuleForm() {
   // Rendered as a function (not its own component type) so the inputs keep focus
   const renderAddressEditor = (field, label) => (
     <div className="address-editor">
-      <span className="addr-label">{label}</span>
+      <span className="field-label">{label}</span>
       {form[field].map((e, i) => (
         <div key={i} className="service-row">
           <input placeholder={t('IP or network, e.g. 10.10.30.5 or 10.10.20.0/24 or "any"')}
@@ -244,7 +282,8 @@ export default function RuleForm() {
         const created = isEmergency
           ? await api.declareEmergencyRule({ ...payload, emergency_reason: emergencyReason })
           : await api.createRule(payload)
-        navigate(`/rules/${created.rule_id}`)
+        if (onCreated) onCreated(created)
+        else navigate(`/rules/${created.rule_id}`)
       }
     } catch (err) {
       setError(err.message)
@@ -253,11 +292,23 @@ export default function RuleForm() {
 
   return (
     <form className="rule-form" onSubmit={submit}>
-      <h1>
-        {isEdit ? `${t('Edit')}: ${id}`
-          : isEmergency ? <>{t('Document an emergency change')} <HelpLink topic="emergency" label={t('How the emergency path works')} /></> : t('Create new rule')}
-      </h1>
+      {!embedded && (
+        <h1>
+          {isEdit ? `${t('Edit')}: ${id}`
+            : isEmergency ? <>{t('Document an emergency change')} <HelpLink topic="emergency" label={t('How the emergency path works')} /></> : t('Create new rule')}
+        </h1>
+      )}
       {error && <div className="error">{error}</div>}
+      {!isEdit && canCreateNormal && (
+        <label className="checkbox emergency-toggle">
+          <input type="checkbox" checked={isEmergency}
+            onChange={(e) => setIsEmergency(e.target.checked)} />
+          <span>
+            {t('This rule is already on the device (emergency change)')}{' '}
+            <HelpLink topic="emergency" label={t('How the emergency path works')} />
+          </span>
+        </label>
+      )}
       {isEmergency && (
         <div className="emergency-box">
           <p>
@@ -266,7 +317,9 @@ export default function RuleForm() {
                + 'fact it is deactivated automatically and has to be removed again.')}
           </p>
           <label>
-            {t('What happened?')} <span className="req">*</span>
+            {/* One flex item, not two: the label is a column flexbox, so a bare
+                text node beside a <span> puts the marker on its own line. */}
+            <span>{t('What happened?')} <span className="req" aria-hidden="true">*</span></span>
             <textarea rows={3} required minLength={10} value={emergencyReason}
               onChange={(e) => setEmergencyReason(e.target.value)}
               placeholder={t('Incident, ticket, who was reachable – a year from now this is all there is')} />
@@ -301,14 +354,18 @@ export default function RuleForm() {
       <fieldset>
         <legend>{t('Traffic relationship')}</legend>
         <div className="grid-2">
+          {/* Coloured by protection level, not by "all good": a green badge on a
+              derived zone read as an approval of the rule, when what it shows is
+              which zone the addresses landed in. The level is the thing worth
+              seeing here - it is what decides the rule's risk. */}
           <label>{t('Source zone (derived from networks)')}
             <div className="derived-zone">{form.source_zone
-              ? <span className="badge status-approved">{form.source_zone}</span>
+              ? <ZoneBadge zone={zoneOf(form.source_zone)} name={form.source_zone} />
               : <span className="muted">–</span>}</div>
           </label>
           <label>{t('Destination zone (derived from networks)')}
             <div className="derived-zone">{form.destination_zone
-              ? <span className="badge status-approved">{form.destination_zone}</span>
+              ? <ZoneBadge zone={zoneOf(form.destination_zone)} name={form.destination_zone} />
               : <span className="muted">–</span>}</div>
           </label>
         </div>
@@ -364,7 +421,9 @@ export default function RuleForm() {
           </div>
         )}
         <div className="services-edit">
-          <span>{t('Services:')}</span>
+          {/* Same class as the source and destination labels: a bare <span>
+              fell back to body typography and rendered larger than they did. */}
+          <span className="field-label">{t('Services:')}</span>
           {form.services.map((s, i) => (
             <div key={i} className="service-row">
               <select value={s.protocol} onChange={(e) => setService(i, 'protocol', e.target.value)}>
@@ -446,7 +505,8 @@ export default function RuleForm() {
 
       <div className="actions">
         <button className="btn btn-primary" type="submit">{isEdit ? t('Save changes') : t('Create rule')}</button>
-        <button className="btn btn-ghost" type="button" onClick={() => navigate(-1)}>{t('Cancel')}</button>
+        <button className="btn btn-ghost" type="button"
+          onClick={() => (onClose ? onClose() : navigate(-1))}>{t('Cancel')}</button>
       </div>
     </form>
   )

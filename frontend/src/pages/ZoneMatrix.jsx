@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, getUser, hasRole } from '../api'
-import { HelpLink, Modal } from '../components/shared'
+import { HelpLink, Modal, SB_BADGE } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
-const SB_BADGE = { normal: 'status-draft', 'high': 'status-in_review', 'very high': 'status-rejected' }
 const zoneLabel = (z) => (z.code ? `${z.code}-${z.name}` : z.name)
 const zref = (z) => z.code || z.name
 const SB_LABEL = (z, t) => `${t(z.protection_level || 'normal')} (C:${z.cia_c || 'normal'} I:${z.cia_i || 'normal'} V:${z.cia_a || 'normal'})`
@@ -368,6 +367,7 @@ export default function ZoneMatrix() {
   const [editMode, setEditMode] = useState(false)
   const [draft, setDraft] = useState({})        // "from|to" -> new policy
   const [draftZones, setDraftZones] = useState([])  // [{name, pap_level}]
+  const [zoneDialog, setZoneDialog] = useState(false)
 
   const isApprover = hasRole(user, 'change_approver')
   const pendingMap = {}
@@ -521,6 +521,8 @@ export default function ZoneMatrix() {
     setError('')
     setDraftZones((list) => [...list, { name, code, pap_level: newZoneLevel, ...newZoneCia }])
     setNewZone('')
+    setNewZoneCia({ cia_c: 'normal', cia_i: 'normal', cia_a: 'normal' })
+    setZoneDialog(false)
     api.zoneNextCode().then((r) => setNewZoneCode(r.code)).catch(() => setNewZoneCode(''))
   }
 
@@ -554,7 +556,7 @@ export default function ZoneMatrix() {
         {t('A transition between security zones always goes through a firewall. As a security component, Cisco ACI is not sufficient for a zone transition (not a firewall by the BSI definition) — ACI contracts are the means within a zone. Permitra enforces this: a cross-zone rule without a firewall component is rejected.')}
       </div>
 
-      {error && <div className="error">{error}</div>}
+      {error && !zoneDialog && <div className="error">{error}</div>}
       {notice && <div className="okbox">{notice}</div>}
 
       <section className="card wide zone-overview">
@@ -776,39 +778,74 @@ export default function ZoneMatrix() {
 
       {canEdit && (
         <div className="zone-manage">
-          {true ? (
-            <form className="zone-add" onSubmit={addZone}>
-              <input value={newZoneCode} onChange={(e) => setNewZoneCode(e.target.value)}
-                placeholder={t('Zone ID, e.g. Z130')} style={{ maxWidth: '120px' }} />
-              <input value={newZone} onChange={(e) => setNewZone(e.target.value)}
-                placeholder={t('Zone name, e.g. T-NEW')} />
-              <select value={newZoneLevel} onChange={(e) => setNewZoneLevel(e.target.value)}>
-                <option value="external">{t('external (north)')}</option>
-                <option value="pap">{t('P-A-P layer')}</option>
-                <option value="internal">{t('internal (south)')}</option>
-              </select>
-              {[['cia_c', 'C'], ['cia_i', 'I'], ['cia_a', 'V']].map(([f, lbl]) => (
-                <select key={f} title={t('Protection level')} value={newZoneCia[f]}
-                  onChange={(e) => setNewZoneCia({ ...newZoneCia, [f]: e.target.value })}
-                  style={{ maxWidth: '110px' }}>
-                  <option value="normal">{lbl}: normal</option>
-                  <option value="high">{lbl}: hoch</option>
-                  <option value="very high">{lbl}: sehr hoch</option>
-                </select>
-              ))}
-              <span className="muted small">
-                {t('Protection level')}: <strong>{['very high', 'high'].find((l) => Object.values(newZoneCia).includes(l)) || 'normal'}</strong>
+          <div className="zone-add-bar">
+            <button className="btn btn-primary"
+              onClick={() => { setError(''); setZoneDialog(true) }}>
+              {t('New zone')}
+            </button>
+            {/* The queued zones stay on the page, not in the overlay: they are
+                what the pending request will create, and that has to be visible
+                while the matrix around it is being edited. */}
+            {draftZones.map((z) => (
+              <span key={z.name} className="zone-chip">
+                ✎ {z.code}-{z.name} <span className="muted small">({t(z.pap_level)})</span>
+                <button type="button"
+                  onClick={() => setDraftZones(draftZones.filter((x) => x.name !== z.name))}>✕</button>
               </span>
-              <button className="btn btn-primary" type="submit">{t('Create zone')} (in Antrag)</button>
-              {draftZones.map((z) => (
-                <span key={z.name} className="zone-chip">
-                  ✎ {z.code}-{z.name} <span className="muted small">({t(z.pap_level)})</span>
-                  <button type="button"
-                    onClick={() => setDraftZones(draftZones.filter((x) => x.name !== z.name))}>✕</button>
-                </span>
-              ))}
-            </form>
-          ) : null}
+            ))}
+          </div>
+          {zoneDialog && (
+            <Modal title={t('New zone')} onClose={() => setZoneDialog(false)}>
+              <form className="zone-add-form" onSubmit={addZone}>
+                {/* Inside the overlay, not behind it: a rejected zone used to
+                    set an error on the page under the dialogue, where nobody
+                    could see it - the button just appeared to do nothing. */}
+                {error && <div className="error">{error}</div>}
+                <div className="grid-2">
+                  <label>{t('Zone ID')}
+                    <input value={newZoneCode} onChange={(e) => setNewZoneCode(e.target.value)}
+                      placeholder={t('Zone ID, e.g. Z130')} />
+                  </label>
+                  <label>{t('Name')}
+                    <input value={newZone} onChange={(e) => setNewZone(e.target.value)}
+                      placeholder={t('Zone name, e.g. T-NEW')} autoFocus />
+                  </label>
+                </div>
+                <label>{t('P-A-P classification')}
+                  <select value={newZoneLevel} onChange={(e) => setNewZoneLevel(e.target.value)}>
+                    <option value="external">{t('external (north)')}</option>
+                    <option value="pap">{t('P-A-P layer')}</option>
+                    <option value="internal">{t('internal (south)')}</option>
+                  </select>
+                </label>
+                <fieldset>
+                  <legend>{t('Protection level')}</legend>
+                  <div className="grid-3">
+                    {[['cia_c', t('Confidentiality')], ['cia_i', t('Integrity')],
+                      ['cia_a', t('Availability')]].map(([f, lbl]) => (
+                      <label key={f}>{lbl}
+                        <select value={newZoneCia[f]}
+                          onChange={(e) => setNewZoneCia({ ...newZoneCia, [f]: e.target.value })}>
+                          <option value="normal">{t('normal')}</option>
+                          <option value="high">{t('high')}</option>
+                          <option value="very high">{t('very high')}</option>
+                        </select>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="muted small">
+                    {t('Overall protection level (maximum principle):')}{' '}
+                    <strong>{t(['very high', 'high'].find((l) => Object.values(newZoneCia).includes(l)) || 'normal')}</strong>
+                  </p>
+                </fieldset>
+                <div className="actions">
+                  <button className="btn btn-primary" type="submit">{t('Create zone')}</button>
+                  <button className="btn btn-ghost" type="button"
+                    onClick={() => setZoneDialog(false)}>{t('Cancel')}</button>
+                </div>
+              </form>
+            </Modal>
+          )}
           <p className="muted small">
             {t('New zones go into the collective request and are only created after two approvals by change approvers – “Request matrix changes” completes the recording.')}
           </p>
