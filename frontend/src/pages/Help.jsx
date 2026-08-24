@@ -190,6 +190,23 @@ const SECTIONS = [
     },
   },
   {
+    id: 'retirement',
+    de: {
+      title: 'Anwendung außer Betrieb nehmen',
+      body: [
+        'Wird eine Anwendung abgelöst, bleiben ihre Regeln sonst stehen — die Anwendung ist weg, die Öffnungen sind es nicht. Das ist eine der häufigsten Ursachen, warum Regelwerke verrotten. Über **Regeln → Anwendung außer Betrieb nehmen** schlägt ein Architekt alle in Kraft befindlichen Regeln einer Anwendungs-ID zur Entfernung vor.',
+        'Es wird dabei **nichts entfernt und nichts deaktiviert**. Jede Regel geht mit der Begründung zurück ins Review und wird einzeln entschieden; erst die Freigabe deaktiviert sie und setzt die Komponenten auf „zu entfernen". Vor dem Auslösen zeigt eine **Vorschau**, welche Regeln betroffen wären — und welche nicht (Entwürfe etwa stehen auf keinem Gerät). Das Vier-Augen-Prinzip bleibt: Wer die Außerbetriebnahme startet, gilt als Einreicher und kann die Entfernungen nicht selbst freigeben.',
+      ],
+    },
+    en: {
+      title: 'Retiring an application',
+      body: [
+        'When an application is replaced its rules otherwise stay behind — the application is gone, the openings are not. It is one of the most common ways a ruleset rots. Under **Rules → Retire application** an architect proposes every rule in force for an application ID for removal.',
+        'Nothing is **removed or deactivated** by this. Each rule goes back into review carrying the reason and is decided one at a time; only the approval deactivates it and sets the components to "to remove". A **preview** shows which rules would be affected before it is triggered — and which would not (a draft, for instance, stands on no device). Four eyes still hold: whoever starts the retirement counts as the submitter and cannot approve those removals.',
+      ],
+    },
+  },
+  {
     id: 'roles',
     de: {
       title: 'Rollen und Vier-Augen-Prinzip',

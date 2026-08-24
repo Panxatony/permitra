@@ -701,6 +701,12 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .role-option { display: inline-flex; align-items: center; gap: .3rem;
   font-size: .85rem; white-space: nowrap; }
 .role-option input { margin: 0; }
+
+/* Retirement preview (#85): the list of what a bulk action would touch, shown
+   before it touches it. Capped in height so a large application does not push
+   the buttons off screen - the scope is meant to be read, not scrolled past. */
+.retire-preview { margin: .75rem 0; }
+.retire-preview .table-wrap { max-height: 15rem; overflow-y: auto; }
 .role-option input:disabled + * , .role-option input:disabled { cursor: not-allowed; }
 .approval-box { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 8px; padding: .9rem 1rem; }
 .row-actions .btn { padding: .2rem .5rem; font-size: .8rem; }

@@ -193,6 +193,17 @@ CATALOG: dict[str, dict[str, str]] = {
             "Ein Requestor ist ein Architekten-Konto – '{username}' ist {role}",
         "That is already the requestor": "Das ist bereits der Requestor",
         "An account must hold at least one role": "Ein Konto muss mindestens eine Rolle haben",
+        "A retirement needs a reason - it becomes the removal reason on every rule":
+            "Eine Außerbetriebnahme braucht eine Begründung – sie wird zur "
+            "Entfernungsbegründung jeder Regel",
+        "No rules carry the application '{app_id}'":
+            "Keine Regel trägt die Anwendung '{app_id}'",
+        "No rule of '{app_id}' is in force":
+            "Keine Regel von '{app_id}' ist in Kraft",
+        "Application {app_id} retired: {reason} - proposed for removal":
+            "Anwendung {app_id} außer Betrieb genommen: {reason} – zur Entfernung vorgeschlagen",
+        "{count} rule(s) proposed for removal: {reason}":
+            "{count} Regel(n) zur Entfernung vorgeschlagen: {reason}",
         "Only the current requestor may hand a rule over (an admin may, once the requestor's account is gone)":
             "Nur der aktuelle Requestor darf eine Regel übergeben (ein Admin, sobald dessen Konto fort ist)",
         "No handover is pending for this rule":

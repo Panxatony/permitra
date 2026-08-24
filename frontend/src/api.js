@@ -167,6 +167,10 @@ export const api = {
   confirmHandover: (id) => request(`/api/rules/${id}/requestor-handover/confirm`, { method: 'POST', body: {} }),
   cancelHandover: (id) => request(`/api/rules/${id}/requestor-handover/cancel`, { method: 'POST', body: {} }),
   incomingHandovers: () => request('/api/rules/handovers/incoming'),
+  applicationSummary: () => request('/api/rules/applications/summary'),
+  retireApplication: (appId, reason, dryRun) =>
+    request(`/api/rules/applications/${encodeURIComponent(appId)}/retire`,
+      { method: 'POST', body: { reason, dry_run: dryRun } }),
   setupStatus: () => request('/api/setup/status'),
   updateSettings: (p) => request('/api/settings', { method: 'PUT', body: p }),
   users: () => request('/api/users'),

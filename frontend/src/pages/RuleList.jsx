@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { api, getToken } from '../api'
+import { api, getToken, getUser, hasRole } from '../api'
 import { AddressList, ComponentBadges, ServiceList, STATUS_LABELS, StatusBadge, useZoneLabels } from '../components/shared'
+import RetireApplication from '../components/RetireApplication'
 import { useLang } from '../i18n'
 
 const EMPTY_FILTERS = { q: '', source: '', destination: '', port: '', protocol: '', status: '', component: '', impl: '', risk: '', app_id: '' }
@@ -88,6 +89,10 @@ export default function RuleList() {
       <div className="page-head">
         <h1>{t('Security rules')}</h1>
         <span className="muted">{total} {t('Rules')}</span>
+        {/* Retiring an application is a decision about the application, so it
+            sits with the architect - the per-rule approval downstream is what
+            keeps it from being a mass deactivation. */}
+        {hasRole(getUser(), 'architect') && <RetireApplication onDone={() => load()} />}
       </div>
 
       <form className="filterbar" onSubmit={submit}>
