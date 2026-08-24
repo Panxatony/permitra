@@ -4,6 +4,19 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Drift now checks that a rule matches its approval, not just that it claims
+  one.** Coverage proved a device rule carried an approved SR ID; it did not
+  prove the rule still permitted only what was approved. A rule widened during
+  an incident — one host on port 443 opened to `any` — kept its ID and read
+  green. The comparison now parses what each rule permits (Juniper, Check Point)
+  and reports the ones **wider than approved**; narrower is fine, since
+  operations may implement less. A rule that cannot be resolved to compare is
+  reported as unverified, never as a pass. (#48)
+- **Demo:** two accounts per role, and rules split across both architects, so
+  the four-eyes approval and the requestor handover are demonstrable.
+- **Fixed:** proposing or confirming a requestor handover greyed the rule page
+  (the endpoints return the rule without its history, which the page needs); it
+  reloads the full rule after each step now.
 - **A rule's requestor can be handed over.** An architect who changes department
   or company proposes a successor for the rules they requested; the requestor
   changes only once that successor confirms — an accountable person is not

@@ -24,12 +24,13 @@ export default function RuleDetail() {
   const submitHandover = async () => {
     setError('')
     try {
-      const updated = await api.proposeHandover(id, successor)
-      setRule(updated); setHandover(false); setSuccessor('')
+      await api.proposeHandover(id, successor)
+      setHandover(false); setSuccessor('')
+      await load()
     } catch (e) { setError(e.message) }
   }
   const cancelHandover = async () => {
-    try { setRule(await api.cancelHandover(id)) } catch (e) { setError(e.message) }
+    try { await api.cancelHandover(id); await load() } catch (e) { setError(e.message) }
   }
   const [rule, setRule] = useState(null)
   const [conflicts, setConflicts] = useState([])
@@ -81,7 +82,7 @@ export default function RuleDetail() {
   }
 
   const confirmHandover = async () => {
-    try { setRule(await api.confirmHandover(id)) } catch (e) { setError(e.message) }
+    try { await api.confirmHandover(id); await load() } catch (e) { setError(e.message) }
   }
 
   return (
