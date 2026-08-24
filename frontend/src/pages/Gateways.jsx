@@ -62,13 +62,11 @@ export default function Gateways() {
   }
 
   return (
-    <div>
-      <div className="page-head">
-        <h1>{t('ACI gateways')}</h1>
-        <span className="muted">
-          {t('Bridge domain gateways, optionally with PBR redirection to a Check Point cluster')}
-        </span>
-      </div>
+    <section className="card wide">
+      <h2>{t('ACI gateways')}</h2>
+      <p className="muted small">
+        {t('Bridge domain gateways, optionally with PBR redirection to a Check Point cluster')}
+      </p>
       {error && <div className="error">{error}</div>}
 
       <div className="table-wrap">
@@ -155,6 +153,6 @@ export default function Gateways() {
           </div>
         </fieldset>
       </form>
-    </div>
+    </section>
   )
 }

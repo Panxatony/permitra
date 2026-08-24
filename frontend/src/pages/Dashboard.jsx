@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api'
-import { STATUS_LABELS } from '../components/shared'
+import { HelpLink, STATUS_LABELS } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
 /* Workflow order, with `active` ahead of `approved`: the interesting number is
@@ -49,7 +49,7 @@ function Coverage({ c, t, lang }) {
 
   return (
     <section className="card wide coverage-card">
-      <h2>{t('Backed by an approved rule')}</h2>
+      <h2>{t('Backed by an approved rule')} <HelpLink topic="drift" label={t('How the coverage figure is measured')} /></h2>
       <div className="coverage-head">
         <div className="coverage-figure">
           <div className={`coverage-percent ${nothing ? 'muted' : ''}`}>
@@ -96,7 +96,7 @@ function Coverage({ c, t, lang }) {
         <p className="coverage-gap">
           <strong>{t('Not measured')}:</strong>{' '}
           {c.not_measured.map((n) => `${n.component} (${t(n.reason)})`).join(', ')} –{' '}
-          <Link to="/components">{t('upload a configuration')}</Link>
+          <Link to="/reports">{t('upload a configuration')}</Link>
         </p>
       )}
 
@@ -112,7 +112,7 @@ function Coverage({ c, t, lang }) {
             <tbody>
               {c.per_component.map((p) => (
                 <tr key={p.component_id}>
-                  <td><Link to="/components">{p.component}</Link></td>
+                  <td><Link to="/reports">{p.component}</Link></td>
                   <td>{p.justified}/{p.total}</td>
                   <td className={p.unjustified ? 'coverage-worse' : ''}>{p.unjustified}</td>
                   <td>{p.percent} %</td>

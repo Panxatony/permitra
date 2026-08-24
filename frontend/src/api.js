@@ -139,6 +139,7 @@ export const api = {
   me: () => request('/api/auth/me'),
   settings: () => request('/api/settings'),
   publicSettings: () => request('/api/settings/public'),
+  requestorReport: () => request('/api/reports/requestors'),
   updateSettings: (p) => request('/api/settings', { method: 'PUT', body: p }),
   users: () => request('/api/users'),
   auditLog: (params = {}) => request(`/api/audit-log?${new URLSearchParams(params)}`),

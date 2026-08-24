@@ -501,6 +501,42 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .emergency-banner li { margin-bottom: .2rem; }
 .emergency-overdue { color: var(--red); font-weight: 600; }
 
+/* Footer: quiet, and at the bottom of the content rather than fixed - a
+   fixed bar would cost every page a line of height for three links. */
+.app-footer {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  margin-top: 2.5rem; padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  font-size: .82rem; color: var(--muted);
+}
+.app-footer a { color: var(--muted); }
+.app-footer a:hover { color: var(--accent); }
+.app-footer code { font-size: .8rem; }
+
+/* Help (#in-app): a quiet "?" beside the feature, landing on its paragraph */
+.help-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.15rem; height: 1.15rem; border-radius: 50%;
+  border: 1px solid var(--border); color: var(--muted);
+  font-size: .75rem; font-weight: 700; text-decoration: none;
+  vertical-align: middle; margin-left: .2rem;
+}
+.help-link:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+.nav-help { opacity: .75; }
+.help-page { max-width: 980px; }
+.help-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: .8rem; margin-bottom: 1.2rem; }
+.help-card { text-align: left; cursor: pointer; font: inherit; color: inherit;
+  border: 1px solid var(--border); }
+.help-card:hover { border-color: var(--accent); }
+.help-card h2 { font-size: 1rem; margin-bottom: .35rem; }
+.help-card p { font-size: .88rem; margin: 0; }
+.help-section { margin-bottom: 1rem; }
+.modal .help-section { max-height: 65vh; overflow-y: auto; margin-bottom: 0; padding-right: .3rem; }
+.help-section h2 { font-size: 1.1rem; }
+.help-section p, .help-section li { font-size: .93rem; line-height: 1.55; max-width: 72ch; }
+.help-section ol { padding-left: 1.3rem; display: flex; flex-direction: column; gap: .5rem; }
+
 /* Recertification campaigns (#35) */
 .recert-campaign { margin-bottom: .8rem; }
 .recert-head { display: flex; justify-content: space-between; align-items: center;
