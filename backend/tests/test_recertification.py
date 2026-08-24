@@ -67,6 +67,8 @@ def db():
                role=Role.admin, is_active=True))
     s.add(User(username="ben", full_name="Ben Betrieb", password_hash="x",
                role=Role.operations, is_active=True))
+    s.add(User(username="clara", full_name="Clara Approver", password_hash="x",
+               role=Role.change_approver, is_active=True))
     s.commit()
     yield s
     s.close()
@@ -78,6 +80,10 @@ def admin(db):
 
 def ops(db):
     return db.query(User).filter(User.username == "ben").one()
+
+
+def approver(db):
+    return db.query(User).filter(User.username == "clara").one()
 
 
 def make_rule(db, rule_id, *, status=RuleStatus.approved, requestor="ben",
@@ -97,7 +103,7 @@ def make_rule(db, rule_id, *, status=RuleStatus.approved, requestor="ben",
 
 def campaign(db, scope="all", name="Q3 review"):
     return create_campaign(CampaignCreate(name=name, due_date=TOMORROW, scope=scope),
-                           Req(), db, admin(db))
+                           Req(), db, approver(db))
 
 
 def item_of(db, rule):
@@ -144,6 +150,11 @@ def test_an_empty_scope_is_refused_not_recorded(db):
     with pytest.raises(HTTPException) as exc:
         campaign(db)
     assert exc.value.status_code == 422
+
+
+# The change-approver-only gate on starting and closing a campaign is enforced by
+# require_roles, a FastAPI dependency that direct function calls here never run.
+# It is tested at the HTTP layer in test_http_authorization.py instead.
 
 
 # ---------- the three decisions ----------
@@ -245,7 +256,7 @@ def test_a_closed_campaign_takes_no_more_decisions(db):
     next campaign, not retro-fitted into this one's report."""
     rule = make_rule(db, "SR00001")
     c = campaign(db)
-    close_campaign(c["id"], Req(), db, admin(db))
+    close_campaign(c["id"], Req(), db, approver(db))
 
     with pytest.raises(HTTPException) as exc:
         confirm_item(c["id"], item_of(db, rule).id, Decision(), Req(), db, ops(db))

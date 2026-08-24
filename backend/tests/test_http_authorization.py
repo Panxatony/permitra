@@ -146,6 +146,33 @@ def test_risk_ports_are_admin_only(client):
     assert client.delete("/api/risk/ports/22", headers=auth(client, "adm")).status_code == 204
 
 
+# ---------- Recertification: the change approver runs the cycle, not the admin ---
+
+def test_starting_a_campaign_is_change_approver_only(client):
+    """Running the recert cycle is the change approver's job, kept separate from
+    administering the tool - the admin is refused here just like everyone else.
+    The change approver passes the role gate (the empty in-memory DB then makes
+    the scope 422, which is a body check past the gate, not a 403)."""
+    body = {"name": "Q3", "due_date": "2027-06-30", "scope": "all"}
+    for user in ("arch", "ops", "adm"):
+        r = client.post("/api/recertification/campaigns", json=body, headers=auth(client, user))
+        assert r.status_code == 403, f"{user} could start a campaign: {r.status_code}"
+    r = client.post("/api/recertification/campaigns", json=body, headers=auth(client, "appr"))
+    assert r.status_code != 403, f"the change approver was blocked from starting: {r.text}"
+
+
+def test_closing_a_campaign_is_change_approver_only(client):
+    """The other end of the same separation: the admin cannot close a review the
+    change approver opened. The role gate fires before the campaign is even
+    looked up, so a non-existent id still returns 403 for the admin."""
+    for user in ("arch", "ops", "adm"):
+        r = client.post("/api/recertification/campaigns/1/close", headers=auth(client, user))
+        assert r.status_code == 403, f"{user} could close a campaign: {r.status_code}"
+    # the change approver clears the gate (then 404 for the missing campaign, not 403)
+    r = client.post("/api/recertification/campaigns/1/close", headers=auth(client, "appr"))
+    assert r.status_code != 403, f"the change approver was blocked from closing: {r.text}"
+
+
 # ---------- Read-only API tokens --------------------------------------------
 
 def _create_pat(client) -> str:
