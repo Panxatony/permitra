@@ -564,14 +564,16 @@ def seed(wipe: bool):
             description=f"{'Intra-Zonen-' if intra else ''}Freischaltung für {app}",
             justification=justification,
             business_context=random.choice(BUSINESS),
-            requestor="architekt",
-            owner="betrieb" if impl_status else "",
+            # Spread the rules across both architects and both operators, so the
+            # per-requestor report and the handover both have something to show.
+            requestor="architekt" if i % 2 else "architekt2",
+            owner=("betrieb" if i % 2 else "betrieb2") if impl_status else "",
             change_id=f"CHN{2026000 + i}",
             valid_from=created.isoformat(),
             valid_until=(created + timedelta(days=365)).isoformat() if random.random() < 0.25 else None,
             status=status,
             impl_status=impl_status,
-            created_by="architekt",
+            created_by="architekt" if i % 2 else "architekt2",
         )
         db.add(rule)
         db.flush()

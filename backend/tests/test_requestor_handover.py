@@ -165,6 +165,35 @@ def test_an_admin_may_not_reassign_while_the_requestor_is_still_active(db):
     assert exc.value.status_code == 403
 
 
+# ---------- operations as requestor: the emergency-change case ----------
+
+def test_operations_requestor_can_hand_a_rule_over(db):
+    """An emergency change is requested by the ops account that opened it (#36),
+    so an ops account can be a requestor - and must be able to hand its own rule
+    to the architect who owns the application. Blocking that stranded the rule
+    with the wrong accountable person."""
+    make_rule(db, requestor="cyril")   # cyril is operations
+    rule = propose_requestor_handover("SR00001", RequestorHandover(new_requestor="anna"),
+                                      Req(), db, user(db, "cyril"))
+    assert rule.pending_requestor == "anna"
+
+    confirmed = confirm_requestor_handover("SR00001", Req(), db, user(db, "anna"))
+    assert confirmed.requestor == "anna"
+
+
+def test_a_non_requestor_operations_account_still_cannot(db):
+    """Loosening the role gate must not let just any ops account hand away
+    someone else's rule - the requestor check still holds."""
+    make_rule(db, requestor="anna")
+    # a second ops account with no part in this rule
+    db.add(User(username="cyril2", password_hash="x", role=Role.operations, is_active=True))
+    db.commit()
+    with pytest.raises(HTTPException) as exc:
+        propose_requestor_handover("SR00001", RequestorHandover(new_requestor="bea"),
+                                   Req(), db, user(db, "cyril2"))
+    assert exc.value.status_code == 403
+
+
 # ---------- ending a proposal ----------
 
 def test_the_successor_can_decline(db):

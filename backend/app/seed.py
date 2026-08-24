@@ -31,12 +31,18 @@ from .models import Role, User
 
 log = logging.getLogger("permitra.seed")
 
+# Two accounts per role, so the demo can show the flows that need a second
+# person: the four-eyes approval (two change approvers), and the requestor
+# handover between two architects. Password is always the username + 123.
 DEMO_USERS = [
-    ("admin", "admin123", "Administrator", Role.admin),
-    ("architekt", "architekt123", "Alex Architekt", Role.architect),
-    ("betrieb", "betrieb123", "Bernd Betrieb", Role.operations),
-    ("approver", "approver123", "Chris Approver", Role.change_approver),
-    ("approver2", "approver123", "Dana Approver", Role.change_approver),
+    ("admin", "admin123", "Alex Admin", Role.admin),
+    ("admin2", "admin2123", "Bea Admin", Role.admin),
+    ("architekt", "architekt123", "Carla Architekt", Role.architect),
+    ("architekt2", "architekt2123", "David Architekt", Role.architect),
+    ("betrieb", "betrieb123", "Erol Betrieb", Role.operations),
+    ("betrieb2", "betrieb2123", "Frida Betrieb", Role.operations),
+    ("approver", "approver123", "Gustav Approver", Role.change_approver),
+    ("approver2", "approver2123", "Hana Approver", Role.change_approver),
 ]
 
 # A path, not a secret - the whole point is that the value lives in the file

@@ -78,6 +78,16 @@ export default function DriftPanel({ components }) {
                 {t('This configuration format cannot be read yet, so the coverage is unknown – only the rule IDs found in it were compared.')}
               </p>
             )}
+            {report.fidelity === 'not_checked' && (
+              <p className="muted small">
+                {t('The rule contents on this device are not compared to what was approved (format not parsed to that depth) – only presence and coverage are checked.')}
+              </p>
+            )}
+            {report.fidelity === 'partial' && (report.unverified?.length > 0) && (
+              <p className="muted small">
+                {t('Some rules could not be resolved deeply enough to compare (missing address book) and are listed as unverified – not confirmed as within approval.')}
+              </p>
+            )}
             <div className={report.in_sync ? 'okbox' : 'warnbox'}>
               {report.in_sync
                 ? `✓ ${t('{component} is in sync ({expected} approved rules, {actual} on the device).')
@@ -102,6 +112,20 @@ export default function DriftPanel({ components }) {
                 <div>
                   <h3>{t('Unknown rule IDs / shadow rules')} ({report.unknown.length})</h3>
                   <ul>{report.unknown.map((rid) => <li key={rid}><code>{rid}</code></li>)}</ul>
+                </div>
+                <div>
+                  <h3>{t('Wider than approved')} ({report.widened?.length || 0})</h3>
+                  <p className="muted small">
+                    {t('On the device carrying an approved rule ID, but permitting more than that rule was approved for – a rule opened up beyond its justification.')}
+                  </p>
+                  <ul>{(report.widened || []).map((w) => (
+                    <li key={w.rule_id}>
+                      <strong>{w.rule_id}</strong> <code>{w.identifier}</code>
+                      <ul className="muted small">
+                        {w.differences.map((d, i) => <li key={i}>{d}</li>)}
+                      </ul>
+                    </li>
+                  ))}</ul>
                 </div>
                 <div>
                   <h3>{t('Not justified by any rule')} ({report.coverage?.unjustified?.length || 0})</h3>

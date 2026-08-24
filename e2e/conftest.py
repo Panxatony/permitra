@@ -25,6 +25,7 @@ BASE_URL = os.environ.get("PERMITRA_E2E_URL", "http://localhost:8090").rstrip("/
 CREDENTIALS = {
     "admin": "admin123",
     "architekt": "architekt123",
+    "architekt2": "architekt2123",
     "betrieb": "betrieb123",
     "approver": "approver123",
 }
