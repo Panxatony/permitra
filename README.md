@@ -140,7 +140,7 @@ scripts/               encrypted backup and restore, secret scan
   tests/               pytest
 frontend/
   src/pages/           React pages (rules, zones, networks, components, admin, …)
-  src/i18n.jsx         bilingual UI (German/English, toggle in the top bar)
+  src/i18n.jsx         bilingual UI (German/English, set by the admin per instance)
 deploy/k8s/            Kubernetes manifests
 docs/                  CONCEPTS, EXPORTS, API, AUDIT, ADMINISTRATION, DEPLOYMENT
 examples/              generated example exports
