@@ -1,7 +1,7 @@
 # Test and linting tools (not part of the runtime image, only for CI and local development)
 -r requirements.txt
 
-pytest>=8.3
+pytest>=9.1.1
 pytest-cov>=7.1.0
 httpx2>=2.12         # TestClient for the HTTP/authorization tests
                      # (starlette deprecates plain httpx here)
