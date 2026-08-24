@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api'
 import DriftPanel from '../components/DriftPanel'
+import EvidenceReport from '../components/EvidenceReport'
 import { useLang } from '../i18n'
 
 /* Reports: the questions someone asks across the whole ruleset, as opposed to
@@ -82,6 +83,7 @@ export default function Reports() {
       <div className="search-results">
         <DriftPanel components={components} />
         <RequestorTable />
+        <EvidenceReport />
       </div>
     </div>
   )
