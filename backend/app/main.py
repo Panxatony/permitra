@@ -161,7 +161,10 @@ def _siem_delivery_once() -> tuple[dict, dict]:
 
     db = SessionLocal()
     try:
-        return audit.deliver_pending(db), audit.deliver_pending_checkpoints(db)
+        events = audit.deliver_pending(db)
+        checkpoints = audit.deliver_pending_checkpoints(db)
+        audit.deliver_pending_seals(db)
+        return events, checkpoints
     finally:
         db.close()
 
@@ -224,9 +227,26 @@ async def audit_checkpoint_job():
             summary = await asyncio.to_thread(_checkpoint_once)
             if summary:
                 logger.debug("Audit checkpoint: %d events, head %s", *summary)
+            # After anchoring the end, collapse the expired start behind a seal.
+            # Order matters: the checkpoint pins the head before retention
+            # touches the tail, so a verify between the two still holds.
+            collapsed = await asyncio.to_thread(_retention_once)
+            if collapsed.get("collapsed"):
+                logger.info("Audit retention: %d event(s) collapsed behind seal %s",
+                            collapsed["collapsed"], collapsed.get("seal_id"))
         except Exception:  # must never take the app down with it
-            logger.exception("Audit checkpoint failed")
+            logger.exception("Audit checkpoint/retention failed")
         await asyncio.sleep(int(os.environ.get("AUDIT_CHECKPOINT_INTERVAL", "3600")))
+
+
+def _retention_once() -> dict:
+    from . import audit
+
+    db = SessionLocal()
+    try:
+        return audit.collapse_expired(db)
+    finally:
+        db.close()
 
 
 def _load_instance_language() -> None:

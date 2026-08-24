@@ -4,6 +4,14 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **The audit log has a retention period now.** It held usernames and source
+  IPs and grew without bound, which GDPR Art. 5(1)(e) and BSI CON.6 make a
+  problem — and the hash chain was the reason it could not be solved, since
+  deleting one event breaks verification forever. Expired prefixes are now
+  collapsed behind a sealed anchor: the segment is deleted, a seal records the
+  boundary hash the survivors link back to, and verification resumes from the
+  seal. Default is keep-forever; with a SIEM configured nothing is deleted
+  before it has been delivered there. (#34)
 - **A fresh instance says what it still needs.** First start used to end at a
   login form; what a working instance needs next was scattered and unspoken,
   and a new operator hit "network not assigned to any zone" before the mental

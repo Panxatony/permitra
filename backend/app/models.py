@@ -523,6 +523,44 @@ class AuditCheckpoint(Base):
     attempts: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class AuditRetentionSeal(Base):
+    """Anchors the START of the surviving chain after a prefix has been deleted.
+
+    Retention pulls two ways at once. GDPR Art. 5(1)(e) and BSI CON.6 require a
+    documented, enforced retention period for personal data - and audit events
+    hold usernames and source IPs. But the hash chain says keep everything:
+    delete one event and verification fails from that point forever.
+
+    The resolution is to collapse whole *prefixes* rather than individual
+    entries. Once the oldest segment is past the retention period (and, if a
+    SIEM is configured, has been delivered there), it is deleted and this seal
+    is written in its place: the boundary hash the first surviving event links
+    back to, and how many events were removed. Verification then starts from the
+    newest seal's boundary hash instead of from genesis - the chain stays
+    provable, the personal data is gone, and the SIEM carries the collapsed
+    evidence beyond the window. Deleting a prefix is a DELETE; keeping it
+    provable afterwards is this row.
+
+    Append-only and never itself deleted: a seal is small (two hashes and a
+    count), and it is the only remaining proof that the collapsed segment ever
+    linked up.
+    """
+
+    __tablename__ = "audit_retention_seals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sealed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    # The last event id that was collapsed, and its hash - which is exactly the
+    # prev_hash the first surviving event carries.
+    boundary_event_id: Mapped[int] = mapped_column(Integer)
+    boundary_hash: Mapped[str] = mapped_column(String(64))
+    collapsed_count: Mapped[int] = mapped_column(Integer)
+    # Delivered to the SIEM like a checkpoint: the seal is the anchor for the
+    # segment whose individual events are now gone from the database.
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class RiskyPort(Base):
     """A service the risk analysis flags, maintained by administrators.
 
