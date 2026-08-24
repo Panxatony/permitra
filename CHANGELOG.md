@@ -4,6 +4,18 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **A fresh instance says what it still needs.** First start used to end at a
+  login form; what a working instance needs next was scattered and unspoken,
+  and a new operator hit "network not assigned to any zone" before the mental
+  model arrived. A checklist on the dashboard and admin page now names the
+  essentials in dependency order — language, zones, networks, components,
+  matrix, accounts, first rule — each step saying why the next one needs it,
+  every step linking to the normal page, nothing blocking anything. It
+  disappears once the essentials exist. Fewer than two active change approvers
+  is warned about permanently: the matrix workflow silently cannot complete
+  without them, and approvers leave after setup too.
+- **Fixed:** `PERMITRA_INITIAL_ADMIN_PASSWORD` was documented but never passed
+  through docker-compose.yml, so setting it in `.env` silently did nothing.
 - **Recertification is a review, not just expiry control.** Campaigns ask the
   actual question rule by rule — still needed, still correct, still owned — with
   a fixed scope, a cut-off, a per-owner worklist and three recorded decisions

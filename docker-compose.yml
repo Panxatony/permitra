@@ -26,6 +26,13 @@ services:
       # Demo/test operation: creates the well-known demo users. Do NOT set this
       # in production – an initial admin with a random password is created (log).
       PERMITRA_DEMO: ${PERMITRA_DEMO:-}
+      # First-start admin: supply the password yourself, or leave both empty and
+      # the backend writes a random one to /app/initial-admin-password.txt inside
+      # the container. Found while walking the first run (#67): the variable was
+      # documented but never passed through here, so setting it in .env silently
+      # did nothing and the operator went hunting for a file instead.
+      PERMITRA_INITIAL_ADMIN_PASSWORD: ${PERMITRA_INITIAL_ADMIN_PASSWORD:-}
+      PERMITRA_INITIAL_ADMIN_PASSWORD_FILE: ${PERMITRA_INITIAL_ADMIN_PASSWORD_FILE:-}
       # Email delivery (empty = off) and base URL for links in emails
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}

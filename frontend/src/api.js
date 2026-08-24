@@ -140,6 +140,7 @@ export const api = {
   settings: () => request('/api/settings'),
   publicSettings: () => request('/api/settings/public'),
   requestorReport: () => request('/api/reports/requestors'),
+  setupStatus: () => request('/api/setup/status'),
   updateSettings: (p) => request('/api/settings', { method: 'PUT', body: p }),
   users: () => request('/api/users'),
   auditLog: (params = {}) => request(`/api/audit-log?${new URLSearchParams(params)}`),

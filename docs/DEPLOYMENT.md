@@ -17,6 +17,13 @@ docker compose exec backend python seed_demo.py --wipe   # optional demo data
 
 - UI/API reachable on port **8080** (nginx proxies `/api` to the backend; backend and DB are not exposed directly). Override with `FRONTEND_PORT`.
 - Data is stored in the `pgdata` volume.
+- **After the stack is up:** sign in as the initial admin and follow the
+  **Initial configuration** checklist on the dashboard/admin page — language,
+  zones, networks, components, matrix, accounts, first rule, in that order,
+  each step saying why the next one needs it. It disappears once the essentials
+  exist. The initial admin password comes from `PERMITRA_INITIAL_ADMIN_PASSWORD`
+  in `.env`, or, if unset, from `/app/initial-admin-password.txt` inside the
+  backend container.
 - **Backup and restore:** see [Backups](#backups) below. Short version: `scripts/backup.sh` writes an encrypted dump, `scripts/restore.sh` plays one back — and you should run the second one on purpose, at least once, before you need it.
 - **Update:** `git pull && docker compose up --build -d` — schema changes run automatically via Alembic migrations at startup.
 - **Optional environment variables** (see README for details): `SMTP_*` + `PERMITRA_BASE_URL` (email delivery and links), `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (passkeys/WebAuthn), `CHANGE_WEBHOOK_URL`/`CHANGE_WEBHOOK_TOKEN` (change management webhook), `AUDIT_WEBHOOK_URL` and/or `AUDIT_SYSLOG_HOST`/`AUDIT_SYSLOG_PORT`/`AUDIT_SYSLOG_PROTO` (SIEM delivery of the audit log).
