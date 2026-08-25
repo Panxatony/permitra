@@ -474,7 +474,11 @@ def seed(wipe: bool):
     # show was absent from every export, drift report and analysis.
     pairs = sorted(ALLOWED)
     intra_zones = ["PROD-APP", "PROD-DB", "SHARED", "TEST", "DEV", "CICD"]
-    LONG_PATH = ("EXTRANET", "PROD-APP")
+    # Monitoring polls the partner-facing gateway, and its collectors sit in the
+    # data centre - so the traffic crosses the whole estate: FFM-DC -> FFM ->
+    # BER -> Extranet. Four clusters, and every one of them derived from the
+    # topology rather than listed by hand.
+    LONG_PATH = ("MON", "EXTRANET")
     LONG_PATH_AT = (86, 87)  # their positions in `plans`, used again below
     plans = [random.choice(pairs) for _ in range(86)] + \
             [LONG_PATH, LONG_PATH] + \
@@ -536,19 +540,18 @@ def seed(wipe: bool):
         component_ids=[components["FW-Cluster-Provider"].id], created_by="demo-seed",
     ))
 
-    # The long path, and the reason this zone exists: several firewalls in a row
-    # between two networks is the normal case in an enterprise, not an exception.
-    # A partner network enters through the provider edge, passes the extranet
-    # cluster (the second filter of the BSI P-A-P chain) and the campus core
-    # before it reaches anything - so a rule from here to PROD-APP has to be
-    # carried on four clusters, and the analysis has to show all four in order.
+    # The partner line terminates on the extranet cluster, so that is the one
+    # component this network sits behind. Deliberately one and not the chain:
+    # the path analysis routes over the documented links now, so naming every
+    # cluster the traffic happens to cross would state the same fact twice -
+    # once here and once in the topology - and the two would drift. What the
+    # rules are carried on follows from the route, not from this list.
     fw_ext = components["FW-Cluster-Extranet"]
     db.add(AddressComponentMap(
         ip=zone_net("EXTRANET"), alias="NET-EXTRANET", vrf_id=vrf_it.id,
-        component_ids=sorted({components["FW-Cluster-Provider"].id, fw_ext.id, fw_ber.id}),
-        created_by="demo-seed",
+        component_ids=[fw_ext.id], created_by="demo-seed",
     ))
-    zones["EXTRANET"].components = [components["FW-Cluster-Provider"], fw_ext, fw_ber]
+    zones["EXTRANET"].components = [fw_ext]
 
     # ACI: EPG catalog + address->EPG mapping (basis of the contract export)
     ACI_ZONES = ["PROD-APP", "PROD-DB", "SHARED", "TEST", "DEV", "CICD"]
@@ -573,31 +576,32 @@ def seed(wipe: bool):
     db.add(AddressEpgMap(ip=zone_net("MGMT"), alias="NET-MGMT", vrf_id=vrf_it.id,
                          epg_id=l3out_mgmt.id, created_by="demo-seed"))
 
-    # Zones whose traffic is carried by several clusters in a row. Several
-    # firewalls between two networks is the normal case in an enterprise, not an
-    # exception - a partner network passes the provider edge, the extranet
-    # cluster (the second filter of the BSI P-A-P chain) and the campus core
-    # before it reaches anything. Kept as a chain rather than a single cluster
-    # so every rule out of the zone carries all of them, not just a hand-picked
-    # example.
-    ZONE_FW_CHAIN = {
-        "EXTRANET": [components["FW-Cluster-Provider"],
-                     components["FW-Cluster-Extranet"], fw_ber],
-    }
+    # Which clusters a rule is carried on is the route its traffic takes, not a
+    # pair of endpoints. The links above are that route (app/routing.py walks
+    # them for the path analysis), so the seed asks the same graph the analysis
+    # does - otherwise the demo would show rules missing on exactly the transit
+    # clusters the analysis then reports as uncovered.
+    from app import routing as _routing
+
+    ZONE_ATTACH = dict(ZONE_FW)
+    ZONE_ATTACH["INET"] = components["FW-Cluster-Provider"]
+    ZONE_ATTACH["EXTRANET"] = components["FW-Cluster-Extranet"]
+    _graph = _routing.build_graph(db)
+    _by_id = {c.id: c for c in components.values()}
 
     def resolve_seed_components(src_zone: str, dst_zone: str) -> list:
         if src_zone == dst_zone:
             return [aci_ffm]
-        fws = {ZONE_FW[z].name: ZONE_FW[z] for z in (src_zone, dst_zone) if z in ZONE_FW}
-        for zone in (src_zone, dst_zone):
-            for component in ZONE_FW_CHAIN.get(zone, []):
-                fws[component.name] = component
-        if src_zone == "INET" or dst_zone == "INET":
-            # Internet traffic runs exclusively via provider -> BER; the FW cluster FFM
-            # has no direct internet path (customer environment example)
-            provider = components["FW-Cluster-Provider"]
-            return sorted([provider, fw_ber], key=lambda c: c.name)
-        return sorted(fws.values(), key=lambda c: c.name)
+        src, dst = ZONE_ATTACH.get(src_zone), ZONE_ATTACH.get(dst_zone)
+        if not src or not dst:
+            return []
+        found = _routing.shortest_routes(_graph, {src.id}, {dst.id})
+        if not found:
+            # Nothing connects them in the documented topology. Falling back to
+            # the two endpoints keeps the demo populated, and the analysis will
+            # say "no route" for that pair, which is the honest report.
+            return sorted({src, dst}, key=lambda c: c.name)
+        return sorted((_by_id[cid] for cid in found[0]), key=lambda c: c.name)
 
     for i, (src_zone, dst_zone) in enumerate(plans, start=1):
         rule_id = f"SR{i:05d}"

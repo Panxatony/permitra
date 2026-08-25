@@ -88,6 +88,42 @@ function PathFlow({ result, t }) {
         )}
       </div>
 
+      {/* What the packet actually crosses, and why. The route comes from the
+          documented links between the components - so "there is no way from
+          here to there" is an answer, and a second redundant route is one the
+          rule has to be on as well. */}
+      {result.routing === 'no_route' && (
+        <div className="warnbox">
+          {t('No route: the documented topology connects no path between these two components. Either a link is missing, or the traffic genuinely cannot get there.')}
+        </div>
+      )}
+      {result.routing === 'not_documented' && (
+        <p className="muted small">
+          {t('No component links are recorded, so the order below follows the north-south tiering rather than an actual route.')}
+        </p>
+      )}
+      {result.routes?.length > 1 && (
+        <div className="warnbox">
+          <strong>{t('{n} redundant routes').replace('{n}', result.routes.length)}</strong>{' '}
+          {t('– the rule has to be present on every cluster of each of them, or the traffic works until the failover.')}
+          <ul>
+            {result.routes.map((r, i) => (
+              <li key={i}>{r.map((c) => c.name).join(' → ')}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {result.route_gaps?.length > 0 && (
+        <div className="warnbox">
+          {result.route_gaps.map((g, i) => (
+            <div key={i}>
+              {g.route.join(' → ')} — <strong>{t('without an approved rule:')}</strong>{' '}
+              {g.uncovered.join(', ')}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="path-flow">
         <div className="path-node">
           <div className="path-node-title">{t('Source')}</div>
@@ -103,8 +139,13 @@ function PathFlow({ result, t }) {
                 {c.location && <span className="muted small">{c.location}</span>}
               </div>
               <div className="path-comp-meta">
+                {/* "transit" is new: a cluster the route crosses that neither
+                    address sits behind. It only exists because the path is
+                    routed over the topology now instead of ordered by tier -
+                    before, every hop was one end or the other. */}
                 <span className="badge side-badge">
-                  {{ source: 'quellseitig', both: 'beidseitig', destination: 'zielseitig' }[c.side] || ''}
+                  {t({ source: 'source side', both: 'both sides',
+                       destination: 'destination side', transit: 'transit' }[c.side] || '')}
                 </span>
                 {c.via_pbr && (
                   <span className="badge pbr-badge" title={t('PBR redirect via {gateway}').replace('{gateway}', c.gateway)}>
