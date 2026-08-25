@@ -56,6 +56,7 @@ ZONES = [
     ("MGMT",      "Administration/Jump-Hosts",         "10.10.80.0/24"),
     ("MON",       "Monitoring/Logging",                "10.10.90.0/24"),
     ("AUDIT",     "Audit/SIEM – zentrale Protokollierung", "10.10.95.0/24"),
+    ("EXTRANET",  "Partner-Anbindung (B2B)",           "10.10.96.0/24"),
 ]
 
 # --- Allowed relationships (everything else: block) --------------------------
@@ -74,6 +75,10 @@ ALLOWED = {
     ("MON", "PROD-APP"), ("MON", "PROD-DB"), ("MON", "DMZ-WEB"), ("MON", "SHARED"),
     ("MON", "TEST"), ("MON", "DEV"), ("MON", "CICD"), ("MON", "MGMT"),
     ("MGMT", "AUDIT"), ("MON", "AUDIT"), ("AUDIT", "SHARED"),
+    # B2B: the partner reaches the application tier, never the database directly.
+    # This is the long path in the demo - four firewalls, see EXTRANET below.
+    ("EXTRANET", "PROD-APP"),
+    ("MGMT", "EXTRANET"), ("MON", "EXTRANET"),
 }
 TEMPORARY = {("VPN", "TEST")}  # example of a relationship allowed only temporarily
 
@@ -99,6 +104,10 @@ COMPONENTS = [
     ("FW-Cluster-Provider-2", ComponentType.juniper, "Extern (Provider 2)",
      "(Management beim Provider)", 0,
      "Zweiter Provider-Cluster – redundanter Übergang (u.a. VPN-Einwahl); Anbindung über FW-Cluster-BER"),
+    ("FW-Cluster-Extranet", ComponentType.checkpoint, "Zone BER",
+     "cpmgmt-ext.ber.demo.local - 10.10.80.23", 5,
+     "Extranet-Cluster für Partner-Anbindungen: zwischen Provider-Übergang und Campus-Kern "
+     "(BSI P-A-P – der zweite Filter hinter dem äußeren Paketfilter)"),
 ]
 
 # --- Building blocks for rules -----------------------------------------------
@@ -116,6 +125,7 @@ HOST_ROLES = {
     "CICD": ["ci", "runner", "registry"], "SHARED": ["dns", "ntp", "repo", "mail"],
     "MGMT": ["jump", "adm"], "MON": ["mon", "log", "graf"], "VPN": ["vpn"],
     "AUDIT": ["sim", "aud", "col"],
+    "EXTRANET": ["b2b", "partner", "sftp"],
 }
 
 # Typical services per destination zone
@@ -359,6 +369,23 @@ def seed(wipe: bool):
             link_type="BGP Peering",
             description="Redundante Upstream-Anbindung an den zweiten Provider-Cluster",
         ),
+        # The extranet cluster sits in the chain, not beside it: partner traffic
+        # arrives at the provider edge, is filtered here, and only then reaches
+        # the campus core. Both links documented so the topology shows the order.
+        ComponentLink(
+            component_a_id=min(components["FW-Cluster-Provider"].id,
+                               components["FW-Cluster-Extranet"].id),
+            component_b_id=max(components["FW-Cluster-Provider"].id,
+                               components["FW-Cluster-Extranet"].id),
+            link_type="Transfernetz",
+            description="Partner-Übergang: Provider-Cluster ↔ Extranet-Cluster",
+        ),
+        ComponentLink(
+            component_a_id=min(components["FW-Cluster-Extranet"].id, fw_ber_c.id),
+            component_b_id=max(components["FW-Cluster-Extranet"].id, fw_ber_c.id),
+            link_type="OSPF Routing",
+            description="Extranet-Cluster ↔ Campus-Kern BER",
+        ),
     ])
 
     # ACI anycast gateways – PBR connection to the Check Point cluster (FFM)
@@ -391,7 +418,7 @@ def seed(wipe: bool):
 
     # Zones + full matrix; BSI P-A-P classification:
     # extern = north of the P-A-P, pap = inside (DMZ/transfer), intern = below
-    PAP_LEVELS = {"INET": "external", "DMZ-WEB": "pap", "VPN": "pap"}
+    PAP_LEVELS = {"INET": "external", "DMZ-WEB": "pap", "VPN": "pap", "EXTRANET": "pap"}
     # BSI documentation per zone: owner + protection requirement (C, I, A)
     ZONE_META = {
         "INET":     ("",                    "normal", "normal", "normal"),
@@ -406,6 +433,7 @@ def seed(wipe: bool):
         "MGMT":     ("Team Infrastruktur",  "very high", "very high", "high"),
         "MON":      ("Team Betrieb",        "high",   "high",   "high"),
         "AUDIT":    ("Team Security",       "very high", "very high", "high"),
+        "EXTRANET": ("Team Netzwerk",       "high",   "very high", "high"),
     }
     zones = {}
     for order, (name, descr, _net) in enumerate(ZONES):
@@ -439,10 +467,17 @@ def seed(wipe: bool):
                 )
             )
 
-    # ~100 rules: 88 between allowed zones (FW), 12 intra-zone (ACI)
+    # ~100 rules: 86 between allowed zones (FW), 12 intra-zone (ACI), and two
+    # fixed ones for the long path. Drawing that pair at random left it to the
+    # dice whether the demo had a rule crossing four firewalls at all, and the
+    # one draw it got came out "deactivated" - so the feature the zone exists to
+    # show was absent from every export, drift report and analysis.
     pairs = sorted(ALLOWED)
     intra_zones = ["PROD-APP", "PROD-DB", "SHARED", "TEST", "DEV", "CICD"]
-    plans = [random.choice(pairs) for _ in range(88)] + \
+    LONG_PATH = ("EXTRANET", "PROD-APP")
+    LONG_PATH_AT = (86, 87)  # their positions in `plans`, used again below
+    plans = [random.choice(pairs) for _ in range(86)] + \
+            [LONG_PATH, LONG_PATH] + \
             [(z, z) for z in (intra_zones * 2)]  # 12 intra-zone rules
 
     statuses = (
@@ -450,6 +485,14 @@ def seed(wipe: bool):
         + [RuleStatus.rejected] * 5 + [RuleStatus.deactivated] * 6
     )
     random.shuffle(statuses)
+    # Both long-path rules are pinned to approved; a shuffled status would put
+    # them back at the mercy of the same dice. Not `active` directly: active
+    # means implemented on every component, and it is _promote_implemented_rules
+    # that decides that from the implementation status further down. Setting it
+    # here would have produced an active rule implemented nowhere - which is
+    # exactly the inconsistency the demo-seed test exists to catch.
+    for offset in LONG_PATH_AT:
+        statuses[offset] = RuleStatus.approved
 
     start = date(2026, 1, 5)
     fw_ffm = components["FW-Cluster-FFM"]
@@ -466,7 +509,7 @@ def seed(wipe: bool):
         "PROD-DB": fw_ffm_dc, "MON": fw_ffm_dc, "AUDIT": fw_ffm_dc,
         "DMZ-WEB": fw_ber, "VPN": fw_ber, "MGMT": fw_ber, "TEST": fw_ber, "DEV": fw_ber, "CICD": fw_ber,
     }
-    NO_ACI_ZONES = {"MGMT", "AUDIT"}  # pure FW zones without ACI segmentation
+    NO_ACI_ZONES = {"MGMT", "AUDIT", "EXTRANET"}  # pure FW zones without ACI segmentation
     for zone_name, fw in ZONE_FW.items():
         ids = {fw.id} if zone_name in NO_ACI_ZONES else {fw.id, aci_ffm.id}
         db.add(
@@ -493,6 +536,20 @@ def seed(wipe: bool):
         component_ids=[components["FW-Cluster-Provider"].id], created_by="demo-seed",
     ))
 
+    # The long path, and the reason this zone exists: several firewalls in a row
+    # between two networks is the normal case in an enterprise, not an exception.
+    # A partner network enters through the provider edge, passes the extranet
+    # cluster (the second filter of the BSI P-A-P chain) and the campus core
+    # before it reaches anything - so a rule from here to PROD-APP has to be
+    # carried on four clusters, and the analysis has to show all four in order.
+    fw_ext = components["FW-Cluster-Extranet"]
+    db.add(AddressComponentMap(
+        ip=zone_net("EXTRANET"), alias="NET-EXTRANET", vrf_id=vrf_it.id,
+        component_ids=sorted({components["FW-Cluster-Provider"].id, fw_ext.id, fw_ber.id}),
+        created_by="demo-seed",
+    ))
+    zones["EXTRANET"].components = [components["FW-Cluster-Provider"], fw_ext, fw_ber]
+
     # ACI: EPG catalog + address->EPG mapping (basis of the contract export)
     ACI_ZONES = ["PROD-APP", "PROD-DB", "SHARED", "TEST", "DEV", "CICD"]
     epgs = {}
@@ -516,10 +573,25 @@ def seed(wipe: bool):
     db.add(AddressEpgMap(ip=zone_net("MGMT"), alias="NET-MGMT", vrf_id=vrf_it.id,
                          epg_id=l3out_mgmt.id, created_by="demo-seed"))
 
+    # Zones whose traffic is carried by several clusters in a row. Several
+    # firewalls between two networks is the normal case in an enterprise, not an
+    # exception - a partner network passes the provider edge, the extranet
+    # cluster (the second filter of the BSI P-A-P chain) and the campus core
+    # before it reaches anything. Kept as a chain rather than a single cluster
+    # so every rule out of the zone carries all of them, not just a hand-picked
+    # example.
+    ZONE_FW_CHAIN = {
+        "EXTRANET": [components["FW-Cluster-Provider"],
+                     components["FW-Cluster-Extranet"], fw_ber],
+    }
+
     def resolve_seed_components(src_zone: str, dst_zone: str) -> list:
         if src_zone == dst_zone:
             return [aci_ffm]
         fws = {ZONE_FW[z].name: ZONE_FW[z] for z in (src_zone, dst_zone) if z in ZONE_FW}
+        for zone in (src_zone, dst_zone):
+            for component in ZONE_FW_CHAIN.get(zone, []):
+                fws[component.name] = component
         if src_zone == "INET" or dst_zone == "INET":
             # Internet traffic runs exclusively via provider -> BER; the FW cluster FFM
             # has no direct internet path (customer environment example)
@@ -544,6 +616,13 @@ def seed(wipe: bool):
         if status == RuleStatus.approved:
             for c in rule_components_list:
                 impl_status[c.name] = random.choice(["implemented", "implemented", "new"])
+            # The first long-path rule is rolled out everywhere, so the promotion
+            # below makes it active: the demo needs one rule crossing four
+            # firewalls that is actually in service, or it appears in no export,
+            # no drift report and no path analysis. The second keeps whatever it
+            # drew - a long path waiting on one of its clusters is just as real.
+            if i - 1 == LONG_PATH_AT[0]:
+                impl_status = {c.name: "implemented" for c in rule_components_list}
         elif status == RuleStatus.deactivated:
             impl_status = {c.name: "deactivated" for c in rule_components_list}
 
