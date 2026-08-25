@@ -570,6 +570,18 @@ const DE = {
   'Risk': 'Risiko',
   'Role': 'Rolle',
   'Roles': 'Rollen',
+  'No route: the documented topology connects no path between these two components. Either a link is missing, or the traffic genuinely cannot get there.':
+    'Keine Route: Die dokumentierte Topologie verbindet diese beiden Komponenten nicht. Entweder fehlt eine Verbindung, oder der Verkehr kommt tatsächlich nicht durch.',
+  'No component links are recorded, so the order below follows the north-south tiering rather than an actual route.':
+    'Es sind keine Komponenten-Verbindungen hinterlegt – die Reihenfolge unten folgt daher der Nord-Süd-Ebene und nicht einer tatsächlichen Route.',
+  '{n} redundant routes': '{n} redundante Routen',
+  '– the rule has to be present on every cluster of each of them, or the traffic works until the failover.':
+    '– die Regel muss auf jedem Cluster jeder Route liegen, sonst funktioniert der Verkehr nur bis zum Schwenk.',
+  'without an approved rule:': 'ohne freigegebene Regel:',
+  'source side': 'quellseitig',
+  'both sides': 'beidseitig',
+  'destination side': 'zielseitig',
+  'transit': 'Transit',
   'Requested': 'Beantragt',
   'Approvals': 'Freigaben',
   'Zone ID': 'Zonen-ID',

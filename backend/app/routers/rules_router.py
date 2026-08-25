@@ -556,19 +556,71 @@ def path_analysis(
             continue
         matching.append((rule, src_kind, dst_kind))
 
-    # Hop ordering: along the north-south tiering, in the direction of flow
-    # (source further south than destination => south->north, else north->south); then
-    # source-side before destination-side.
-    def avg_tier(ids):
-        tiers = [c.ns_tier for c in components if c.id in ids]
-        return sum(tiers) / len(tiers) if tiers else 100
+    # The path comes from the topology: the links record which clusters are
+    # connected (routing.py), the address mapping says which one an address sits
+    # behind, and the route is the way through. A transit cluster is found by
+    # following the links, so it no longer has to be listed on every address
+    # behind it - and two clusters nothing connects yield no route rather than
+    # an order that reads like a working path.
+    from .. import routing
 
-    direction = -1 if avg_tier(src_ids) > avg_tier(dst_ids) else 1
-    side_rank = {"source": 0, "both": 1, "destination": 2}
-    hop_list.sort(
-        key=lambda h: (direction * h["component"].ns_tier,
-                       side_rank.get(h["side"], 1), h["component"].name)
-    )
+    graph = routing.build_graph(db)
+    # Route between the *firewalls* the addresses sit behind. The ACI fabric is
+    # listed on nearly every zone because it segments inside one - it is not a
+    # way from one zone to another. Left in, both endpoints would share it and
+    # the route collapsed to a single fabric hop, reporting that VPN reaches the
+    # production databases without crossing a firewall. `filtered` already draws
+    # that line for the hop list; the route has to use the same one.
+    routable = {c.id for c in filtered}
+    routes = (routing.shortest_routes(graph, src_ids & routable, dst_ids & routable)
+              if graph else [])
+    # No links recorded at all is not the same statement as "there is no way".
+    # One is an estate whose topology nobody documented, the other is a finding -
+    # collapsing them would either invent routes or condemn every install that
+    # has not filled the links in.
+    routing_state = ("routed" if routes else "no_route") if graph else "not_documented"
+
+    if routes:
+        by_id = {hop["component"].id: hop for hop in hop_list}
+        extra = routing.components_by_id(
+            db, {cid for route in routes for cid in route} - set(by_id))
+        ordered, seen_ids = [], set()
+        for route in routes:
+            for position, component_id in enumerate(route):
+                if component_id in seen_ids:
+                    continue
+                seen_ids.add(component_id)
+                hop = by_id.get(component_id)
+                if hop is None:
+                    component = extra.get(component_id)
+                    if component is None:
+                        continue
+                    hop = {"component": component, "side": "transit", "via_pbr": False}
+                elif component_id not in src_ids and component_id not in dst_ids:
+                    hop = {**hop, "side": "transit"}
+                if position == 0 and component_id in src_ids:
+                    hop = {**hop, "side": "source"}
+                elif position == len(route) - 1 and component_id in dst_ids:
+                    hop = {**hop, "side": "destination"}
+                ordered.append(hop)
+        # Anything the mapping named that no route crosses is kept at the end
+        # rather than dropped: it is what somebody documented, and losing it
+        # silently would hide a mapping that disagrees with the topology.
+        ordered += [h for h in hop_list if h["component"].id not in seen_ids]
+        hop_list = ordered
+    else:
+        # Undocumented topology: fall back to the tiering, which is what this
+        # did before there was a graph to ask.
+        def avg_tier(ids):
+            tiers = [c.ns_tier for c in components if c.id in ids]
+            return sum(tiers) / len(tiers) if tiers else 100
+
+        direction = -1 if avg_tier(src_ids) > avg_tier(dst_ids) else 1
+        side_rank = {"source": 0, "both": 1, "destination": 2}
+        hop_list.sort(
+            key=lambda h: (direction * h["component"].ns_tier,
+                           side_rank.get(h["side"], 1), h["component"].name)
+        )
 
     def service_key(svc):
         return ((svc.get("protocol") or "").upper(), (svc.get("port") or "").lower())
@@ -613,6 +665,18 @@ def path_analysis(
             }
         )
 
+    # Which clusters a route crosses that no rule covers. Reported per route,
+    # because the interesting case is precisely the one where a route is whole
+    # and its alternative is not - traffic then works until the failover.
+    covered_ids = {c["id"] for c in component_results if c["covered"]}
+    names = {c["id"]: c["name"] for c in component_results}
+    route_gaps = [
+        {"route": [names.get(cid, str(cid)) for cid in route],
+         "uncovered": [names.get(cid, str(cid)) for cid in route if cid not in covered_ids]}
+        for route in routes
+        if any(cid not in covered_ids for cid in route)
+    ]
+
     # Permitted services = the intersection across every hop that has to be traversed
     allowed = set.intersection(*allowed_sets) if len(allowed_sets) == len(hop_list) and allowed_sets else set()
     possible = bool(hop_list) and all(c["covered"] for c in component_results) and bool(allowed)
@@ -627,6 +691,18 @@ def path_analysis(
             {"protocol": p, "port": port} for p, port in sorted(allowed)
         ],
         "components": component_results,
+        # "routed" - the path came from the topology; "no_route" - the links are
+        # documented and there is no way between these two, which is a finding;
+        # "not_documented" - no links recorded at all, so the hops fall back to
+        # the tiering. The three say different things and are kept apart.
+        "routing": routing_state,
+        "routes": [
+            [{"id": cid, "name": names.get(cid, str(cid))} for cid in route]
+            for route in routes
+        ],
+        # Redundancy is the reason a second route exists, and a rule that sits
+        # on one route but not the other holds until the day it fails over.
+        "route_gaps": route_gaps,
     }
 
 

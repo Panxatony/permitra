@@ -276,6 +276,13 @@ class ComponentLink(Base):
     )
     link_type: Mapped[str] = mapped_column(String(64), default="")  # e.g. "OSPF Routing", "PBR / Service Graph"
     description: Mapped[str] = mapped_column(Text, default="")
+    # Whether a packet can travel down this link. The path analysis routes over
+    # these (app/routing.py), so a relationship that is documentation rather
+    # than a data path - a management connection, say - has to be able to say
+    # so, or it would offer routes that do not exist. Defaults to true: every
+    # link recorded so far was a transfer network, an OSPF adjacency or a BGP
+    # peering, and all of those carry traffic.
+    carries_transit: Mapped[bool] = mapped_column(default=True)
 
     component_a: Mapped["SecurityComponent"] = relationship(foreign_keys=[component_a_id])
     component_b: Mapped["SecurityComponent"] = relationship(foreign_keys=[component_b_id])
