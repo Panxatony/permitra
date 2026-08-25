@@ -114,6 +114,23 @@ export const SECTIONS = [
     },
   },
   {
+    id: 'analysis',
+    de: {
+      title: 'Pfad-Analyse: welche Firewalls liegen dazwischen',
+      body: [
+        'Die Analyse beantwortet für ein Adresspaar: **kommt der Verkehr durch, über welche Firewalls, und welche Regel erlaubt ihn dort**. Mehrere Firewalls hintereinander sind im Unternehmen der Normalfall — der Weg wird deshalb **aus den dokumentierten Verbindungen zwischen den Komponenten abgeleitet** (Seite „Komponenten": OSPF, BGP, Transfernetze). Die Adress-Zuordnung sagt nur noch, hinter welcher Firewall eine Adresse hängt; alles dazwischen ergibt sich aus der Topologie. Eine Station, hinter der keine der beiden Adressen liegt, ist als **Transit** gekennzeichnet.',
+        'Drei Aussagen kommen erst dadurch zustande. **Keine Route**: Wenn die Topologie die beiden Komponenten nicht verbindet, sagt die Analyse das — statt einer Reihenfolge, die wie ein funktionierender Pfad aussieht. **Redundante Routen**: Gibt es zwei gleich kurze Wege, werden beide gezeigt, denn eine Regel, die nur auf einem liegt, trägt bis zum Schwenk. Und die Cluster einer Route **ohne freigegebene Regel** werden benannt. Sind gar keine Verbindungen hinterlegt, sagt die Analyse auch das und ordnet ersatzweise nach Nord-Süd-Ebene — „nicht dokumentiert" ist etwas anderes als „nicht erreichbar".',
+      ],
+    },
+    en: {
+      title: 'Path analysis: which firewalls are in between',
+      body: [
+        'For a pair of addresses the analysis answers: **does the traffic get through, across which firewalls, and which rule permits it there**. Several firewalls in a row is the normal case in an enterprise, so the path is **derived from the documented links between components** (the components page: OSPF, BGP, transfer networks). The address mapping only says which firewall an address sits behind; everything in between follows from the topology. A hop neither address sits behind is marked **transit**.',
+        'Three answers only exist because of that. **No route**: where the topology connects no way between the two components, the analysis says so — instead of an order that reads like a working path. **Redundant routes**: two equally short ways are both shown, because a rule that sits on only one of them holds until the failover. And the clusters on a route **without an approved rule** are named. Where no links are recorded at all the analysis says that too and falls back to the north-south tiering — "not documented" is not the same statement as "not reachable".',
+      ],
+    },
+  },
+  {
     id: 'drift',
     de: {
       title: 'Soll-Ist-Abgleich und Deckungsgrad',

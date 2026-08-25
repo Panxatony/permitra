@@ -4,6 +4,28 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **The path analysis routes over the topology instead of sorting by tier.**
+  The hops used to come from the address mapping, ordered by each component's
+  north-south tier - which holds while an estate is one straight stack and can
+  never say whether there is a way from here to there at all. The component
+  links (OSPF, BGP, transfer networks) were already recorded and nothing read
+  them; now they are the graph. Three answers follow that ordering could not
+  give: **no route** is a finding rather than an invented sequence, **every
+  shortest route** is reported because a rule on one redundant path and not the
+  other holds until the failover, and a transit cluster appears on its own
+  instead of having to be listed on every address behind it. "Nobody documented
+  the links" stays distinct from "there is no way".
+- **Fixed:** the ACI fabric is listed on nearly every zone because it segments
+  *inside* one. Treated as an attachment point it made both endpoints share it,
+  and the analysis reported that VPN reaches the production databases without
+  crossing a firewall.
+- **The demo shows a path across four firewall clusters** - monitoring in the
+  data centre polling a partner-facing gateway, across FFM-DC → FFM → BER →
+  Extranet. New zone EXTRANET and cluster FW-Cluster-Extranet (the second filter
+  of the BSI P-A-P chain). Every hop is derived from the topology; the seed
+  distributes each rule along the route the analysis computes, so it cannot show
+  a rule missing on a transit cluster the analysis then reports as uncovered.
+
 - **An account can hold several roles**, and its permission is their union
   (#78). Small teams do not have four people for four roles. Separation of
   duties is untouched, because the four-eyes checks key on the acting *account*
