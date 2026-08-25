@@ -16,6 +16,8 @@ Full interactive documentation is at `/docs` on a running instance (OpenAPI).
 | `POST /api/rules/applications/{app_id}/retire` | Propose every in-force rule of a retired application for removal (architect). **`dry_run` defaults to `true`** — a call without it reports what would happen and changes nothing |
 | `PUT /api/rules/{id}/impl-status` | Implementation status per component (operations) |
 | `GET /api/rules/{id}/conflicts` | Conflict warnings |
+| `GET /api/rules/path-search?src=&dst=` | All rules touching an address, in both directions |
+| `GET /api/rules/path-analysis?src=&dst=` | Which firewalls the traffic crosses and whether it gets through. The hops are **routed over the documented component links**, not ordered by tier: `routing` is `routed`, `no_route` (the links connect no way between them — a finding) or `not_documented` (no links recorded, so the order falls back to the north-south tiering). `routes` lists every shortest route, because a rule present on one redundant route and missing on the other holds until the failover; `route_gaps` names the clusters on a route that no approved rule covers. A hop neither address sits behind is marked `transit` |
 | `GET /api/zones/…` | Zones, overview, matrix, batch requests, network mapping |
 | `GET /api/recertification/campaigns` · `POST …` · `POST …/{id}/close` | Recertification. Reading is open to the working roles; **starting and closing a campaign is change-approver only** — not the admin |
 | `GET /api/reports/evidence` · `/evidence.csv` | Evidence report for an audit: every change in a period, optionally by zone or application, with requester, approver, justification and date, plus the chain-integrity statement |
