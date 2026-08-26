@@ -16,7 +16,7 @@ Full interactive documentation is at `/docs` on a running instance (OpenAPI).
 | `GET /api/rules/applications/summary` | The applications rules were opened for, with their in-force counts |
 | `POST /api/rules/applications/{app_id}/retire` | Propose every in-force rule of a retired application for removal (architect). **`dry_run` defaults to `true`** — a call without it reports what would happen and changes nothing |
 | `PUT /api/rules/{id}/impl-status` | Implementation status per component (operations) |
-| `GET /api/rules/{id}/conflicts` | Conflict warnings |
+| `GET /api/rules/{id}/conflicts` | Conflict warnings — overlap, duplicate, permit/deny shadowing. Only against rules on the **same zone transition**, directional: two rules enforced on different policies cannot shadow each other, however their addresses look. Rules carrying no zones (legacy imports) are compared on their addresses alone |
 | `GET /api/rules/path-search?src=&dst=` | All rules touching an address, in both directions |
 | `GET /api/rules/path-analysis?src=&dst=` | Which firewalls the traffic crosses and whether it gets through. The hops are **routed over the documented component links**, not ordered by tier: `routing` is `routed`, `no_route` (the links connect no way between them — a finding) or `not_documented` (no links recorded, so the order falls back to the north-south tiering). `routes` lists every shortest route, because a rule present on one redundant route and missing on the other holds until the failover; `route_gaps` names the clusters on a route that no approved rule covers. A hop neither address sits behind is marked `transit` |
 | `GET /api/zones/…` | Zones, overview, matrix, batch requests, network mapping |
