@@ -1,4 +1,13 @@
-"""Conflict detection: warns about rules with overlapping networks, protocols and ports."""
+"""Conflict detection: warns about rules with overlapping networks, protocols and ports.
+
+Two rules can only be in conflict where both are enforced, which is the zone
+pair. That used to follow from the addresses alone - a network belongs to
+exactly one security zone, so overlapping networks meant the same zones - and
+the comparison never had to state it. `any` is the exception that breaks the
+implication: expanded to 0.0.0.0/0 it overlaps every address in the estate, so
+an any-to-any rule was reported against rules it has nothing to do with. The
+zone pair is therefore checked outright.
+"""
 from .messages import _
 from .models import Rule
 from .validation import parse_network, parse_ports
@@ -53,6 +62,25 @@ def _ports_overlap(rule_a: Rule, rule_b: Rule) -> bool:
     return False
 
 
+def _zone_pair(rule: Rule) -> tuple[str, str]:
+    return ((rule.source_zone or "").strip().upper(),
+            (rule.destination_zone or "").strip().upper())
+
+
+def _elsewhere(rule: Rule, other: Rule) -> bool:
+    """Whether the two rules are enforced on different zone transitions.
+
+    Rules imported before the zone administration existed carry no zones at all;
+    for those the address comparison stays the only evidence there is, and
+    skipping them would lose findings on exactly the legacy data conflicts were
+    written for.
+    """
+    mine, theirs = _zone_pair(rule), _zone_pair(other)
+    if not all(mine) or not all(theirs):
+        return False
+    return mine != theirs
+
+
 def find_conflicts(rule: Rule, others: list[Rule]) -> list[dict]:
     """Compares a rule against all others and returns warnings."""
     warnings = []
@@ -61,6 +89,8 @@ def find_conflicts(rule: Rule, others: list[Rule]) -> list[dict]:
 
     for other in others:
         if other.id == rule.id:
+            continue
+        if _elsewhere(rule, other):
             continue
         if not (_protocols_of(other) & protos_a):
             continue

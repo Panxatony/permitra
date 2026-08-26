@@ -4,6 +4,17 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Fixed: conflict detection ignored the zone pair.** It compared addresses,
+  and that carried an unstated assumption - a network belongs to exactly one
+  zone, so overlapping networks meant the same zone transition. `any` breaks it:
+  expanded to 0.0.0.0/0 it overlaps every address in the estate, so a ping
+  baseline was reported as a "duplicate" of a baseline between two entirely
+  different zones and as "overlapping" every ICMP rule anywhere. Two rules can
+  only conflict where both are enforced, so the zone pair is now a precondition
+  - directional, like the matrix cell it follows. Rules with no zones at all
+  (imported from the Excel matrix) keep being compared on their addresses, which
+  is the only evidence they have.
+
 - **Operations may have one broad rule: a ping baseline.** When a system stops
   answering, the first question is not *which port* but *does the network reach
   it at all* - and nothing in a rule catalogue answers it, so the search starts
