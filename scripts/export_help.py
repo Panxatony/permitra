@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Generates the website's help page from the in-app help.
 
-The application is the source of truth: frontend/src/pages/Help.jsx holds the
-bilingual sections, and this script renders them as hilfe.html for permitra.de.
-Two hand-maintained copies of nine sections of prose drift the week after
-somebody edits one of them - so the website copy is generated, never edited.
+The application is the source of truth: frontend/src/helpContent.jsx holds the
+bilingual sections, and this script renders them as the website's bilingual
+source src/hilfe.html. Two hand-maintained copies of a dozen sections of prose
+drift the week after somebody edits one of them - so the website copy is
+generated, never edited.
+
+The website splits the languages itself: run its build.py afterwards to write
+hilfe.html and en/help.html from the source this produces.
 
 Usage:  python3 scripts/export_help.py [path-to-website-repo]
 """
@@ -14,13 +18,15 @@ import re
 import sys
 
 APP = pathlib.Path(__file__).resolve().parent.parent
-HELP_JSX = APP / "frontend" / "src" / "pages" / "Help.jsx"
+HELP_JSX = APP / "frontend" / "src" / "helpContent.jsx"
 
 
 def parse_sections(text: str) -> list[dict]:
     start = text.index("const SECTIONS = [")
     block = text[start:text.index("\n]\n", start)]
-    chunks = re.split(r"\n  \{\n    id: '(\w+)',", block)
+    # Ids carry hyphens ('ping-baseline'), so \w+ is not enough - and a
+    # section it silently skipped would simply be missing from the website.
+    chunks = re.split(r"\n  \{\n    id: '([\w-]+)',", block)
     sections = []
     for i in range(1, len(chunks), 2):
         sid, body = chunks[i], chunks[i + 1]
@@ -31,7 +37,7 @@ def parse_sections(text: str) -> list[dict]:
                 body, re.S)
             if not m:
                 raise SystemExit(f"help section '{sid}' ({lang}) does not match - "
-                                 "the Help.jsx structure changed; adjust this parser")
+                                 "the helpContent.jsx structure changed; adjust this parser")
             items = []
             for item in re.finditer(
                     r"\n\s+(?:'((?:[^'\\]|\\.)*)',|\{ (ol|ul): \[(.*?)\n\s+\] \})",
@@ -93,7 +99,7 @@ def build(sections: list[dict]) -> str:
 <meta name="description" content="Hilfe zu Permitra: Regel-Workflow, Rezertifizierungs-Kampagnen, Notfall-Änderungen, Zonen-Matrix, Soll-Ist-Abgleich, Exporte.">
 <link rel="stylesheet" href="styles.css">
 <style>
-  /* GENERATED FILE - edit frontend/src/pages/Help.jsx in the application
+  /* GENERATED FILE - edit frontend/src/helpContent.jsx in the application
      repository and re-run scripts/export_help.py. Changes made here are lost. */
   .help-head {{ background: linear-gradient(160deg, var(--brand) 0%, var(--brand-2) 100%); color: var(--on-brand); padding: 1.6rem 0; }}
   .help-head .topline {{ margin-bottom: 0; }}
@@ -174,11 +180,17 @@ def build(sections: list[dict]) -> str:
 def main() -> None:
     website = pathlib.Path(sys.argv[1] if len(sys.argv) > 1
                            else APP.parent / "permitra-website")
-    if not (website / "index.html").exists():
+    # src/, not the root: since the language split the root pages are generated
+    # from these bilingual sources. Writing the root file directly would be
+    # undone by the very next build.py run, which is a quiet way to publish
+    # nothing.
+    source = website / "src" / "hilfe.html"
+    if not (website / "src" / "index.html").exists():
         raise SystemExit(f"{website} does not look like the website repository")
     sections = parse_sections(HELP_JSX.read_text())
-    (website / "hilfe.html").write_text(build(sections))
-    print(f"hilfe.html: {len(sections)} sections -> {website / 'hilfe.html'}")
+    source.write_text(build(sections))
+    print(f"{len(sections)} sections -> {source}")
+    print("now run the website's build.py to write hilfe.html and en/help.html")
 
 
 if __name__ == "__main__":
