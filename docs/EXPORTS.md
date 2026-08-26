@@ -14,6 +14,20 @@ The ACI export models contracts idiomatically instead of "one contract per rule"
 - **Service graph / PBR**: if the provider EPG's bridge domain carries an anycast gateway with PBR, the subject references its service graph template.
 - **EPG bindings**: the APIC JSON export contains `fvAp`/`fvAEPg` with provider/consumer references; SR IDs are kept in subject descriptions for traceability/drift. Rules without an EPG mapping fall back to single contracts and are listed in the warnings.
 
+## ICMP: echo is not "every ICMP type"
+
+ICMP has no ports, so a rule states its restriction in the service's port field:
+`ping` (also `ping6`, `echo`, `echo-request`) means the echo request alone, an
+empty value means every ICMP type there is. Every exporter reads that
+distinction, because on each platform these are different permissions —
+`junos-ping` vs `junos-icmp-all`, Check Point `echo-request` vs `icmp-proto`, an
+ACI filter entry with `icmpv4T: echo` vs one without, `--icmp-type echo-request`
+vs a bare `-p icmp`, and an `icmp-type` on the Aerleon term. The drift comparison
+uses the same distinction: a device answering every ICMP type where an approval
+says echo is reported as a widening, not as a match. This is what makes a [ping
+baseline](CONCEPTS.md#the-rule-workflow) mean on the device what it says in
+Permitra.
+
 Exports always apply the approval filter, **including when explicit `ids=` are given** — a rule ID narrows *which* rules are meant, not whether their status still counts. A deactivated or draft rule is therefore not exported by accident; a deliberate preview needs `only_approved=false`, and that export is marked as such in the audit trail. Every export path (device formats, Capirca/Aerleon, host firewall) writes an audit entry with actor, format and rule count.
 
 ## Host firewall export

@@ -842,6 +842,18 @@ class Rule(Base):
     log_level: Mapped[RuleLogging] = mapped_column(
         Enum(RuleLogging), default=RuleLogging.detailed)
 
+    # --- Ping baseline ------------------------------------------------------
+    # An any-to-any rule carrying ICMP echo between two internal zones the
+    # matrix already permits, so operations can tell "the network does not
+    # reach it" from "the service is down" without raising a change first.
+    #
+    # A declaration, not a computed property: the flag is what says which two
+    # zones the rule means. Its addresses are `any` and have no zone to derive
+    # one from, and a rule that merely happens to look like this must not
+    # inherit the exemption by accident. What the declaration is worth is
+    # checked on every write - see app/ping_baseline.py.
+    ping_baseline: Mapped[bool] = mapped_column(default=False)
+
     # --- Emergency change (#36) ---------------------------------------------
     # A rule opened directly on the firewall at three in the morning, because
     # the approver was unreachable. Permitra cannot prevent that; what it can do

@@ -87,7 +87,7 @@ python3 -m venv .venv
 cd backend
 ../.venv/bin/python -m uvicorn app.main:app --port 8000   # API on :8000, creates SQLite + demo users
 
-# 2. Generate demo data (12 zones, matrix, ~100 rules) – recommended for testing
+# 2. Generate demo data (13 zones, matrix, ~100 rules) – recommended for testing
 ../.venv/bin/python seed_demo.py --wipe
 
 # 3. Frontend
@@ -114,7 +114,7 @@ docker compose exec backend python seed_demo.py --wipe
 
 ### Demo dataset (`backend/seed_demo.py`)
 
-Deterministic (fixed seed), entirely fictional (networks from `10.10.0.0/16`, hosts `*.demo.local`): 12 zones with a complete allow/block matrix and BSI documentation (owner, C/I/A), ~100 rules across all workflow states, firewall rules between zones (Juniper/Check Point), intra-zonal ACI rules, two deliberately overlapping rules (SR00101/SR00102) for testing conflict warnings, and one rule (SR00103) spanning all three components. It also uploads device configurations generated with the real exporters — some carrying rules nobody documented, so the drift comparison has something to find — and leaves one rule standing as an emergency change awaiting approval. A demo that shows only the happy path demonstrates none of what the tool is for.
+Deterministic (fixed seed), entirely fictional (networks from `10.10.0.0/16`, hosts `*.demo.local`): 13 zones with a complete allow/block matrix and BSI documentation (owner, C/I/A), ~100 rules across all workflow states, firewall rules between zones (Juniper/Check Point), intra-zonal ACI rules, two deliberately overlapping rules (SR00101/SR00102) for testing conflict warnings, and one rule (SR00103) spanning all three components, plus two ping baselines (SR00104 in service, SR00105 in review) showing the one rule that is allowed to be any-to-any. It also uploads device configurations generated with the real exporters — some carrying rules nobody documented, so the drift comparison has something to find — and leaves one rule standing as an emergency change awaiting approval. A demo that shows only the happy path demonstrates none of what the tool is for.
 
 ## Example workflow
 

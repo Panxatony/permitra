@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, getUser, hasRole } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
-import { AddressList, ComponentBadges, Modal, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
+import { AddressList, ComponentBadges, HelpLink, Modal, ServiceList, StatusBadge, useZoneLabels } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
 const IMPL_OPTIONS = ['open', 'new', 'to change', 'to remove', 'implemented', 'deactivated']
@@ -140,6 +140,22 @@ export default function RuleDetail() {
               <> – {t('without an approval it is deactivated on')}{' '}
                 {new Date(rule.emergency_approval_due).toLocaleString(dateLocale(lang))}</>
             )}
+          </p>
+        </div>
+      )}
+
+      {/* Stated on the rule, not only in the risk panel: this is the one rule
+          here whose source and destination say "any", and a reader who does not
+          know why is looking at what would otherwise be the worst rule in the
+          catalogue. */}
+      {rule.ping_baseline && (
+        <div className="infobox">
+          <strong>{t('Ping baseline')}</strong>
+          <p style={{ margin: '.3rem 0 0' }}>
+            {t('Every address in {from} may ping every address in {to} – ICMP echo only.')
+              .replace('{from}', rule.source_zone || '?')
+              .replace('{to}', rule.destination_zone || '?')}{' '}
+            <HelpLink topic="ping-baseline" label={t('When that is allowed')} />
           </p>
         </div>
       )}

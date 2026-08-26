@@ -13,6 +13,7 @@ import re
 import yaml
 
 from ..models import RuleAction, RuleLogging
+from .common import icmp_echo_only
 
 # Target platforms: generator name -> (header template, description).
 # {filter} is replaced by the filter name; zone-based targets use
@@ -74,7 +75,11 @@ def _collect_definitions(rules):
         if not port:
             return
         for protocol in _protocols(svc.get("protocol")):
-            if protocol in ("any", "ip"):
+            if protocol in ("any", "ip") or protocol.startswith("icmp"):
+                # ICMP has no ports: its "port" carries a type restriction
+                # ("ping"), which becomes an icmp-type on the term rather than a
+                # service object. Defined as one it would generate
+                # `port: ping`, which Capirca cannot resolve.
                 continue
             key = (protocol, port)
             if key in svc_tokens:
@@ -130,12 +135,18 @@ def _rule_terms(rule, addr_tokens, svc_tokens):
 
     by_protocol: dict[str, list[str]] = {}
     open_protocols: list[str] = []  # protocols without a port (e.g. icmp, tcp without a port)
+    icmp_types: dict[str, str] = {}  # protocol -> the one ICMP type it is limited to
     for svc in rule.services or []:
         port = (svc.get("port") or "").strip()
         for protocol in _protocols(svc.get("protocol")):
             if protocol in ("any", "ip"):
                 continue
-            if port:
+            if protocol.startswith("icmp"):
+                if protocol not in open_protocols:
+                    open_protocols.append(protocol)
+                if icmp_echo_only(svc):
+                    icmp_types[protocol] = "echo-request"
+            elif port:
                 by_protocol.setdefault(protocol, []).append(svc_tokens[(protocol, port)])
             elif protocol not in open_protocols:
                 open_protocols.append(protocol)
@@ -162,6 +173,8 @@ def _rule_terms(rule, addr_tokens, svc_tokens):
             term["destination-address"] = " ".join(dst)
         if protocol:
             term["protocol"] = protocol
+        if protocol in icmp_types:
+            term["icmp-type"] = icmp_types[protocol]
         if tokens:
             term["destination-port"] = " ".join(sorted(set(tokens)))
         terms.append(term)

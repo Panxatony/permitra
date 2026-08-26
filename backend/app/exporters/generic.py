@@ -32,6 +32,7 @@ def rule_to_dict(rule: Rule, with_meta: bool = True) -> dict:
         "destination": rule.destination,
         "services": rule.services,
         "action": rule.action.value,
+        "ping_baseline": rule.ping_baseline,
         "status": rule.status.value,
         "impl_status": rule.impl_status,
     }

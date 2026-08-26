@@ -34,14 +34,15 @@ def parse_sections(text: str) -> list[dict]:
                                  "the Help.jsx structure changed; adjust this parser")
             items = []
             for item in re.finditer(
-                    r"\n\s+(?:'((?:[^'\\]|\\.)*)',|\{ ol: \[(.*?)\n\s+\] \})",
+                    r"\n\s+(?:'((?:[^'\\]|\\.)*)',|\{ (ol|ul): \[(.*?)\n\s+\] \})",
                     m.group(2), re.S):
                 if item.group(1) is not None:
                     items.append(("p", item.group(1).replace("\\'", "'")))
                 else:
-                    items.append(("ol", [li.group(1).replace("\\'", "'")
-                                         for li in re.finditer(r"'((?:[^'\\]|\\.)*)',",
-                                                               item.group(2))]))
+                    items.append((item.group(2),
+                                  [li.group(1).replace("\\'", "'")
+                                   for li in re.finditer(r"'((?:[^'\\]|\\.)*)',",
+                                                         item.group(3))]))
             entry[lang] = {"title": m.group(1).replace("\\'", "'"), "body": items}
         sections.append(entry)
     return sections
@@ -62,7 +63,7 @@ def render_body(items) -> str:
             parts.append(f"      <p>{fmt(content)}</p>")
         else:
             lis = "\n".join(f"        <li>{fmt(li)}</li>" for li in content)
-            parts.append(f"      <ol>\n{lis}\n      </ol>")
+            parts.append(f"      <{kind}>\n{lis}\n      </{kind}>")
     return "\n".join(parts)
 
 
@@ -101,7 +102,7 @@ def build(sections: list[dict]) -> str:
   .help-topic {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.4rem; margin-bottom: 1rem; scroll-margin-top: 1rem; }}
   .help-topic h2 {{ font-size: 1.15rem; margin-bottom: .7rem; }}
   .help-topic p, .help-topic li {{ font-size: .94rem; color: var(--ink); max-width: 75ch; margin-bottom: .6rem; }}
-  .help-topic ol {{ padding-left: 1.3rem; }}
+  .help-topic ol, .help-topic ul {{ padding-left: 1.3rem; }}
   .help-topic code {{ background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: .05rem .3rem; font-size: .88em; }}
   main.wrap {{ padding-bottom: 2rem; }}
 </style>

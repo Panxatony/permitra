@@ -4,6 +4,30 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Operations may have one broad rule: a ping baseline.** When a system stops
+  answering, the first question is not *which port* but *does the network reach
+  it at all* - and nothing in a rule catalogue answers it, so the search starts
+  at the firewall, the one place that could have answered it already. A rule
+  can now declare itself the ping baseline between two zones: any-to-any,
+  carrying ICMP echo and nothing else. It turns "the network is broken" into
+  "the path is open, the service is down", without a change request to find out.
+  The exemption is checked rather than claimed - **internal zones only**, **on a
+  relation the matrix already permits** (it rides on one, it never creates one),
+  **echo only** and **one direction**. Since `any` has no network to derive a
+  zone from, a baseline names its two zones, and its components follow from
+  those zones and the topology between them, transit clusters included. The risk
+  assessment names it at low severity instead of reporting it as too broad; an
+  ordinary any-to-any rule still is.
+- **Fixed: an ICMP rule limited to ping exported as every ICMP type.** `port:
+  ping` was recorded, and every exporter ignored it - Juniper emitted
+  `junos-icmp-all`, Check Point `icmp-proto`, ACI a filter entry without a type,
+  the host firewalls a bare `-p icmp`. That documented redirects and timestamps
+  the rule never granted. They now emit `junos-ping`, `echo-request`,
+  `icmpv4T: echo` and `--icmp-type echo-request`, and the drift comparison reads
+  "every ICMP type" on a device as a widening of an approval for echo. The
+  Aerleon export additionally generated an unresolvable `port: ping` service
+  object; ICMP now travels as an `icmp-type` on the term, where it belongs.
+
 - **The path analysis routes over the topology instead of sorting by tier.**
   The hops used to come from the address mapping, ordered by each component's
   north-south tier - which holds while an estate is one straight stack and can

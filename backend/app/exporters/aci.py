@@ -21,7 +21,7 @@ import yaml
 from ..messages import _
 from ..models import AciGateway, AddressEpgMap, Rule, RuleLogging, ServiceObject
 from ..validation import parse_network
-from .common import sanitize_name, service_ports, split_protocols
+from .common import icmp_echo_only, sanitize_name, service_ports, split_protocols
 
 DEFAULT_TENANT = "Permitra"
 
@@ -68,7 +68,12 @@ def _filter_entries_for_service(svc: dict) -> list[dict]:
     entries = []
     for proto in split_protocols(svc.get("protocol", "")):
         if proto == "icmp":
-            entries.append({"name": "icmp", "etherT": "ip", "prot": "icmp"})
+            # A filter entry without icmpv4T matches every ICMP type; echo is
+            # the request alone, which is what a ping-only rule permits.
+            entries.append({"name": "icmp-echo", "etherT": "ip", "prot": "icmp",
+                            "icmpv4T": "echo"}
+                           if icmp_echo_only(svc)
+                           else {"name": "icmp", "etherT": "ip", "prot": "icmp"})
             continue
         ports = service_ports(svc.get("port", "")) or ["unspecified"]
         for port in ports:

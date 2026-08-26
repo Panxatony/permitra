@@ -725,6 +725,46 @@ def seed(wipe: bool):
     db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
                        change_note="Demo rule created", changed_by="demo-seed"))
 
+    # The ping baselines. Any-to-any on purpose, ICMP echo only, between
+    # internal zones the matrix already allows - so the demo shows what the
+    # exception looks like, and what the risk assessment says about it (a
+    # "ping baseline" finding at low severity, not "the rule is too broad").
+    # One is in service, one is still in review, because both are states an
+    # approver meets. The components come from the topology, exactly as
+    # ping_baseline.components_for() derives them for a real one.
+    for rid, (src_zone, dst_zone), status, reason in (
+        ("SR00104", ("MGMT", "PROD-APP"), RuleStatus.approved,
+         "Erreichbarkeit der PROD-APP-Server aus dem Management-Netz nachweisen, "
+         "ohne dafür je Host einen Change zu stellen"),
+        ("SR00105", ("MON", "PROD-DB"), RuleStatus.in_review,
+         "Monitoring soll bei einem Ausfall zuerst sehen können, ob das Netz "
+         "die Datenbankserver überhaupt erreicht"),
+    ):
+        baseline_components = resolve_seed_components(src_zone, dst_zone)
+        rule = Rule(
+            rule_id=rid,
+            vrf_id=vrf_it.id, name=f"Ping-Basis-{src_zone}-{dst_zone}",
+            application="Infrastruktur", app_id=APP_IDS.get("Infrastruktur", ""),
+            components=baseline_components,
+            source_zone=zc(src_zone), destination_zone=zc(dst_zone),
+            source=[{"ip": "any", "alias": ""}],
+            destination=[{"ip": "any", "alias": ""}],
+            services=[{"protocol": "ICMP", "port": "ping"}],
+            action=RuleAction.permit, ping_baseline=True,
+            description="Ping-Basisregel: ICMP Echo zwischen zwei internen Zonen",
+            justification=reason, business_context="Interne IT",
+            requestor="architekt", owner="betrieb" if status == RuleStatus.approved else "",
+            change_id="CHN2027010", status=status,
+            valid_from="2026-02-01", valid_until="2027-01-31",
+            impl_status=({c.name: "implemented" for c in baseline_components}
+                         if status == RuleStatus.approved else {}),
+            created_by="architekt",
+        )
+        db.add(rule)
+        db.flush()
+        db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
+                           change_note="Demo rule created", changed_by="demo-seed"))
+
     # Least privilege: the demo matrix is fully maintained -> enable default-deny
     # for unmaintained zone relationships (BSI recommendation, issue #13)
     from app.settings import set_setting

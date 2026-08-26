@@ -6,7 +6,13 @@ Produces per rule:
   - one security policy from-zone/to-zone with match/then
 """
 from ..models import Rule, RuleAction, RuleLogging
-from .common import parse_address_entries, sanitize_name, service_ports, split_protocols
+from .common import (
+    icmp_echo_only,
+    parse_address_entries,
+    sanitize_name,
+    service_ports,
+    split_protocols,
+)
 
 
 def _applications(rule: Rule) -> list[str]:
@@ -14,7 +20,10 @@ def _applications(rule: Rule) -> list[str]:
     for svc in rule.services or []:
         for proto in split_protocols(svc.get("protocol", "")):
             if proto == "icmp":
-                apps.append("junos-icmp-all")
+                # junos-ping is the echo request alone; junos-icmp-all is every
+                # ICMP type, redirects included. A ping-only rule that exported
+                # the second would permit more than it says.
+                apps.append("junos-ping" if icmp_echo_only(svc) else "junos-icmp-all")
                 continue
             ports = service_ports(svc.get("port", ""))
             if not ports:

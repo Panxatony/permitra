@@ -12,6 +12,14 @@ from .messages import _
 
 PROTOCOLS = {"TCP", "UDP", "TCP/UDP", "UDP/TCP", "ICMP", "ICMPV6", "ICMP/ICMPV6", "ANY"}
 
+# ICMP has no ports, so its "port" carries the type restriction instead. These
+# values mean echo request - a ping and nothing else - as opposed to the empty
+# value, which means every ICMP type there is. The distinction is load-bearing:
+# it decides whether an export says `junos-ping` or `junos-icmp-all`, and those
+# are different permissions.
+PING_PORTS = {"ping", "ping6", "ping/ping6", "echo", "echo-request"}
+ICMP_PORTS = PING_PORTS | {"", "any", "icmp", "icmp/icmpv6", "icmp/icmp6"}
+
 HOSTNAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
 IP_IN_TEXT_RE = re.compile(
     r"(\d{1,3}(?:\.\d{1,3}){3}(?:/\d{1,2})?)|([0-9A-Fa-f:]+:[0-9A-Fa-f:]+(?:/\d{1,3})?)"
@@ -92,7 +100,7 @@ def validate_address_list(value: str, field: str) -> str:
 
 def validate_port(port: str) -> None:
     port = port.strip().lower()
-    if port in ("", "any", "ping", "ping/ping6", "icmp", "icmp/icmpv6", "icmp/icmp6"):
+    if port in ICMP_PORTS:
         return
     for part in re.split(r"[,/]", port):
         part = part.strip()
@@ -107,6 +115,11 @@ def validate_port(port: str) -> None:
                 raise ValueError(_("Port outside 1-65535: '{part}'", part=part))
         else:
             raise ValueError(_("Invalid port: '{part}'", part=part))
+
+
+def is_ping_port(port: str) -> bool:
+    """Whether an ICMP service is restricted to echo, rather than every ICMP type."""
+    return (port or "").strip().lower() in PING_PORTS
 
 
 def validate_service(protocol: str, port: str) -> None:

@@ -97,6 +97,31 @@ CATALOG: dict[str, dict[str, str]] = {
     "de": {
         "'{port}' is not a valid port (1-65535)": "'{port}' ist kein gültiger Port (1-65535)",
         "A component cannot be linked to itself": "Eine Komponente spricht nicht mit sich selbst",
+        "A ping baseline carries ICMP echo and nothing else. Request the other services "
+        "as their own rule, with the source and destination they actually need":
+            "Eine Ping-Basisregel trägt ICMP Echo und sonst nichts. Beantragen Sie die "
+            "übrigen Dienste als eigene Regel, mit der Quelle und dem Ziel, die sie "
+            "tatsächlich brauchen",
+        "A ping baseline covers whole zones, so it has to name zones that exist - "
+        "'{zone}' is not maintained in the zone administration":
+            "Eine Ping-Basisregel gilt für ganze Zonen, sie muss also Zonen benennen, die "
+            "es gibt – '{zone}' ist in der Zonenverwaltung nicht gepflegt",
+        "A ping baseline is an any-to-any rule: it permits every address in the source "
+        "zone to ping every address in the destination zone. Name the addresses and it "
+        "is an ordinary ICMP rule, which needs no exception":
+            "Eine Ping-Basisregel ist eine Any-zu-Any-Regel: Sie erlaubt jeder Adresse der "
+            "Quellzone, jede Adresse der Zielzone anzupingen. Wer Adressen benennt, hat "
+            "eine gewöhnliche ICMP-Regel – und die braucht keine Ausnahme",
+        "A ping baseline is only permitted between internal zones, and {zone} is "
+        "classified as '{level}'. Towards the P-A-P layer and outwards, an echo answer "
+        "tells an attacker what it tells operations":
+            "Eine Ping-Basisregel ist nur zwischen internen Zonen zulässig, und {zone} ist "
+            "als '{level}' eingestuft. Zur P-A-P-Schicht und nach außen verrät eine "
+            "Echo-Antwort einem Angreifer dasselbe wie dem Betrieb",
+        "A ping baseline permits - a baseline that denies grants nothing and hides the "
+        "rule that would":
+            "Eine Ping-Basisregel erlaubt – eine, die verbietet, gewährt nichts und "
+            "verdeckt die Regel, die es täte",
         "A service from the list below is used": "Ein Dienst aus der Liste unten wird verwendet",
         "A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)":
             "Zonenübergang erfordert eine Firewall – Cisco ACI allein genügt nicht (BSI)",
@@ -136,6 +161,15 @@ CATALOG: dict[str, dict[str, str]] = {
         "Emergency change, approval due within {hours} h: {reason}":
             "Notfall-Änderung, Freigabe fällig binnen {hours} h: {reason}",
         "Contrary to the zone matrix: {reason}": "Entgegen der Zonen-Matrix: {reason}",
+        "Source and destination zone are the same - traffic inside a zone does not cross "
+        "a firewall, so there is nothing here to permit":
+            "Quell- und Zielzone sind identisch – Verkehr innerhalb einer Zone passiert "
+            "keine Firewall, hier gibt es also nichts zu erlauben",
+        "Ping baseline: every address in {from_zone} may ping every address in "
+        "{to_zone}, ICMP echo only":
+            "Ping-Basisregel: Jede Adresse in {from_zone} darf jede Adresse in {to_zone} "
+            "anpingen, nur ICMP Echo",
+        "Ping baseline: ": "Ping-Basisregel: ",
         "The emergency change was not approved within the window. Remove the rule on the components, or submit it again for a proper review.":
             "Die Notfall-Änderung wurde nicht innerhalb des Zeitfensters freigegeben. Bitte die Regel auf den Komponenten entfernen oder erneut regulär zum Review einreichen.",
         "Describe what happened - this is the evidence, and a year from now it is all there will be":
@@ -161,6 +195,10 @@ CATALOG: dict[str, dict[str, str]] = {
         "The campaign is already closed": "Die Kampagne ist bereits geschlossen",
         "Already decided by {user} ({decision})":
             "Bereits entschieden von {user} ({decision})",
+        "The matrix does not allow {from_zone} → {to_zone}. A ping baseline rides on a "
+        "relation the matrix already permits - it does not create one":
+            "Die Matrix erlaubt {from_zone} → {to_zone} nicht. Eine Ping-Basisregel setzt "
+            "auf einer Beziehung auf, die die Matrix bereits erlaubt – sie schafft keine",
         "The rule is no longer in force - there is nothing to confirm (status '{status}')":
             "Die Regel ist nicht mehr in Kraft – es gibt nichts zu bestätigen (Status '{status}')",
         "The cut-off date must not lie in the past":
@@ -205,6 +243,11 @@ CATALOG: dict[str, dict[str, str]] = {
             "Keine Regel von '{app_id}' ist in Kraft",
         "Application {app_id} retired: {reason} - proposed for removal":
             "Anwendung {app_id} außer Betrieb genommen: {reason} – zur Entfernung vorgeschlagen",
+        "Zone {zone} is not attached to a firewall cluster, so there is nothing to roll "
+        "the baseline out on. Maintain the attachment on the security zone":
+            "Zone {zone} ist an keinen Firewall-Cluster angebunden, es gibt also nichts, "
+            "worauf die Basisregel ausgerollt werden könnte. Pflegen Sie die Anbindung an "
+            "der Sicherheitszone",
         "{count} rule(s) proposed for removal: {reason}":
             "{count} Regel(n) zur Entfernung vorgeschlagen: {reason}",
         "Only the current requestor may hand a rule over (an admin may, once the requestor's account is gone)":

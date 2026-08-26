@@ -93,6 +93,41 @@ export const SECTIONS = [
     },
   },
   {
+    id: 'ping-baseline',
+    de: {
+      title: 'Ping-Basisregel',
+      body: [
+        'Wenn ein System nicht antwortet, ist die erste Frage nicht „welcher Port", sondern: **kommt das Netz überhaupt dort an?** Ohne Antwort beginnt die Suche an der Firewall — ausgerechnet an der Stelle, die es längst hätte beantworten können. Eine **Ping-Basisregel** beantwortet es: eine stehende Regel, die jeder Adresse der Quellzone erlaubt, jede Adresse der Zielzone anzupingen. Sie macht aus „das Netz ist kaputt" ein „der Weg ist offen, der Dienst ist unten" — der Unterschied zwischen einem Change und einem Neustart.',
+        'Angelegt wird sie über „Neue Regel" mit der Option **„Ping-Basisregel"**. Adressen gibt es keine — die Regel gilt für ganze Zonen, deshalb werden die beiden Zonen ausgewählt statt abgeleitet. Alles andere bleibt wie bei jeder Regel: Freigabe, Export, Rezertifizierung, Ablaufdatum.',
+        'Zulässig ist sie nur unter vier Bedingungen, und die sind der eigentliche Punkt:',
+        { ul: [
+          '**Nur zwischen internen Zonen.** Unterhalb der P-A-P-Struktur vertrauen sich die Zonen ohnehin so weit, dass die Matrix eine Freigabe trägt. Zur P-A-P-Schicht und nach außen ist ICMP Aufklärung — die erste Frage eines Angreifers ist dieselbe wie die des Betriebs, und dort beantworten wir sie nicht.',
+          '**Nur auf einer Beziehung, die die Matrix bereits erlaubt.** Die Basisregel setzt auf einer freigegebenen Beziehung auf, sie schafft keine. Ob zwei Zonen miteinander reden dürfen, bleibt eine Matrix-Entscheidung mit zwei Freigaben.',
+          '**Nur Echo.** Nicht jeder ICMP-Typ: kein Redirect, kein Timestamp, keine Address Mask. Der Export sagt entsprechend `junos-ping` und nicht `junos-icmp-all` — sonst würde die Regel etwas anderes dokumentieren, als auf dem Gerät steht.',
+          '**Nur in eine Richtung.** Die Matrix-Zelle ist gerichtet, die Regel auch. Die Antwort auf den Echo Request kommt über die Session zurück, die die Firewall ohnehin führt; in die Gegenrichtung pingen ist eine zweite Frage mit einer eigenen Zelle.',
+        ] },
+        'Die Firewalls, auf denen sie entsteht, ergeben sich aus den beiden Zonen und der **Topologie** dazwischen — also auch Cluster, die nur auf dem Weg liegen und an keiner der beiden Zonen hängen.',
+        'In der Risikobewertung erscheint sie als eigener Befund („Ping-Basisregel") mit niedriger Stufe — nicht als „zu breite Regel". Eine Regel, die per Ausnahme breit sein darf, als Fehler zu melden, hieße, die Bewertung wüsste nicht, was freigegeben wurde; und ein Kriterium, das bei jeder Regel einer Art anschlägt, überliest man. Genannt wird sie trotzdem: eine stehende Regel, die niemand sieht, ist der Weg, auf dem eine ihren Grund überlebt.',
+      ],
+    },
+    en: {
+      title: 'Ping baseline',
+      body: [
+        'When a system stops answering, the first question is not "which port" but: **does the network reach it at all?** Without an answer the search starts at the firewall — the very place that could have answered it already. A **ping baseline** answers it: a standing rule letting every address in the source zone ping every address in the destination zone. It turns "the network is broken" into "the path is open, the service is down" — the difference between a change request and a restart.',
+        'It is created from "New rule" with the **"Ping baseline"** option. There are no addresses — the rule covers whole zones, so the two zones are picked rather than derived. Everything else stays as it is for any rule: approval, export, recertification, expiry.',
+        'It is permitted under four conditions, and those conditions are the point:',
+        { ul: [
+          '**Between internal zones only.** Below the P-A-P structure the zones already trust each other enough to carry an allow relation. Towards the P-A-P layer and outwards, ICMP is reconnaissance — an attacker\'s first question is the same as the operator\'s, and out there we do not answer it.',
+          '**On a relation the matrix already allows.** The baseline rides on a permitted relation, it never creates one. Whether two zones may talk stays a matrix decision with its two approvals.',
+          '**Echo only.** Not every ICMP type: no redirect, no timestamp, no address mask. The export says `junos-ping` accordingly and not `junos-icmp-all` — otherwise the rule would document something other than what the device does.',
+          '**One direction.** The matrix cell is directional and so is the rule. The answer to an echo request comes back through the session the firewall already tracks; pinging the other way is a second question with its own cell.',
+        ] },
+        'The firewalls it is rolled out on follow from the two zones and the **topology** between them — including clusters that merely sit on the path and hang off neither zone.',
+        'In the risk assessment it appears as its own finding ("Ping baseline") at low severity — not as "the rule is too broad". Filing a rule that is broad by exception as an error would say the assessment does not know what was approved; and a criterion firing on every rule of a kind is one people learn to scroll past. It is still named: a standing rule nobody sees is how one outlives its reason.',
+      ],
+    },
+  },
+  {
     id: 'zones',
     de: {
       title: 'Zonen, Netzwerke und die Matrix',
@@ -270,11 +305,13 @@ export function HelpBody({ section }) {
   const content = lang === 'de' ? section.de : section.en
   return (
     <div className="help-section">
-      {content.body.map((item, i) =>
-        typeof item === 'string'
-          ? <p key={i}>{fmt(item)}</p>
-          : <ol key={i}>{item.ol.map((li, j) => <li key={j}>{fmt(li)}</li>)}</ol>
-      )}
+      {content.body.map((item, i) => {
+        if (typeof item === 'string') return <p key={i}>{fmt(item)}</p>
+        // Numbered where the order carries meaning (a process runs in steps),
+        // bulleted where it does not (conditions all hold at once).
+        if (item.ul) return <ul key={i}>{item.ul.map((li, j) => <li key={j}>{fmt(li)}</li>)}</ul>
+        return <ol key={i}>{item.ol.map((li, j) => <li key={j}>{fmt(li)}</li>)}</ol>
+      })}
     </div>
   )
 }

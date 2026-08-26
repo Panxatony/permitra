@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import audit
+from .. import audit, ping_baseline
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
 from ..conflicts import find_conflicts
@@ -51,7 +51,7 @@ from ..schemas import (
 from ..settings import get_setting
 from ..validation import format_entry, parse_network
 from ..vrf import get_vrf
-from ..zone_check import check_zone_pair, resolve_zone_for_entries
+from ..zone_check import check_zone_pair, find_zone, resolve_zone_for_entries, zone_ref
 
 router = APIRouter(prefix="/api/rules", tags=["rules"])
 
@@ -111,6 +111,9 @@ def derive_zones(db: Session, payload, vrf_id: int):
 
     Every network must be assigned to a security zone, and one side of a rule may
     span only a single zone. The derived zones override whatever was submitted."""
+    if getattr(payload, "ping_baseline", False):
+        return declared_zones(db, payload)
+
     def entries_of(value):
         return [e.model_dump() if hasattr(e, "model_dump") else e for e in value]
 
@@ -135,6 +138,44 @@ def derive_zones(db: Session, payload, vrf_id: int):
     payload.destination_zone = zones["destination"] or payload.destination_zone
 
 
+def declared_zones(db: Session, payload):
+    """A ping baseline names its zones instead of deriving them.
+
+    Its addresses are `any`, and `any` has no network assignment to look up - it
+    would resolve to whichever zone happens to own the 0.0.0.0/0 entry, which is
+    the internet and precisely not what this rule means. So the two zones the
+    requester picked are the rule, and all that happens here is resolving them
+    to their authoritative reference.
+    """
+    resolved = {}
+    for field in ("source_zone", "destination_zone"):
+        zone = find_zone(db, getattr(payload, field, "") or "")
+        if zone is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
+                _("A ping baseline covers whole zones, so it has to name zones that exist - "
+                  "'{zone}' is not maintained in the zone administration",
+                  zone=getattr(payload, field, "") or "-"))
+        resolved[field] = zone_ref(zone)
+    payload.source_zone = resolved["source_zone"]
+    payload.destination_zone = resolved["destination_zone"]
+
+
+def enforce_ping_baseline(db: Session, payload):
+    """Refuse a declaration the exception does not cover.
+
+    Without this the checkbox would be the whole of it - anybody could label an
+    any-to-any rule a baseline and have the risk assessment stop mentioning it.
+    The declaration is worth something precisely because it is checked.
+    """
+    if not getattr(payload, "ping_baseline", False):
+        return
+    problems = ping_baseline.problems(db, payload)
+    if problems:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Ping baseline: ") + "; ".join(problems))
+
+
 def determine_components(db: Session, payload, vrf_id: int) -> list[SecurityComponent]:
     """Determine the enforcing components automatically from source/destination.
 
@@ -142,6 +183,12 @@ def determine_components(db: Session, payload, vrf_id: int) -> list[SecurityComp
     Addresses without a maintained assignment result in a 422 – the user has to
     define the assignment once via /api/address-map.
     """
+    if getattr(payload, "ping_baseline", False):
+        # Zone-wide by definition, so the zones name the components - see
+        # ping_baseline.components_for(). The address mapping has nothing to say
+        # about `any` except which cluster faces the internet.
+        return ping_baseline.components_for(
+            db, find_zone(db, payload.source_zone), find_zone(db, payload.destination_zone))
     if payload.component_ids:
         return resolve_components(db, payload.component_ids)
     source = [e.model_dump() if hasattr(e, "model_dump") else e for e in payload.source]
@@ -769,6 +816,7 @@ def _create_rule(db: Session, payload, user: User, *,
     enforce_required_fields(db, payload)
     for _attempt in range(5):
         derive_zones(db, payload, vrf.id)
+        enforce_ping_baseline(db, payload)
         components = determine_components(db, payload, vrf.id)
         enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
         matrix_violation = ""
@@ -1164,6 +1212,7 @@ def update_rule(
     vrf = get_vrf(db, payload.vrf or None) if payload.vrf else rule.vrf
     enforce_required_fields(db, payload)
     derive_zones(db, payload, vrf.id)
+    enforce_ping_baseline(db, payload)
     components = determine_components(db, payload, vrf.id)
     enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
     enforce_zone_matrix(
@@ -1256,7 +1305,19 @@ def restore_version(
     payload.source_zone = snap.get("source_zone") or ""
     payload.destination_zone = snap.get("destination_zone") or ""
     payload.component_ids = []
+    payload.services = snap.get("services") or []
+    payload.action = (RuleAction(snap["action"])
+                      if snap.get("action") in {a.value for a in RuleAction} else rule.action)
+    # A version written before the baseline existed carries no flag. Falling
+    # back to the rule's own would restore addresses from a time when it was an
+    # ordinary rule while still calling it a baseline, so the snapshot's shape
+    # decides: any-to-any is the only thing a baseline ever looked like.
+    declared = snap.get("ping_baseline")
+    if declared is None:
+        declared = rule.ping_baseline and ping_baseline.is_any_only(payload.source)
+    payload.ping_baseline = bool(declared)
     derive_zones(db, payload, rule.vrf_id)
+    enforce_ping_baseline(db, payload)
     components = determine_components(db, payload, rule.vrf_id)
     enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
     enforce_zone_matrix(
@@ -1271,8 +1332,8 @@ def restore_version(
                   "change_id", "valid_from", "valid_until"):
         if field in snap:
             setattr(rule, field, snap[field])
-    if snap.get("action") in (a.value for a in RuleAction):
-        rule.action = RuleAction(snap["action"])
+    rule.action = payload.action
+    rule.ping_baseline = payload.ping_baseline
     rule.source_zone = payload.source_zone
     rule.destination_zone = payload.destination_zone
     rule.components = components
@@ -1335,6 +1396,15 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     # set to "to remove" for each component – so it shows up for operations as a
     # pending implementation (removal from the devices).
     if new_status == RuleStatus.approved:
+        # A baseline's licence can lapse without the matrix moving: reclassify
+        # either zone out of "internal" and the exception no longer covers it.
+        # check_zone_pair cannot see that - it only knows the cell - so the
+        # extra conditions are re-asked here, where approving means putting the
+        # rule back on the devices.
+        if rule.ping_baseline and not rule.removal_reason:
+            lapsed = ping_baseline.zone_problems(db, rule.source_zone, rule.destination_zone)
+            if lapsed:
+                rule.removal_reason = "; ".join(lapsed)[:255]
         verdict = check_zone_pair(db, rule.source_zone, rule.destination_zone,
                                   rule.platforms or [])
         # An explicit removal proposal counts here as well: it arises e.g. when a

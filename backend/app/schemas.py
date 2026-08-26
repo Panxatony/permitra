@@ -91,6 +91,10 @@ class RuleFields(BaseModel):
     destination: list[dict] = []
     services: list[dict] = []
     action: RuleAction = RuleAction.permit
+    # An any-to-any ICMP echo rule between two internal zones the matrix
+    # permits, declared so operations can prove reachability without raising a
+    # change first (see app/ping_baseline.py).
+    ping_baseline: bool = False
     # What the rule logs when it matches (#37). Defaults to `detailed` because
     # that is what every export produced before this field existed, so an
     # existing rule's configuration does not change under it.
@@ -130,6 +134,10 @@ class RuleBase(BaseModel):
     destination: list[AddressEntry]
     services: list[Service]
     action: RuleAction = RuleAction.permit
+    # The declaration that this is the ping baseline between the two zones named
+    # above. Everything it needs to be true is checked against the database in
+    # the router; what can be judged from the payload alone is checked here.
+    ping_baseline: bool = False
     # What the rule logs when it matches (#37). Defaults to `detailed` because
     # that is what every export produced before this field existed, so an
     # existing rule's configuration does not change under it.
@@ -170,6 +178,37 @@ class RuleBase(BaseModel):
         # Both values are already normalised to an ISO date here (check_dates)
         if self.valid_from and self.valid_until and self.valid_from > self.valid_until:
             raise ValueError(_("Valid until is earlier than valid from"))
+        return self
+
+    @model_validator(mode="after")
+    def check_ping_baseline(self):
+        """The half of the exception that needs no database: shape and services.
+
+        The zones - internal, and allowed by the matrix - are checked where the
+        zones live. What is decided here is that the declaration matches what
+        was actually submitted, rather than quietly rewriting somebody's rule
+        into a different one.
+        """
+        if not self.ping_baseline:
+            return self
+        from . import ping_baseline
+
+        if not ping_baseline.is_any_only(self.source) or not ping_baseline.is_any_only(self.destination):
+            raise ValueError(
+                _("A ping baseline is an any-to-any rule: it permits every address in the "
+                  "source zone to ping every address in the destination zone. Name the "
+                  "addresses and it is an ordinary ICMP rule, which needs no exception"))
+        if not ping_baseline.is_ping_only(self.services):
+            raise ValueError(
+                _("A ping baseline carries ICMP echo and nothing else. Request the other "
+                  "services as their own rule, with the source and destination they "
+                  "actually need"))
+        if self.action != RuleAction.permit:
+            raise ValueError(_("A ping baseline permits - a baseline that denies grants "
+                               "nothing and hides the rule that would"))
+        # Echo, written the way the exporters read it: an empty port would leave
+        # them emitting every ICMP type, which is not what this rule says.
+        self.services = [Service(protocol=s.protocol, port="ping") for s in self.services]
         return self
 
 
