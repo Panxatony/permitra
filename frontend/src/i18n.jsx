@@ -588,6 +588,27 @@ const DE = {
   'normal': 'normal',
   'This rule is already on the device (emergency change)':
     'Diese Regel liegt bereits auf dem Gerät (Notfall-Änderung)',
+  // --- Ping baseline ---------------------------------------------
+  'This rule is the ping baseline between two internal zones':
+    'Diese Regel ist die Ping-Basisregel zwischen zwei internen Zonen',
+  'When that is allowed': 'Wann das erlaubt ist',
+  'Every address in the source zone may ping every address in the destination zone.':
+    'Jede Adresse der Quellzone darf jede Adresse der Zielzone anpingen.',
+  // One long key on purpose: the runtime string is one string, and a key split
+  // across lines would have to be a computed expression to match it.
+  'ICMP echo and nothing else, so operations can tell "the network does not reach it" from "the service is down" without raising a change first. Permitted between internal zones on a relation the matrix already allows - the firewalls follow from the two zones.':
+    'ICMP Echo und sonst nichts – damit der Betrieb „das Netz kommt nicht an" von '
+    + '„der Dienst ist unten" unterscheiden kann, ohne dafür erst einen Change zu '
+    + 'stellen. Zulässig zwischen internen Zonen auf einer Beziehung, die die Matrix '
+    + 'bereits erlaubt; die Firewalls ergeben sich aus den beiden Zonen.',
+  'Implemented on components (derived from the two zones and the topology between them):':
+    'Umgesetzt auf Komponenten (abgeleitet aus den beiden Zonen und der Topologie dazwischen):',
+  '– determined from the zones when the rule is created –':
+    '– ergibt sich beim Anlegen aus den Zonen –',
+  'not maintained': 'nicht gepflegt',
+  'Ping baseline': 'Ping-Basisregel',
+  'Every address in {from} may ping every address in {to} – ICMP echo only.':
+    'Jede Adresse in {from} darf jede Adresse in {to} anpingen – nur ICMP Echo.',
   'Evidence report': 'Nachweisbericht',
   'From': 'Von',
   'To': 'Bis',

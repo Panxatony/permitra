@@ -2,7 +2,7 @@
 import re
 from dataclasses import dataclass
 
-from ..validation import parse_network
+from ..validation import is_ping_port, parse_network
 
 
 @dataclass
@@ -50,6 +50,17 @@ def service_ports(port: str) -> list[str]:
     if port in ("", "any") or port.startswith(("icmp", "ping")):
         return []
     return [p.strip() for p in re.split(r"[,/]", port) if p.strip()]
+
+
+def icmp_echo_only(svc: dict) -> bool:
+    """Whether an ICMP service is restricted to echo (ping) rather than every type.
+
+    ICMP has no ports, so a rule states the restriction in the port field. The
+    exporters have to read it: "ICMP" and "ICMP ping" are different permissions
+    on every platform here, and emitting the wider one for the narrower rule
+    documents a device configuration nobody approved.
+    """
+    return is_ping_port(svc.get("port", ""))
 
 
 def split_protocols(protocol: str) -> list[str]:

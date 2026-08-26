@@ -7,7 +7,7 @@ session with a concluding publish.
 import json
 
 from ..models import Rule, RuleAction, RuleLogging
-from .common import parse_address_entries, service_ports, split_protocols
+from .common import icmp_echo_only, parse_address_entries, service_ports, split_protocols
 
 ACCESS_LAYER = "Network"
 
@@ -36,7 +36,9 @@ def _service_objects(rule: Rule) -> tuple[list[dict], list[str]]:
     for svc in rule.services or []:
         for proto in split_protocols(svc.get("protocol", "")):
             if proto == "icmp":
-                names.append("icmp-proto")
+                # echo-request is Check Point's predefined ping service;
+                # icmp-proto is the whole protocol.
+                names.append("echo-request" if icmp_echo_only(svc) else "icmp-proto")
                 continue
             ports = service_ports(svc.get("port", ""))
             if not ports:

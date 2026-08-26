@@ -139,7 +139,22 @@ def assess_rule(db: Session, rule) -> dict:
     dst_any = _is_any(rule.destination)
 
     # 1) Any-to-Any
-    if src_any and dst_any:
+    #
+    # A ping baseline is any-to-any deliberately and was granted on exactly that
+    # basis: internal zones, a relation the matrix already allows, ICMP echo and
+    # nothing else (app/ping_baseline.py). Reporting it as "too broad" would say
+    # the assessment does not know what the approver decided - and a criterion
+    # that fires on every rule of a kind is one reviewers learn to skip past,
+    # which costs the findings around it their weight. It is still named, at the
+    # severity its breadth is worth, because a standing rule nobody sees is how
+    # one outlives its reason.
+    if getattr(rule, "ping_baseline", False):
+        findings.append({"severity": "low", "code": "ping-baseline",
+                         "detail": _("Ping baseline: every address in {from_zone} may ping "
+                                     "every address in {to_zone}, ICMP echo only",
+                                     from_zone=rule.source_zone or "?",
+                                     to_zone=rule.destination_zone or "?")})
+    elif src_any and dst_any:
         findings.append({"severity": "high", "code": "any-to-any",
                          "detail": _("Source and destination are both 'any' – the rule is too broad")})
     elif src_any:

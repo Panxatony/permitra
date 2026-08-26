@@ -11,7 +11,7 @@ Every line carries the SR ID as a comment (traceability/drift).
 from ..messages import _
 from ..models import IN_FORCE, Rule, RuleAction
 from ..validation import parse_network
-from .common import service_ports, split_protocols
+from .common import icmp_echo_only, service_ports, split_protocols
 
 HOST_OS = {
     "debian": ("nftables.conf", "Debian (nftables)"),
@@ -63,7 +63,9 @@ def _services(rule: Rule) -> list[tuple[str, str]]:
     for svc in rule.services or []:
         for proto in split_protocols(svc.get("protocol", "")):
             if proto == "icmp":
-                result.append(("icmp", ""))
+                # "ping" travels with the service so the emitters below can
+                # narrow to echo-request; empty stays every ICMP type.
+                result.append(("icmp", "ping" if icmp_echo_only(svc) else ""))
                 continue
             ports = service_ports(svc.get("port", ""))
             if not ports:
@@ -100,7 +102,9 @@ def export_debian(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
                 saddr = f"{family} saddr {src} "
             for proto, port in _services(rule):
                 if proto == "icmp":
-                    lines.append(f"    {saddr}ip protocol icmp accept comment \"{rule.rule_id}\"")
+                    icmp_type = " icmp type echo-request" if port == "ping" else ""
+                    lines.append(f"    {saddr}ip protocol icmp{icmp_type} accept "
+                                 f"comment \"{rule.rule_id}\"")
                     continue
                 dport = f" dport {port.replace('/', '-')}" if port else ""
                 lines.append(f"    {saddr}{proto}{dport} accept comment \"{rule.rule_id}\"")
@@ -122,7 +126,9 @@ def export_redhat(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
             src_part = f' source address="{src}"' if src else ""
             for proto, port in _services(rule):
                 if proto == "icmp":
-                    rich = f'rule family="{family}"{src_part} protocol value="icmp" accept'
+                    rich = (f'rule family="{family}"{src_part} icmp-type name="echo-request" accept'
+                            if port == "ping"
+                            else f'rule family="{family}"{src_part} protocol value="icmp" accept')
                 else:
                     rich = (f'rule family="{family}"{src_part} '
                             f'port port="{port or "1-65535"}" protocol="{proto}" accept')
@@ -154,8 +160,10 @@ def export_sles(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:
             src_part = f" -s {src}" if src else ""
             for proto, port in _services(rule):
                 if proto == "icmp":
+                    icmp_type = " --icmp-type echo-request" if port == "ping" else ""
                     lines.append(
-                        f"{cmd} -A INPUT{src_part} -p icmp -m comment --comment \"{rule.rule_id}\" -j ACCEPT"
+                        f"{cmd} -A INPUT{src_part} -p icmp{icmp_type} "
+                        f"-m comment --comment \"{rule.rule_id}\" -j ACCEPT"
                     )
                     continue
                 dport = f" --dport {port.replace('-', ':')}" if port else ""

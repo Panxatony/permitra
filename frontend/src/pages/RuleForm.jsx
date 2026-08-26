@@ -42,6 +42,7 @@ const EMPTY = {
   destination: [{ ip: '', alias: '' }],
   services: [{ protocol: 'TCP', port: '' }],
   action: 'permit',
+  ping_baseline: false,
   log_level: 'detailed',
   description: '',
   justification: '',
@@ -52,16 +53,23 @@ const EMPTY = {
   valid_until: '',
 }
 
-function ZoneSelect({ label, value, onChange, zones }) {
-  // Keep existing values (legacy data) even when they are not a maintained zone
-  const known = zones.some((z) => z.name.toUpperCase() === (value || '').toUpperCase())
+/* Picking a zone, for the one rule that has no addresses to derive it from.
+   A ping baseline covers whole zones, so the zones are what it says - see
+   backend/app/ping_baseline.py. The value is the zone's authoritative
+   reference (its ID where it has one), because that is what rules store. */
+function ZoneSelect({ label, value, onChange, zones, t }) {
+  const ref = (z) => z.code || z.name
+  // Keep an existing value (legacy data) even when it is not a maintained zone
+  const known = zones.some((z) => ref(z).toUpperCase() === (value || '').toUpperCase())
   return (
     <label>
       {label}
-      <select value={value} onChange={onChange}>
+      <select value={value} onChange={onChange} required>
         <option value="">{t('– select zone –')}</option>
-        {!known && value && <option value={value}>{value} (nicht gepflegt)</option>}
-        {zones.map((z) => <option key={z.id} value={z.name}>{z.name}</option>)}
+        {!known && value && <option value={value}>{value} ({t('not maintained')})</option>}
+        {zones.map((z) => (
+          <option key={z.id} value={ref(z)}>{z.code ? `${z.code}-${z.name}` : z.name}</option>
+        ))}
       </select>
     </label>
   )
@@ -100,6 +108,28 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
   const [changeNote, setChangeNote] = useState('')
   const [error, setError] = useState('')
 
+  /* The second option on this form, and the opposite kind of exception: an
+     emergency change is an ordinary rule documented late, a ping baseline is a
+     deliberately broad one - any-to-any, ICMP echo, between two internal zones
+     the matrix already allows. Ticking it changes what the form asks for,
+     because a rule without addresses has no zone to derive and has to name the
+     two it means. */
+  const isBaseline = form.ping_baseline
+  const internalZones = zones.filter((z) => (z.pap_level || 'internal') === 'internal')
+  const toggleBaseline = (on) => {
+    setResolved({ components: [], unknown: [] })
+    setForm((f) => ({
+      ...f,
+      ping_baseline: on,
+      source: [{ ip: on ? 'any' : '', alias: '' }],
+      destination: [{ ip: on ? 'any' : '', alias: '' }],
+      services: on ? [{ protocol: 'ICMP', port: 'ping' }] : [{ protocol: 'TCP', port: '' }],
+      action: on ? 'permit' : f.action,
+      source_zone: '',
+      destination_zone: '',
+    }))
+  }
+
   const [addressObjects, setAddressObjects] = useState([])
   const [serviceObjects, setServiceObjects] = useState([])
 
@@ -121,7 +151,11 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
   useEffect(() => {
     const src = validEntries(form.source)
     const dst = validEntries(form.destination)
-    if (!src.length && !dst.length) {
+    /* A ping baseline states its zones instead of deriving them: its addresses
+       are `any`, and `any` resolves to whichever zone owns 0.0.0.0/0 - the
+       internet, and precisely not what the rule means. Letting the resolver run
+       here would overwrite the two zones the requester picked. */
+    if (isBaseline || (!src.length && !dst.length)) {
       setResolved({ components: [], unknown: [] })
       return
     }
@@ -141,7 +175,8 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
     }, 400)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(form.source), JSON.stringify(form.destination), form.source_zone, form.destination_zone])
+  }, [isBaseline, JSON.stringify(form.source), JSON.stringify(form.destination),
+      form.source_zone, form.destination_zone])
 
   // Platforms for the zone matrix check: from resolved + newly assigned components
   const assignedIds = Object.values(assignments).flat()
@@ -309,6 +344,27 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
           </span>
         </label>
       )}
+      {!isEdit && canCreateNormal && !isEmergency && (
+        <label className="checkbox emergency-toggle">
+          <input type="checkbox" checked={isBaseline}
+            onChange={(e) => toggleBaseline(e.target.checked)} />
+          <span>
+            {t('This rule is the ping baseline between two internal zones')}{' '}
+            <HelpLink topic="ping-baseline" label={t('When that is allowed')} />
+          </span>
+        </label>
+      )}
+      {isBaseline && (
+        <div className="infobox">
+          <p style={{ margin: 0 }}>
+            <strong>{t('Every address in the source zone may ping every address in the destination zone.')}</strong>{' '}
+            {t('ICMP echo and nothing else, so operations can tell "the network does not reach it" '
+               + 'from "the service is down" without raising a change first. Permitted between '
+               + 'internal zones on a relation the matrix already allows - the firewalls follow '
+               + 'from the two zones.')}
+          </p>
+        </div>
+      )}
       {isEmergency && (
         <div className="emergency-box">
           <p>
@@ -339,38 +395,59 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
           <label>APP-ID<input value={form.app_id} onChange={set('app_id')} placeholder="z.B. APP-4711" /></label>
         </div>
         <div className="platform-select">
-          <span>{t('Implemented on components (derived automatically from source/destination):')}</span>
-          {resolved.components.length
+          <span>{isBaseline
+            ? t('Implemented on components (derived from the two zones and the topology between them):')
+            : t('Implemented on components (derived automatically from source/destination):')}</span>
+          {isBaseline
+            ? <span className="muted">{t('– determined from the zones when the rule is created –')}</span>
+            : resolved.components.length
             ? resolved.components.map((c) => (
                 <span key={c.id} className={`badge platform-${c.type}`}
                   title={t({ juniper: 'Firewall rule (Juniper)', checkpoint: 'Firewall rule (Check Point)', aci: 'ACI Contract' }[c.type])}>
                   {c.name}
                 </span>
               ))
-            : <span className="muted">{t('– determined once source and destination are entered –')}</span>}
+              : <span className="muted">{t('– determined once source and destination are entered –')}</span>}
         </div>
       </fieldset>
 
       <fieldset>
         <legend>{t('Traffic relationship')}</legend>
-        <div className="grid-2">
-          {/* Coloured by protection level, not by "all good": a green badge on a
-              derived zone read as an approval of the rule, when what it shows is
-              which zone the addresses landed in. The level is the thing worth
-              seeing here - it is what decides the rule's risk. */}
-          <label>{t('Source zone (derived from networks)')}
-            <div className="derived-zone">{form.source_zone
-              ? <ZoneBadge zone={zoneOf(form.source_zone)} name={form.source_zone} />
-              : <span className="muted">–</span>}</div>
-          </label>
-          <label>{t('Destination zone (derived from networks)')}
-            <div className="derived-zone">{form.destination_zone
-              ? <ZoneBadge zone={zoneOf(form.destination_zone)} name={form.destination_zone} />
-              : <span className="muted">–</span>}</div>
-          </label>
-        </div>
-        {renderAddressEditor('source', t('Source (IP/network + optional alias)'))}
-        {renderAddressEditor('destination', t('Destination (IP/network + optional alias)'))}
+        {isBaseline ? (
+          /* The only rule on this form whose zones are an input. Everywhere
+             else they are derived and showing them as a field would invite
+             somebody to contradict the networks; here there are no addresses to
+             derive from, so the two zones are what the rule says. Only internal
+             ones are offered - outwards an echo answer tells an attacker what
+             it tells operations. */
+          <div className="grid-2">
+            <ZoneSelect label={t('Source zone')} zones={internalZones} t={t}
+              value={form.source_zone} onChange={set('source_zone')} />
+            <ZoneSelect label={t('Destination zone')} zones={internalZones} t={t}
+              value={form.destination_zone} onChange={set('destination_zone')} />
+          </div>
+        ) : (
+          <>
+            <div className="grid-2">
+              {/* Coloured by protection level, not by "all good": a green badge on a
+                  derived zone read as an approval of the rule, when what it shows is
+                  which zone the addresses landed in. The level is the thing worth
+                  seeing here - it is what decides the rule's risk. */}
+              <label>{t('Source zone (derived from networks)')}
+                <div className="derived-zone">{form.source_zone
+                  ? <ZoneBadge zone={zoneOf(form.source_zone)} name={form.source_zone} />
+                  : <span className="muted">–</span>}</div>
+              </label>
+              <label>{t('Destination zone (derived from networks)')}
+                <div className="derived-zone">{form.destination_zone
+                  ? <ZoneBadge zone={zoneOf(form.destination_zone)} name={form.destination_zone} />
+                  : <span className="muted">–</span>}</div>
+              </label>
+            </div>
+            {renderAddressEditor('source', t('Source (IP/network + optional alias)'))}
+            {renderAddressEditor('destination', t('Destination (IP/network + optional alias)'))}
+          </>
+        )}
         {unassigned.length > 0 && (
           <div className="warnbox">
             <strong>{t('Unknown network:')}</strong>{' '}
@@ -424,7 +501,16 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
           {/* Same class as the source and destination labels: a bare <span>
               fell back to body typography and rendered larger than they did. */}
           <span className="field-label">{t('Services:')}</span>
-          {form.services.map((s, i) => (
+          {isBaseline && (
+            /* Not a disabled dropdown: there is one answer, and offering the
+               others only to refuse them on submit reads as a broken form.
+               "echo" rather than "ICMP" because they are different permissions
+               - the export says junos-ping, not junos-icmp-all. */
+            <div className="derived-zone">
+              <span className="badge">ICMP echo (ping)</span>
+            </div>
+          )}
+          {!isBaseline && form.services.map((s, i) => (
             <div key={i} className="service-row">
               <select value={s.protocol} onChange={(e) => setService(i, 'protocol', e.target.value)}>
                 <option>TCP</option><option>UDP</option><option>TCP/UDP</option>
@@ -437,7 +523,7 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
               )}
             </div>
           ))}
-          <div className="catalog-pick">
+          {!isBaseline && <div className="catalog-pick">
             <button type="button" className="btn btn-ghost" onClick={addService}>{t('+ Service')}</button>
             {serviceObjects.length > 0 && (
               <select value="" onChange={(ev) => {
@@ -453,9 +539,11 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
                 ))}
               </select>
             )}
-          </div>
+          </div>}
         </div>
-        <label className="inline">
+        {/* A baseline permits, always: one that denies grants nothing and hides
+            the rule that would. So there is no choice to offer. */}
+        {!isBaseline && <label className="inline">
           {t('Action:')}
           <select value={form.action} onChange={set('action')}>
             <option value="permit">permit</option>
@@ -466,7 +554,7 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
             <option value="deny">{t('deny (drop – silent, caller sees a timeout)')}</option>
             <option value="reject">{t('reject (answers – caller sees an error at once)')}</option>
           </select>
-        </label>
+        </label>}
         <label className="inline">
           {t('Logging:')}
           <select value={form.log_level} onChange={set('log_level')}>

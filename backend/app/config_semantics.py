@@ -25,6 +25,7 @@ import re
 from dataclasses import dataclass, field
 
 from .models import ComponentType
+from .validation import is_ping_port
 
 ANY_V4 = ipaddress.ip_network("0.0.0.0/0")
 ANY_V6 = ipaddress.ip_network("::/0")
@@ -32,9 +33,18 @@ ANY_V6 = ipaddress.ip_network("::/0")
 # junos-* service names our own exporter emits, plus the handful a hand-written
 # config is likely to use. An unknown junos-* name is left unresolved on
 # purpose - claiming a port for a service we do not know would invent fidelity.
+# ICMP has no ports, so for it the range holds the *type* instead. That keeps
+# one comparison for everything: a device permitting every ICMP type (0-65535)
+# covers an approval for echo (8-8), and the widening check reports it - which
+# is the whole question a ping-only rule raises. Approved echo against a device
+# that answers every ICMP type is exactly the asymmetric widening this module
+# exists to catch.
+ICMP_ECHO = (8, 8)
+
 JUNOS_SERVICES: dict[str, tuple[str, int, int]] = {
     "junos-icmp-all": ("icmp", 0, 65535),
-    "junos-icmp-ping": ("icmp", 0, 65535),
+    "junos-ping": ("icmp", *ICMP_ECHO),
+    "junos-icmp-ping": ("icmp", *ICMP_ECHO),
     "junos-https": ("tcp", 443, 443),
     "junos-http": ("tcp", 80, 80),
     "junos-ssh": ("tcp", 22, 22),
@@ -117,6 +127,8 @@ def _services_cover(covering: list, covering_any: bool, subject: list, subject_a
 
 
 def _svc_str(svc: Service) -> str:
+    if svc.proto.startswith("icmp") and (svc.lo, svc.hi) == ICMP_ECHO:
+        return f"{svc.proto}/echo"
     port = "any" if (svc.lo, svc.hi) == (0, 65535) else (
         str(svc.lo) if svc.lo == svc.hi else f"{svc.lo}-{svc.hi}")
     return f"{svc.proto}/{port}"
@@ -159,6 +171,8 @@ def _service_from_spec(proto: str, port: str) -> list:
     port = (port or "").strip()
     if proto in ("", "any", "ip"):
         return [Service("any", 0, 65535)]
+    if proto.startswith("icmp"):
+        return [Service(proto, *(ICMP_ECHO if is_ping_port(port) else (0, 65535)))]
     protos = ["tcp", "udp"] if proto in ("tcp/udp", "tcpudp") else [proto]
     ranges = _port_ranges(port)
     out = []

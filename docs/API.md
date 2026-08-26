@@ -11,6 +11,7 @@ Full interactive documentation is at `/docs` on a running instance (OpenAPI).
 | `GET /api/rules?q=&source=&destination=&port=&protocol=&status=&component=&impl=&vrf=` | Search/filter with pagination |
 | `POST /api/rules` · `PUT /api/rules/{id}` | Create/update (architect), versioned. A new rule is prefilled to expire in a year |
 | `POST /api/rules/emergency` | Document a rule already opened on the device (architect, operations) — mandatory reason, into review, time-limited |
+| `POST /api/rules` with `ping_baseline: true` | The one broad rule that is allowed: any-to-any, ICMP echo only, between two **internal** zones the matrix already permits. It names its two zones (`source_zone`/`destination_zone`) instead of deriving them — its addresses are `any`, which has no network to derive from — and its components follow from those zones and the topology between them. A declaration that does not hold is a 422 naming every reason |
 | `POST /api/rules/{id}/submit\|approve\|reject\|deactivate` | Review workflow. `approve`/`reject` are change-approver only, and four eyes are enforced on the acting **account**: whoever requested, created or submitted the rule cannot approve it, whichever roles that account holds |
 | `GET /api/rules/applications/summary` | The applications rules were opened for, with their in-force counts |
 | `POST /api/rules/applications/{app_id}/retire` | Propose every in-force rule of a retired application for removal (architect). **`dry_run` defaults to `true`** — a call without it reports what would happen and changes nothing |
