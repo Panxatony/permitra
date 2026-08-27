@@ -4,6 +4,14 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **The exported help page links to the Impressum and the Datenschutzerklärung.**
+  permitra.de gained both, and § 5 DDG wants them reachable from every page, not
+  from the front page only. The help page is generated here, so its footer is
+  too - `scripts/export_help.py` writes the links, and the website's `build.py`
+  rewrites them to `imprint.html` / `privacy.html` for the English page. This
+  changes the project website; a self-hosted instance is unaffected, and
+  deliberately so: its Impressum is its operator's, not ours.
+
 - **Fixed: conflict detection ignored the zone pair.** It compared addresses,
   and that carried an unstated assumption - a network belongs to exactly one
   zone, so overlapping networks meant the same zone transition. `any` breaks it:

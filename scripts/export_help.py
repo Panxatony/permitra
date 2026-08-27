@@ -146,7 +146,7 @@ def build(sections: list[dict]) -> str:
 <footer>
   <div class="wrap">
     <span>© 2026 Permitra</span>
-    <span><a href="index.html">permitra.de</a> · <a href="https://demo.permitra.de">Demo</a></span>
+    <span><a href="index.html">permitra.de</a> · <a href="https://demo.permitra.de">Demo</a> · <a href="impressum.html"><span class="lang-de">Impressum</span><span class="lang-en">Legal notice</span></a> · <a href="datenschutz.html"><span class="lang-de">Datenschutz</span><span class="lang-en">Privacy</span></a></span>
   </div>
 </footer>
 
