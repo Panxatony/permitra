@@ -5,5 +5,5 @@ pytest>=9.1.1
 pytest-cov>=7.1.0
 httpx2>=2.12         # TestClient for the HTTP/authorization tests
                      # (starlette deprecates plain httpx here)
-ruff>=0.16.4            # Linting
+ruff>=0.16.5            # Linting
 pip-audit>=2.10.1       # known vulnerabilities in the dependencies
