@@ -1,6 +1,12 @@
 services:
   db:
     image: postgres:16-alpine
+    # Come back after a reboot. Without this, Docker starts nothing on boot and
+    # the stack stays down until somebody notices and runs `up` by hand - which
+    # is how the test instance sat dark for three days, and how the demo would
+    # have too, the next time its host restarts. `unless-stopped` rather than
+    # `always`: a stack stopped on purpose stays stopped.
+    restart: unless-stopped
     environment:
       POSTGRES_DB: permitra
       POSTGRES_USER: permitra
@@ -15,6 +21,7 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     environment:
       # No fallback values: if SECRET_KEY is missing, the app refuses to start
       # (fail-secure, app/auth.py). A well-known default would allow forgeable
@@ -70,6 +77,7 @@ services:
       PERMITRA_TRUSTED_PROXIES: ${PERMITRA_TRUSTED_PROXIES:-}
       PERMITRA_LOGIN_RATE: ${PERMITRA_LOGIN_RATE:-}
     build: ./frontend
+    restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:

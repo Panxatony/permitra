@@ -17,6 +17,11 @@ docker compose exec backend python seed_demo.py --wipe   # optional demo data
 
 - UI/API reachable on port **8080** (nginx proxies `/api` to the backend; backend and DB are not exposed directly). Override with `FRONTEND_PORT`.
 - Data is stored in the `pgdata` volume.
+- **The stack comes back after a reboot.** All three services carry
+  `restart: unless-stopped`, so Docker starts them again when the host
+  does. A stack you stopped on purpose (`docker compose stop`) stays
+  stopped. Without this the containers simply do not come back and
+  nothing says so — the instance is down until somebody visits it.
 - **After the stack is up:** sign in as the initial admin and follow the
   **Initial configuration** checklist on the dashboard/admin page — language,
   zones, networks, components, matrix, accounts, first rule, in that order,
