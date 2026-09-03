@@ -4,6 +4,15 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Fixed: the stack did not come back after a reboot.** `docker-compose.yml`
+  carried no restart policy, so Docker started nothing on boot: the containers
+  stayed down until somebody ran `up` by hand, and nothing anywhere said they
+  were gone. A test instance sat dark for three days that way. All three
+  services now use `restart: unless-stopped` — back after a reboot, still
+  stopped when you stopped it on purpose. Existing deployments pick this up on
+  the next `docker compose up -d`; a plain `git pull` does not restart running
+  containers, so the policy only applies once they are recreated.
+
 - **The exported help page links to the Impressum and the Datenschutzerklärung.**
   permitra.de gained both, and § 5 DDG wants them reachable from every page, not
   from the front page only. The help page is generated here, so its footer is
