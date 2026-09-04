@@ -3,7 +3,7 @@ the zone matrix default behaviour); only admins may change them."""
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from .. import audit
+from .. import audit, legal
 from ..auth import get_current_user, require_roles
 from ..database import get_db
 from ..messages import _
@@ -35,7 +35,11 @@ def read_public_settings(db: Session = Depends(get_db)):
         messages.set_language(lang)
     # The version is public by design: it is on every login screen of every
     # self-hosted product, and the footer has to know it before sign-in too.
-    return {"ui_language": lang, "version": VERSION}
+    #
+    # The imprint and privacy links are public for a stronger reason: a visitor
+    # who cannot sign in is precisely the one § 5 DDG has in mind. Both are
+    # operator-configured URLs and empty unless this instance set them.
+    return {"ui_language": lang, "version": VERSION, **legal.links()}
 
 
 @router.get("")

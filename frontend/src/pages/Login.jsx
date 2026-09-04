@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, login, passkeyLogin } from '../api'
 import { useLang } from '../i18n'
+import { LegalLinks } from '../legal'
 import { useTheme } from '../theme'
 
 const THEME_ICONS = { system: '🖥️', light: '☀️', dark: '🌙' }
@@ -112,6 +113,9 @@ export default function Login() {
         <p className="muted small">
           Demo: architekt · betrieb · approver · approver2 · admin — Passwort jeweils Name+123
         </p>
+        {/* Below the form on purpose: somebody who cannot sign in is exactly the
+            visitor the imprint requirement is written for. */}
+        <LegalLinks className="muted small login-legal" />
       </form>
     </div>
   )

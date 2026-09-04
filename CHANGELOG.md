@@ -4,6 +4,18 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **The footer can carry an imprint and a privacy link.** A publicly reachable
+  instance needs them — § 5 DDG asks that a visitor who has *not* signed in can
+  reach them, so they are served from the public settings endpoint and appear on
+  the sign-in page as well as in the footer. They are two URLs the operator
+  configures (`PERMITRA_IMPRINT_URL`, `PERMITRA_PRIVACY_URL`) rather than links
+  to permitra.de, and deliberately so: the operator of an instance is the one
+  the imprint names, and printing our address under somebody else's service
+  would be worse than printing none. Unset by default, and then nothing is
+  shown — a tool on a company network has no imprint obligation. Only absolute
+  `http(s)` URLs are accepted: the value is rendered into an `href` on every
+  page, where `javascript:` would be stored XSS arriving by typo.
+
 - **Fixed: the stack did not come back after a reboot.** `docker-compose.yml`
   carried no restart policy, so Docker started nothing on boot: the containers
   stayed down until somebody ran `up` by hand, and nothing anywhere said they

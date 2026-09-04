@@ -537,6 +537,10 @@ const DE = {
   'Protection level & owner': 'Schutzbedarf & Verantwortlicher',
   'Protocol': 'Protokoll',
   'Reachable via firewall cluster': 'Erreichbar über Firewall-Cluster',
+  // --- Legal links (§ 5 DDG), shown only where the operator configured them ---
+  'Legal notice': 'Impressum',
+  'Privacy policy': 'Datenschutzerklärung',
+
   'Read-only access (GET). Use as header: Authorization: Bearer <token>': 'Nur lesender Zugriff (GET). Als Header verwenden: Authorization: Bearer <token>',
   'Reason': 'Anlass',
   'Reason / justification': 'Anlass / Begründung',

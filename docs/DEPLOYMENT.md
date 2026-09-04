@@ -31,6 +31,15 @@ docker compose exec backend python seed_demo.py --wipe   # optional demo data
   backend container.
 - **Backup and restore:** see [Backups](#backups) below. Short version: `scripts/backup.sh` writes an encrypted dump, `scripts/restore.sh` plays one back — and you should run the second one on purpose, at least once, before you need it.
 - **Update:** `git pull && docker compose up --build -d` — schema changes run automatically via Alembic migrations at startup.
+- **Imprint and privacy policy.** `PERMITRA_IMPRINT_URL` and
+  `PERMITRA_PRIVACY_URL` put two links in the footer and on the sign-in page.
+  They are empty by default and then nothing is shown, which is right for an
+  instance reachable only inside a company network. **An instance reachable
+  from the internet has to set them, and has to point them at its own
+  operator's pages** — § 5 DDG names the operator of the service, and that is
+  you, not the supplier of the software. Only absolute `http(s)` URLs are
+  accepted; anything else is dropped with a warning in the log, because the
+  value ends up in an `href` on every page.
 - **Optional environment variables** (see README for details): `SMTP_*` + `PERMITRA_BASE_URL` (email delivery and links), `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (passkeys/WebAuthn), `CHANGE_WEBHOOK_URL`/`CHANGE_WEBHOOK_TOKEN` (change management webhook), `AUDIT_WEBHOOK_URL` and/or `AUDIT_SYSLOG_HOST`/`AUDIT_SYSLOG_PORT`/`AUDIT_SYSLOG_PROTO` (SIEM delivery of the audit log).
 
 > **Single instance by design.** The backend runs background jobs in-process — SIEM delivery, audit-chain anchoring and the daily expiry/recertification run. They carry no cross-instance locking, so a second backend instance would deliver audit events to the SIEM twice, send recertification mails twice, and race on the Alembic migrations at startup. Scale the frontend freely (it is stateless); keep the backend at one replica unless those jobs are reworked.
