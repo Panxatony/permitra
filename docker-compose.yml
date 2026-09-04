@@ -47,6 +47,12 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       PERMITRA_BASE_URL: ${PERMITRA_BASE_URL:-}
+      # Imprint and privacy policy (§ 5 DDG, Art. 13 GDPR). Empty = the footer
+      # shows no legal links, which is right for an instance that is only
+      # reachable inside a company network. An instance reachable from the
+      # internet has to set them - to ITS OWN operator's pages, never to ours.
+      PERMITRA_IMPRINT_URL: ${PERMITRA_IMPRINT_URL:-}
+      PERMITRA_PRIVACY_URL: ${PERMITRA_PRIVACY_URL:-}
       # WebAuthn/passkeys (default: derived from PERMITRA_BASE_URL)
       PERMITRA_RP_ID: ${PERMITRA_RP_ID:-}
       PERMITRA_ORIGIN: ${PERMITRA_ORIGIN:-}

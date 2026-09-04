@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import { api, setInstanceLanguage } from './api'
 import { LangProvider } from './i18n'
+import { LegalProvider } from './legal'
 import { ThemeProvider } from './theme'
 import './styles.css'
 
@@ -14,6 +15,9 @@ import './styles.css'
    as English rather than breaking. */
 function Root() {
   const [lang, setLang] = useState(null)
+  // Fetched in the same request as the language, and for the same reason: the
+  // sign-in page needs them before anyone has signed in.
+  const [legal, setLegal] = useState(null)
 
   useEffect(() => {
     let cancelled = false
@@ -21,7 +25,10 @@ function Root() {
       .then((s) => {
         const configured = s.ui_language === 'de' ? 'de' : 'en'
         setInstanceLanguage(configured)   // for backend messages outside React
-        if (!cancelled) setLang(configured)
+        if (!cancelled) {
+          setLang(configured)
+          setLegal({ imprint_url: s.imprint_url || '', privacy_url: s.privacy_url || '' })
+        }
       })
       .catch(() => { if (!cancelled) setLang('en') })
     return () => { cancelled = true }
@@ -32,9 +39,11 @@ function Root() {
   return (
     <ThemeProvider>
       <LangProvider lang={lang}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <LegalProvider links={legal}>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </LegalProvider>
       </LangProvider>
     </ThemeProvider>
   )

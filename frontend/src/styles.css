@@ -533,6 +533,10 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .app-footer a { color: var(--muted); }
 .app-footer a:hover { color: var(--accent); }
 .app-footer code { font-size: .8rem; }
+/* The imprint links sit in their own footer cell so they stay together
+   when the footer wraps on a narrow screen. */
+.app-footer .login-legal, .login-legal { display: inline-block; }
+.login-legal { margin-top: .6rem; text-align: center; }
 
 /* Help (#in-app): a quiet "?" beside the feature, landing on its paragraph */
 .help-link {

@@ -2,6 +2,7 @@ import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-r
 import { useEffect, useState } from 'react'
 import { api, clearSession, getUser, getVrfName, rolesOf, setVrfName } from './api'
 import { useLang } from './i18n'
+import { LegalLinks } from './legal'
 import { useTheme } from './theme'
 import Components from './pages/Components'
 import Dashboard from './pages/Dashboard'
@@ -184,6 +185,7 @@ function Layout({ children }) {
           {' · '}
           <a href="https://permitra.de" target="_blank" rel="noopener noreferrer">permitra.de</a>
         </span>
+        <LegalLinks />
         <span className="muted">Apache-2.0 · © 2026 Lars Vonhof-Hunold</span>
       </footer>
     </div>
