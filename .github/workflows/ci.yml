@@ -336,6 +336,40 @@ jobs:
       - run: npm audit --audit-level=high
         working-directory: frontend
 
+  requirements-lock:
+    name: requirements lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          # Must match backend/Dockerfile: resolution depends on the
+          # interpreter, and pip-compile writes the version into the file
+          # header - so a mismatch here shows up as a diff below rather than
+          # as a lock that quietly pins for the wrong Python.
+          python-version: '3.14'
+        # Pinned: a new pip-tools may format its output differently, and
+        # that must not read as "somebody forgot to regenerate". Keep in step
+        # with PIP_TOOLS_VERSION in scripts/lock_requirements.sh.
+      - run: pip install --quiet pip-tools==7.6.1
+      - name: Recompile the lock from the .in files
+        working-directory: backend
+        run: |
+          for f in requirements requirements-dev; do
+            pip-compile --strip-extras --generate-hashes --allow-unsafe \
+              --output-file "$f.txt" "$f.in"
+          done
+      - name: The committed lock must match
+        run: |
+          if ! git diff --exit-code -- backend/requirements.txt \
+                                       backend/requirements-dev.txt; then
+            echo "::error::The lock is out of step with the .in files."
+            echo "Run ./scripts/lock_requirements.sh and commit both halves."
+            exit 1
+          fi
+
   secret-scan:
     name: secret scan
     runs-on: ubuntu-latest

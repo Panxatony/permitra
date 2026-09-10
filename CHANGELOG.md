@@ -4,6 +4,22 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **The backend's dependencies are locked.** `requirements.txt` listed lower
+  bounds (`pydantic>=2.13.4`), and the Dockerfile installs it in a cached
+  layer - so the versions that shipped were whatever pip resolved on the day
+  somebody last edited that file, and nothing recorded which day that was. The
+  running backend held pydantic 2.13.4 three weeks after 2.13.5 was released
+  and a week after the image was rebuilt. Worse for a tool that generates
+  firewall configuration: `pip-audit` was auditing a resolution made at audit
+  time, not the one in the image.
+  Direct dependencies now live in `requirements.in`, and
+  `scripts/lock_requirements.sh` compiles them to a fully pinned
+  `requirements.txt` **with hashes** - resolved inside the same image the
+  backend is built from, because markers make resolution interpreter-specific.
+  The Dockerfile is unchanged. A new CI job recompiles and refuses a lock that
+  has drifted from its `.in` file. Dependabot keeps working and its pull
+  requests get more honest: they now show every transitive version that moves.
+
 - **The footer can carry an imprint and a privacy link.** A publicly reachable
   instance needs them — § 5 DDG asks that a visitor who has *not* signed in can
   reach them, so they are served from the public settings endpoint and appear on
