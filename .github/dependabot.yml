@@ -7,6 +7,11 @@
 
 version: 2
 updates:
+  # pip-compile layout: Dependabot edits requirements.in / requirements-dev.in
+  # and regenerates the pinned .txt beside it, which is what it does natively
+  # when it finds the pair. So its pull requests now show the full effect of a
+  # bump - every transitive version that moves with it - instead of one line
+  # whose real consequences only appeared at the next image build.
   - package-ecosystem: pip
     directory: /backend
     schedule:
