@@ -1,13 +1,13 @@
-fastapi>=0.141.1
-uvicorn[standard]>=0.52.4
-sqlalchemy>=2.0.52
+fastapi>=0.142.2
+uvicorn[standard]>=0.54.0
+sqlalchemy>=2.1.1
 pydantic>=2.13.5
-PyJWT>=2.13.0
+PyJWT>=2.15.1
 python-multipart>=0.0.32
 psycopg2-binary>=2.9.12; platform_system != "Windows"
 PyYAML>=6.0.3
 openpyxl>=3.1.5
 
-alembic>=1.19.1
-aerleon>=1.17.0
-webauthn>=3.0.0
+alembic>=1.20.0
+aerleon>=1.18.0
+webauthn>=3.0.1
