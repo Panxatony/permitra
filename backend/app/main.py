@@ -46,15 +46,15 @@ app = FastAPI(
     version=VERSION,
 )
 
-# CORS origins are configurable (PERMITRA_CORS_ORIGINS, comma-separated).
-# Default: local development origins only. In production set the real frontend
-# URL; empty/"*" is deliberately NOT accepted as a wildcard (credentials=True).
+# CORS origins are configurable (PERMITRA_CORS_ORIGINS, comma-separated);
+# "*" is deliberately NOT accepted as a wildcard (credentials=True).
+#
+# Default: none. The shipped setup is same-origin - nginx serves the UI and
+# proxies /api - and the Vite dev server proxies /api as well, so neither needs
+# CORS. The old default admitted three localhost origins in every production
+# deployment that did not override it.
 _cors_env = os.environ.get("PERMITRA_CORS_ORIGINS", "").strip()
-CORS_ORIGINS = (
-    [o.strip() for o in _cors_env.split(",") if o.strip() and o.strip() != "*"]
-    if _cors_env
-    else ["http://localhost:5173", "http://localhost:8080", "http://localhost:3000"]
-)
+CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip() and o.strip() != "*"]
 
 app.add_middleware(
     CORSMiddleware,

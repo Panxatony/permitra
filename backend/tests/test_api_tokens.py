@@ -53,6 +53,16 @@ def test_pat_blocks_write_methods(db):
         assert exc.value.status_code == 403
 
 
+def test_pat_without_a_request_is_not_read_only_by_default(db):
+    """The read-only guard used to apply only when a request was present, so a
+    call without one let the token through for anything. Not knowing the method
+    has to mean "no", not "fine"."""
+    _make(db)
+    with pytest.raises(HTTPException) as exc:
+        auth.get_current_user(request=None, token=FIXTURE_TOKEN, db=db)
+    assert exc.value.status_code == 403
+
+
 def test_revoked_token_rejected(db):
     _make(db, revoked=True)
     with pytest.raises(HTTPException) as exc:
