@@ -80,12 +80,27 @@ def test_rules_aggregate_into_one_contract(db):
 def test_vzany_and_unknown(db):
     rules = [
         make_rule("SR0010", "any", "10.10.31.7"),          # consumer vzAny
-        make_rule("SR0011", "192.168.1.1", "10.10.31.7"),  # no EPG mapping -> legacy
+        make_rule("SR0011", "192.168.1.1", "10.10.31.7"),  # no EPG mapping -> not exported
     ]
     model = aci.build_contract_model(rules, db)
     assert any(c["consumer"] == "vzAny" for c in model["contracts"])
     assert [r.rule_id for r in model["legacy"]] == ["SR0011"]
     assert model["warnings"]
+
+
+def test_a_rule_without_an_epg_mapping_is_not_exported_as_a_contract(db):
+    """A contract no EPG provides or consumes enforces nothing - but it carried
+    the SR ID, so the drift comparison read the rule as implemented. The rule
+    is named where an engineer looks, and left out of what the APIC applies."""
+    rules = [make_rule("SR0001", "10.10.30.5", "10.10.31.7"),
+             make_rule("SR0011", "192.168.1.1", "10.10.31.7")]
+    out = aci.export_json(rules, db)
+    tenant = json.loads(out)["fvTenant"]
+    contracts = [c["vzBrCP"]["attributes"]["name"] for c in tenant["children"] if "vzBrCP" in c]
+    assert contracts == ["con-epg-prod-app-to-epg-prod-db"]
+    assert "SR0011" not in json.dumps(tenant["children"])
+    assert "SR0011" in tenant["attributes"]["descr"]
+    assert "SR0011" in aci.export_yaml(rules, db)
 
 
 def test_json_structure(db):

@@ -233,20 +233,17 @@ def test_aci_reports_that_the_rules_disagreed(db):
     assert any("logging" in w.lower() or "Logging" in w for w in model["warnings"])
 
 
-def test_a_rule_without_an_epg_mapping_keeps_its_logging_too(db):
-    """It falls back to a contract of its own - and dropping the attribute there
-    would lose it for exactly the rules nobody has modelled properly yet."""
+def test_a_rule_without_an_epg_mapping_reaches_the_fabric_with_nothing(db):
+    """It used to fall back to a contract of its own, carrying its logging
+    attribute - and its SR ID, which made the drift comparison read a contract
+    nothing provides or consumes as implemented. Now nothing of it is written;
+    the logging question is asked again once its addresses are mapped."""
     from app.exporters import aci
 
     exported = json.loads(aci.export_json(
         [make(db, log_level=RuleLogging.none)], db))
-    directives = [
-        att["vzRsSubjFiltAtt"]["attributes"]["directives"]
-        for child in exported["fvTenant"]["children"] if "vzBrCP" in child
-        for subj in child["vzBrCP"]["children"]
-        for att in subj["vzSubj"]["children"] if "vzRsSubjFiltAtt" in att
-    ]
-    assert directives == [""]
+    assert not any("vzBrCP" in child for child in exported["fvTenant"]["children"])
+    assert "not exported" in exported["fvTenant"]["attributes"]["descr"]
 
 
 # ---------- the question the issue asked ----------
