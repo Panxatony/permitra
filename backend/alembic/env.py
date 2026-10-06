@@ -11,7 +11,11 @@ config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: the migrations run inside the server's
+    # startup, after every module has been imported. fileConfig's default
+    # disables every logger that exists at that moment - all of permitra.* -
+    # and from then on SIEM delivery, NetBox and mail failures log nothing.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 
