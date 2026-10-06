@@ -4,6 +4,39 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Changed: CORS is off unless configured.** `PERMITRA_CORS_ORIGINS` used to
+  fall back to three localhost development origins on every installation that
+  did not set it. The shipped setup is same-origin and the Vite dev server
+  proxies `/api`, so neither needs CORS; the default is now no origin at all.
+  **If you serve the UI from a different origin than the API, set
+  `PERMITRA_CORS_ORIGINS` explicitly.**
+
+- **The read-only check on API tokens fails closed.** It applied only when a
+  request object was present, so a call without one treated the token as
+  allowed to write. Over HTTP a request is always present; the check is now
+  correct regardless.
+
+- **Dependency audits block on `main`, not on merge requests.** A newly
+  published advisory still does not stop a correct change from merging, but the
+  default-branch pipeline - the one a deployment looks at - no longer shows
+  green while it carries known vulnerabilities. On GitLab the audit jobs are
+  retried, so a registry outage is not mistaken for a finding.
+
+- **A message template that does not fit its values returns text.** `_()`
+  caught only `KeyError`/`IndexError`; a mismatched format spec or attribute
+  raised out of the error path it is called from.
+
+- **Fixed: application logging was disabled at startup.** Alembic's
+  `fileConfig()` disabled every `permitra.*` logger when the migrations ran, so
+  SIEM delivery, NetBox, mail and audit-write failures were logged nowhere.
+
+- **Fixed: the demo reset left the audit checkpoints behind**, and the next
+  verification reported a truncated chain. A second `seed_demo.py --wipe` on
+  SQLite also crashed, because the wipe relied on cascades SQLite does not
+  enforce; dependent tables are now cleared explicitly.
+
+- **PyJWT 2.15.1** (14 advisories fixed from 2.14.0) and **source-map-js 1.2.2**.
+
 - **The backend's dependencies are locked.** `requirements.txt` listed lower
   bounds (`pydantic>=2.13.4`), and the Dockerfile installs it in a cached
   layer - so the versions that shipped were whatever pip resolved on the day

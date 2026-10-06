@@ -65,7 +65,10 @@ def _service_principal_from_pat(request, token: str, db: Session) -> User:
     service principal. Only GET access is permitted (fail-secure)."""
     from .models import ApiToken
 
-    if request is not None and request.method not in ("GET", "HEAD", "OPTIONS"):
+    # Fail closed: without a request there is no method to check, and "could
+    # not tell" must not read as "read-only". Over HTTP FastAPI always passes
+    # the request; this only bites a direct call - which is where it should.
+    if request is None or request.method not in ("GET", "HEAD", "OPTIONS"):
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             _("API tokens are read-only – only read access is permitted"))
     digest = hashlib.sha256(token.encode()).hexdigest()

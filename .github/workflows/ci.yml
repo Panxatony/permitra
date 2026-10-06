@@ -314,10 +314,11 @@ jobs:
   dependency-audit:
     name: dependency audit
     runs-on: ubuntu-latest
-    # Reports known vulnerabilities without blocking: an advisory published in a
-    # transitive dependency should be visible, not a reason a correct change
-    # cannot be merged. The report is what matters.
-    continue-on-error: true
+    # Non-blocking on a pull request: an advisory published in a transitive
+    # dependency should be visible, not a reason a correct change cannot be
+    # merged. Blocking on main: a green main with known vulnerabilities is how
+    # 14 PyJWT advisories went unnoticed, and main is what gets deployed.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@v7
         with:

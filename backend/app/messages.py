@@ -50,13 +50,19 @@ def _(template: str, **values) -> str:
     text = CATALOG.get(_language, {}).get(template, template)
     if not values:
         return text
+    # Every way str.format can refuse - a missing key, a positional field, a
+    # format spec the value does not support ({count:d} with a string), an
+    # attribute that is not there - counts as "does not match". Catching only
+    # the first two let the others raise out of the error path this function
+    # exists to keep alive.
+    mismatch = (KeyError, IndexError, ValueError, TypeError, AttributeError)
     try:
         return text.format(**values)
-    except (KeyError, IndexError):
+    except mismatch:
         log.warning("Message template does not match its values: %r", template)
         try:
             return template.format(**values)
-        except (KeyError, IndexError):
+        except mismatch:
             return template
 
 
