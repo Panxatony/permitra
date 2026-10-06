@@ -11,11 +11,11 @@ from fastapi.responses import PlainTextResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from .. import audit, crypto, mailer, totp
+from .. import audit, crypto, mailer, ratelimit, totp
 from ..auth import create_token, get_current_user, hash_password, verify_password
 from ..database import get_db
 from ..messages import _
-from ..models import Passkey, User, utcnow
+from ..models import AuthToken, Passkey, User, utcnow
 from ..schemas import Token, UserOut
 from .users_router import consume_token, issue_token
 
@@ -29,6 +29,14 @@ def _login_ok(user: User) -> Token:
 # Brute-force protection: after LOGIN_MAX_FAILS failed attempts, lock the account for LOGIN_LOCK_MINUTES
 LOGIN_MAX_FAILS = int(os.environ.get("LOGIN_MAX_FAILS", "5"))
 LOGIN_LOCK_MINUTES = int(os.environ.get("LOGIN_LOCK_MINUTES", "15"))
+
+# Forgotten-password requests: at most FORGOT_MAX_REQUESTS per source address
+# and one mail per account within FORGOT_WINDOW_MINUTES. The endpoint needs no
+# session and sends a mail for every hit, so without a ceiling it is a way to
+# flood a mailbox and the operator's relay from one address, one request each.
+FORGOT_MAX_REQUESTS = int(os.environ.get("FORGOT_MAX_REQUESTS", "5"))
+FORGOT_WINDOW_MINUTES = int(os.environ.get("FORGOT_WINDOW_MINUTES", "15"))
+_forgot_limiter = ratelimit.Window(FORGOT_MAX_REQUESTS, FORGOT_WINDOW_MINUTES)
 
 
 # A valid hash of a value nobody can supply. Verifying against it costs the same
@@ -129,31 +137,81 @@ def set_notifications(
 
 # ---------- Forgotten password / set password ----------
 
+def _recent_reset_token(db: Session, user: User) -> bool:
+    """Whether an unused reset link was issued for this account inside the window."""
+    from datetime import timedelta, timezone
+    since = utcnow() - timedelta(minutes=FORGOT_WINDOW_MINUTES)
+    latest = (
+        db.query(AuthToken)
+        .filter(AuthToken.user_id == user.id, AuthToken.purpose == "reset",
+                AuthToken.used == False)  # noqa: E712
+        .order_by(AuthToken.created_at.desc())
+        .first()
+    )
+    if latest is None:
+        return False
+    created = latest.created_at
+    if created.tzinfo is None:  # SQLite returns naive datetimes
+        created = created.replace(tzinfo=timezone.utc)
+    return created > since
+
+
 @router.post("/forgot")
-def forgot_password(payload: dict, db: Session = Depends(get_db)):
-    """Request a reset link. The response is always the same (no user enumeration)."""
+def forgot_password(request: Request, payload: dict, db: Session = Depends(get_db)):
+    """Request a reset link. The response is always the same (no user enumeration).
+
+    The same answer also covers every reason a link is *not* sent: an unknown
+    name, a deactivated account, a missing address, the per-address ceiling or
+    the per-account cooldown. A 429 here would tell the caller which of those
+    applied - and that an address was recognised at all. What differs is only
+    the audit record, which names the reason for whoever reads the log.
+    """
     ident = (payload.get("username") or "").strip()
+    source_ip = audit.client_ip(request)
+    outcome = "unknown account"
     user = None
-    if ident:
+    if not _forgot_limiter.allow(source_ip):
+        outcome = "rate limited"
+    elif ident:
         user = db.query(User).filter(
             (User.username == ident) | (User.email == ident)
         ).first()
-    if user and user.email:
-        mailer.reset_mail(user, issue_token(db, user, "reset"))
+    if user is not None and outcome != "rate limited":
+        if not user.is_active:
+            # A deactivated account must not reactivate itself through the
+            # reset flow; an admin ends a deactivation, not the user.
+            outcome = "account deactivated"
+        elif not user.email:
+            outcome = "no mail address"
+        elif _recent_reset_token(db, user):
+            # One mail per account per window, whatever the source addresses.
+            outcome = "cooldown"
+        else:
+            mailer.reset_mail(user, issue_token(db, user, "reset"))
+            outcome = "sent"
+    # The identifier is whatever the caller typed; the column holds 64.
+    audit.record(db, "auth", "auth.reset_requested", actor=ident[:64],
+                 source_ip=source_ip, detail=outcome)
     return {"detail": _("If the account exists and has an e-mail address on file, "
                         "a reset link has been sent.")}
 
 
 @router.post("/set-password")
 def set_password(request: Request, payload: dict, db: Session = Depends(get_db)):
-    """Set the password via an activation or reset link; this activates the account."""
+    """Set the password via an activation or reset link.
+
+    Only an activation link activates the account. A reset link changes the
+    password and nothing else: a deactivated account stays deactivated, so the
+    reset flow cannot be used to undo what an admin decided.
+    """
     password = payload.get("password") or ""
     if len(password) < 8:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             _("Password must be at least 8 characters long"))
     user, purpose = consume_token(db, payload.get("token") or "")
     user.password_hash = hash_password(password)
-    user.is_active = True
+    if purpose == "activate":
+        user.is_active = True
     user.token_valid_from = utcnow()  # a password change revokes existing tokens
     user.failed_logins = 0
     user.locked_until = None
