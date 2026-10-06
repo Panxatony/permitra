@@ -130,6 +130,11 @@ dependency-audit:
   # green main with known vulnerabilities is how 14 PyJWT advisories went
   # unnoticed. Retried, because a registry outage is not a finding.
   rules:
+    # Rules on a job make GitLab offer it to merge-request pipelines as well,
+    # which spawned a second, two-job pipeline beside the branch pipeline.
+    # The branch pipeline already covers the change.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       allow_failure: false
     - allow_failure: true
@@ -144,6 +149,11 @@ npm-audit:
     - cd frontend && npm audit --audit-level=high
   # Same rule as dependency-audit.
   rules:
+    # Rules on a job make GitLab offer it to merge-request pipelines as well,
+    # which spawned a second, two-job pipeline beside the branch pipeline.
+    # The branch pipeline already covers the change.
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       allow_failure: false
     - allow_failure: true
