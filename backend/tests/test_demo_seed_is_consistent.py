@@ -123,3 +123,43 @@ def test_the_implementation_status_names_only_the_rule_own_components(seeded):
         if set(r.impl_status or {}) - {c.name for c in r.components}
     }
     assert wrong == {}
+
+
+def _run_seed(path) -> None:
+    result = subprocess.run(
+        [sys.executable, "seed_demo.py", "--wipe"],
+        cwd=BACKEND, capture_output=True, text=True,
+        env={**os.environ, "DATABASE_URL": f"sqlite:///{path}",
+             "PYTHONPATH": str(BACKEND), "PERMITRA_DEV": "1"},
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_the_nightly_reset_leaves_a_chain_that_verifies(tmp_path):
+    """The demo is reset every night, and between two resets people use it -
+    which writes audit events and, hourly, a checkpoint anchoring the chain.
+
+    The reset deleted the events and kept the checkpoints, so the next
+    verification found an anchored entry missing and reported a truncation: the
+    public demo of a tamper-evident audit log showing its own log as tampered.
+    A reset has to take the anchors with the chain they anchor.
+    """
+    from app import audit
+
+    path = tmp_path / "demo.db"
+    _run_seed(path)
+
+    # A day of use: activity, then the periodic anchoring.
+    session = sessionmaker(bind=create_engine(f"sqlite:///{path}"))()
+    audit.record(session, "auth", "auth.login", actor="architekt")
+    audit.create_checkpoint(session)
+    session.close()
+
+    _run_seed(path)   # the nightly reset
+
+    session = sessionmaker(bind=create_engine(f"sqlite:///{path}"))()
+    try:
+        result = audit.verify_chain(session)
+    finally:
+        session.close()
+    assert result["ok"], result

@@ -18,12 +18,17 @@ from app.models import (
     AddressComponentMap,
     AddressEpgMap,
     AddressObject,
+    AuditCheckpoint,
     AuditEvent,
+    AuditRetentionSeal,
     Comment,
     ComponentActualConfig,
     ComponentLink,
     ComponentType,
+    CoverageSnapshot,
     Epg,
+    RecertCampaign,
+    RecertItem,
     Rule,
     RuleAction,
     RuleStatus,
@@ -37,7 +42,9 @@ from app.models import (
     ZonePolicy,
     ZonePolicyChange,
     ZonePolicyType,
+    rule_components,
     utcnow,
+    zone_components,
 )
 
 random.seed(42)
@@ -301,7 +308,22 @@ def seed(wipe: bool):
         # AuditEvent is part of the demo reset: the wipe discards the entire
         # rule history, otherwise old events would reference deleted rules
         # and the hash chain would carry remnants of the previous demo cycle (#26).
-        for model in (AuditEvent, Setting, Comment, RuleVersion, Rule, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
+        #
+        # The checkpoints and retention seals go with it. They anchor the chain
+        # that is being deleted; left behind, they point at events that no
+        # longer exist, and verification reports exactly what a truncation
+        # looks like - on the instance meant to show that the chain holds.
+        # The link tables first, by hand. Their ON DELETE CASCADE clears them on
+        # PostgreSQL, but SQLite does not enforce foreign keys unless told to -
+        # so on the quick-start setup a second --wipe left the old links in
+        # place, the reused ids collided with them, and the seed crashed.
+        db.execute(rule_components.delete())
+        db.execute(zone_components.delete())
+        # Everything that points at the rules and components being deleted goes
+        # too. Accounts, passkeys, tokens and the NetBox connection stay: they
+        # are not demo content, and signing in again after every reset would be.
+        for model in (RecertItem, RecertCampaign, CoverageSnapshot, ComponentActualConfig,
+                      AuditCheckpoint, AuditRetentionSeal, AuditEvent, Setting, Comment, RuleVersion, Rule, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
                       AddressComponentMap, AddressEpgMap, Epg, AddressObject,
                       ServiceObject, ComponentLink, SecurityComponent, Vrf):
             db.query(model).delete()
