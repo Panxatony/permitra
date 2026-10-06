@@ -285,7 +285,8 @@ def list_rules(
     destination: str | None = None,
     port: str | None = None,
     protocol: str | None = None,
-    rule_status: RuleStatus | None = Query(None, alias="status"),
+    rule_status: str | None = Query(None, alias="status",
+                                    description="Status, or several comma-separated (approved,active = in force)"),
     impl: str | None = Query(None, description="'pending' = approved rules with a pending implementation"),
     risk: str | None = Query(None, description="'flagged' = only rules carrying a risk finding"),
     application: str | None = None,
@@ -315,7 +316,20 @@ def list_rules(
             )
         )
     if rule_status:
-        query = query.filter(Rule.status == rule_status)
+        # Several values, because "in force" is two of them: a rule becomes
+        # `active` the moment operations marks it implemented, and a feed that
+        # asked for `approved` alone lost every rule that had actually arrived.
+        wanted = []
+        for value in rule_status.split(","):
+            value = value.strip()
+            if not value:
+                continue
+            try:
+                wanted.append(RuleStatus(value))
+            except ValueError as exc:
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                    _("Unknown status '{status}'", status=value)) from exc
+        query = query.filter(Rule.status.in_(wanted))
     if updated_since:
         from datetime import datetime as _dt
         try:

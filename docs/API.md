@@ -31,11 +31,16 @@ Full interactive documentation is at `/docs` on a running instance (OpenAPI).
 Create a **read-only API token** in the admin area (shown once). Tokens allow only `GET` requests
 (writes return 403) and never expose admin endpoints. Use `updated_since` for efficient polling.
 
+Ask for `status=approved,active`, not `approved` alone: a rule becomes `active` as soon as
+operations marks it implemented, and it is still in force. `status` takes several values,
+comma-separated. For a complete, unpaginated set per component or application, `GET
+/api/export/json?component_id=&app_id=` applies the same in-force filter.
+
 ```yaml
 # Ansible
-- name: Read approved rules from Permitra
+- name: Read the rules in force from Permitra
   ansible.builtin.uri:
-    url: "https://permitra.example.org/api/rules?status=approved&component=FW-Cluster-BER"
+    url: "https://permitra.example.org/api/rules?status=approved,active&component=FW-Cluster-BER"
     headers:
       Authorization: "Bearer {{ permitra_token }}"
   register: permitra
@@ -45,7 +50,7 @@ Create a **read-only API token** in the admin area (shown once). Tokens allow on
 ```hcl
 # Terraform
 data "http" "permitra_rules" {
-  url             = "https://permitra.example.org/api/rules?status=approved"
+  url             = "https://permitra.example.org/api/rules?status=approved,active"
   request_headers = { Authorization = "Bearer ${var.permitra_token}" }
 }
 locals { rules = jsondecode(data.http.permitra_rules.response_body).items }
