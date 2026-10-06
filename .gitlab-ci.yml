@@ -124,14 +124,32 @@ dependency-audit:
     - pip install --quiet pip-audit
   script:
     - pip-audit -r backend/requirements.txt --progress-spinner off
-  allow_failure: true   # reports vulnerabilities but does not block the deployment
+  # Non-blocking in a merge request: an advisory published in some transitive
+  # dependency is not a reason a correct change cannot be merged. Blocking on
+  # the default branch: that pipeline is what a deployment looks at, and a
+  # green main with known vulnerabilities is how 14 PyJWT advisories went
+  # unnoticed. Retried, because a registry outage is not a finding.
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      allow_failure: false
+    - allow_failure: true
+  retry:
+    max: 2
+    when: [script_failure, runner_system_failure]
 
 npm-audit:
   stage: security
   image: node:26-alpine
   script:
     - cd frontend && npm audit --audit-level=high
-  allow_failure: true
+  # Same rule as dependency-audit.
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      allow_failure: false
+    - allow_failure: true
+  retry:
+    max: 2
+    when: [script_failure, runner_system_failure]
 
 # No secret must accidentally end up in the repository. The scan itself lives in
 # scripts/secret_scan.py so GitHub Actions runs the identical check - two copies
