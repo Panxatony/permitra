@@ -2,17 +2,21 @@
 
 Address objects tie a name (alias) to an IP or network. When an object's IP changes,
 every rule address entry carrying that alias is updated along with it automatically
-(including a version entry for each affected rule).
+(including a version entry for each affected rule). The new address goes through
+the same checks an edit of the rule would face, and a rule in force loses its
+approval: what was approved was the old address.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from ..auth import get_current_user, require_roles
+from ..component_resolution import resolve_rule_components
 from ..database import get_db
 from ..messages import _
-from ..models import AddressObject, Role, RuleVersion, ServiceObject, User, active_rules
+from ..models import IN_FORCE, AddressObject, Role, RuleStatus, RuleVersion, ServiceObject, User, active_rules
 from ..validation import validate_ip_entry, validate_service
+from ..zone_check import check_zone_pair, resolve_zone_for_entries
 
 router = APIRouter(prefix="/api/objects", tags=["objects"])
 
@@ -52,35 +56,109 @@ class ServiceObjectOut(ServiceObjectIn):
     id: int
 
 
+def _reassess(db: Session, rule, source: list[dict], destination: list[dict]) -> tuple[dict, list[str]]:
+    """Run a rule's new addresses through the checks an edit of the rule would face.
+
+    Zones are derived data, so they are derived again; the components follow the
+    addresses; and the zone matrix and the BSI firewall requirement are asked
+    about the pair that results. Returns the state to apply and the reasons it
+    must not be applied - the same reasons the rule form would show.
+    """
+    reasons: list[str] = []
+    zones = {}
+    for label, field, entries in ((_("Source"), "source", source),
+                                  (_("Destination"), "destination", destination)):
+        zone, unassigned, hits = resolve_zone_for_entries(db, entries, rule.vrf_id)
+        if unassigned:
+            reasons.append(
+                _("{label}: network(s) not assigned to any security zone: {networks} "
+                  "– create the network on the Networks page first and assign it to a "
+                  "security zone",
+                  label=label, networks=", ".join(unassigned)))
+        elif len(hits) > 1:
+            reasons.append(_("{label} spans several zones ({zones}) – split the rule",
+                             label=label, zones=", ".join(sorted(hits))))
+        zones[field] = zone or getattr(rule, f"{field}_zone") or ""
+    src, dst = zones["source"], zones["destination"]
+    components, unknown = resolve_rule_components(db, source, destination, src, dst, rule.vrf_id)
+    if unknown:
+        reasons.append(_("No component mapping is defined yet for these addresses: ")
+                       + ", ".join(u["ip"] for u in unknown)
+                       + _(". Define it once via the address mapping."))
+    elif not components:
+        reasons.append(_("No enforcing components could be determined"))
+    if not reasons:
+        if src.upper() != dst.upper() and not any(c.type.value != "aci" for c in components):
+            reasons.append(_("A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)"))
+        verdict = check_zone_pair(db, src, dst, [c.type.value for c in components])
+        if not verdict.allowed:
+            reasons.append(_("Zone matrix: ") + "; ".join(verdict.messages))
+    state = {"source": source, "destination": destination,
+             "source_zone": src, "destination_zone": dst, "components": components}
+    return state, reasons
+
+
 def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: str) -> int:
-    """Propagate the new IP into every rule entry that carries this alias."""
-    changed = 0
+    """Propagate the new IP into every rule entry that carries this alias.
+
+    Two passes: first every affected rule is assessed, then the change is
+    applied to all of them or to none. A single rule the new address would
+    leave inadmissible refuses the whole object change (422 naming the rule),
+    because the alternative - some rules changed, one of them silently out of
+    policy - is the state the checks exist to prevent.
+
+    A rule in force (or rejected) goes back to draft. The approval covered the
+    old address, and an object edit needs no approver - without the reset, this
+    would be the one way to point an approved rule at a new target unreviewed.
+    """
+    plans, problems = [], []
     for rule in active_rules(db).all():
-        touched = False
+        if getattr(rule, "ping_baseline", False):
+            continue  # addresses are `any` by definition; zones are declared, not derived
+        new, touched = {}, False
         for field in ("source", "destination"):
-            entries = getattr(rule, field) or []
-            new_entries = []
-            for entry in entries:
+            entries = []
+            for entry in getattr(rule, field) or []:
                 if (entry.get("alias") or "").strip() == obj.name and entry.get("ip") != obj.ip:
-                    new_entries.append({**entry, "ip": obj.ip})
+                    entries.append({**entry, "ip": obj.ip})
                     touched = True
                 else:
-                    new_entries.append(entry)
-            if touched:
-                setattr(rule, field, new_entries)
-        if touched:
-            rule.version += 1
-            db.add(
-                RuleVersion(
-                    rule_pk=rule.id, version=rule.version,
-                    snapshot={"auto": "address-object-update"},
-                    change_note="Address object '{name}': IP {old_ip} → {new_ip}",
-                    change_values={"name": obj.name, "old_ip": old_ip, "new_ip": obj.ip},
-                    changed_by=username,
-                )
+                    entries.append(entry)
+            new[field] = entries
+        if not touched:
+            continue
+        state, reasons = _reassess(db, rule, new["source"], new["destination"])
+        if reasons:
+            problems.append(f"{rule.rule_id}: " + "; ".join(reasons))
+        else:
+            plans.append((rule, state))
+    if problems:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            _("Address object '{name}': the new IP {ip} would leave rule(s) inadmissible – {problems}",
+              name=obj.name, ip=obj.ip, problems=" | ".join(problems)),
+        )
+    for rule, state in plans:
+        rule.source, rule.destination = state["source"], state["destination"]
+        rule.source_zone, rule.destination_zone = state["source_zone"], state["destination_zone"]
+        rule.components = state["components"]
+        rule.removal_reason = ""   # the checks above passed; an earlier proposal is moot
+        rule.version += 1
+        template = "Address object '{name}': IP {old_ip} → {new_ip}"
+        if rule.status in (*IN_FORCE, RuleStatus.rejected):
+            rule.status = RuleStatus.draft
+            template = ("Address object '{name}': IP {old_ip} → {new_ip} "
+                        "– the approval is withdrawn, the rule needs a new review")
+        db.add(
+            RuleVersion(
+                rule_pk=rule.id, version=rule.version,
+                snapshot={"auto": "address-object-update"},
+                change_note=template,
+                change_values={"name": obj.name, "old_ip": old_ip, "new_ip": obj.ip},
+                changed_by=username,
             )
-            changed += 1
-    return changed
+        )
+    return len(plans)
 
 
 # --- Address objects ---------------------------------------------------------
