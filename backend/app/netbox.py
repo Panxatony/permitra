@@ -50,10 +50,15 @@ def validate_url(raw: str) -> str:
     same as "it is safe to fetch": the server calls it from inside the network,
     so http://169.254.169.254/ or a management interface is reachable from here
     even when it is not from the browser. What is allowed is a plain http(s)
-    URL with a host that is not a loopback, link-local, or otherwise internal
-    address. Names are not resolved here - DNS can change between check and
-    call - so this rejects the obvious literals rather than claiming to close
-    SSRF entirely."""
+    URL whose host is not loopback (unless switched on), link-local, multicast,
+    reserved or unspecified.
+
+    Private ranges (RFC 1918, IPv6 ULA) ARE allowed, on purpose: NetBox is an
+    internal service and almost always lives in one of them. So this does not
+    keep the server away from internal addresses in general - it keeps it away
+    from the special-purpose ones. Names are not resolved here either - DNS can
+    change between check and call - so this rejects the obvious literals rather
+    than claiming to close SSRF entirely."""
     import ipaddress
 
     url = (raw or "").strip()
