@@ -19,7 +19,11 @@ hash-chained audit log. See `docs/CONCEPTS.md`.
 ## Conventions
 
 - **Repository language is English**: code, comments, docs, commit messages,
-  issues, PRs. Conversation with the maintainer is German.
+  and everything on GitHub (issues, pull requests, reviews). Conversation with
+  the maintainer is German.
+- **The private GitLab mirror is German**: issues, merge-request titles and
+  descriptions, and comments there are written in German. Commit messages stay
+  English, because the same commits end up on GitHub.
 - Comments explain *why*, in full sentences; match the density of the
   surrounding code. Tests carry a docstring that states the reason they exist.
 - Every new test for a fix should **fail without the fix** — check it by
