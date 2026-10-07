@@ -403,7 +403,7 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
             : resolved.components.length
             ? resolved.components.map((c) => (
                 <span key={c.id} className={`badge platform-${c.type}`}
-                  title={t({ juniper: 'Firewall rule (Juniper)', checkpoint: 'Firewall rule (Check Point)', aci: 'ACI Contract' }[c.type])}>
+                  title={t({ juniper: 'Firewall rule (Juniper)', checkpoint: 'Firewall rule (Check Point)', aci: 'ACI Contract', microsegmentation: 'Micro-segmentation policy' }[c.type])}>
                   {c.name}
                 </span>
               ))

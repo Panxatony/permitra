@@ -129,6 +129,12 @@ CATALOG: dict[str, dict[str, str]] = {
             "Eine Ping-Basisregel erlaubt – eine, die verbietet, gewährt nichts und "
             "verdeckt die Regel, die es täte",
         "A service from the list below is used": "Ein Dienst aus der Liste unten wird verwendet",
+        "A zone transition requires a firewall (BSI definition): micro-segmentation alone (ACI or another platform) is not sufficient for {src} → {dst}. Assign a firewall cluster.":
+            "Ein Zonenübergang braucht eine Firewall (BSI-Definition): Mikrosegmentierung allein (ACI oder eine andere Plattform) reicht für {src} → {dst} nicht aus. Bitte ein Firewall-Cluster zuweisen.",
+        "Zones attach to firewall clusters – micro-segmentation is not a zone transition: {components}":
+            "Zonen werden an Firewall-Cluster angebunden – Mikrosegmentierung ist kein Zonenübergang: {components}",
+        "Micro-segmentation (ACI or another platform) is only used within a single zone – this rule crosses zones, check the component assignment":
+            "Mikrosegmentierung (ACI oder eine andere Plattform) wird nur innerhalb einer Zone eingesetzt – diese Regel überschreitet Zonen, bitte die Komponentenzuordnung prüfen",
         "A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)":
             "Zonenübergang erfordert eine Firewall – Cisco ACI allein genügt nicht (BSI)",
         "Account activated – you can sign in now": "Konto aktiviert – du kannst dich jetzt anmelden",

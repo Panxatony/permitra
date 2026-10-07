@@ -40,7 +40,7 @@ from, so it has to say which two zones it means.
 from sqlalchemy.orm import Session
 
 from .messages import _
-from .models import ComponentType, RuleAction, SecurityComponent, Zone, ZonePolicyType
+from .models import RuleAction, SecurityComponent, Zone, ZonePolicyType
 from .validation import is_ping_port
 from .zone_check import find_zone, get_policy
 
@@ -101,14 +101,14 @@ def components_for(db: Session, source: Zone, destination: Zone) -> list[Securit
     """
     from . import routing
 
-    src = {c.id for c in source.components if c.type != ComponentType.aci}
-    dst = {c.id for c in destination.components if c.type != ComponentType.aci}
+    src = {c.id for c in source.components if c.is_firewall}
+    dst = {c.id for c in destination.components if c.is_firewall}
     if not src or not dst:
         return []
     on_path = {cid for route in routing.shortest_routes(routing.build_graph(db), src, dst)
                for cid in route}
     found = routing.components_by_id(db, on_path or (src | dst))
-    return sorted((c for c in found.values() if c.type != ComponentType.aci),
+    return sorted((c for c in found.values() if c.is_firewall),
                   key=lambda c: c.name)
 
 
@@ -144,7 +144,7 @@ def zone_problems(db: Session, source_zone: str, destination_zone: str) -> list[
               from_zone=src.name, to_zone=dst.name))
 
     for zone in (src, dst):
-        if not [c for c in zone.components if c.type != ComponentType.aci]:
+        if not [c for c in zone.components if c.is_firewall]:
             problems.append(
                 _("Zone {zone} is not attached to a firewall cluster, so there is nothing to "
                   "roll the baseline out on. Maintain the attachment on the security zone",

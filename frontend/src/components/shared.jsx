@@ -80,7 +80,7 @@ export const STATUS_LABELS = {
   deleted: 'Deleted',
 }
 
-export const PLATFORM_LABELS = { juniper: 'Juniper', checkpoint: 'Check Point', aci: 'ACI' }
+export const PLATFORM_LABELS = { juniper: 'Juniper', checkpoint: 'Check Point', aci: 'ACI', microsegmentation: 'Micro-segmentation' }
 
 export function StatusBadge({ status }) {
   const { t } = useLang()

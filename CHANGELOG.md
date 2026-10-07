@@ -4,6 +4,20 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **A component says how it enforces: firewall or micro-segmentation.** The
+  question an auditor asks — is this relation enforced, and how? — was
+  answered with a zone pair and a component name. Every component now carries
+  an `enforcement` model (`firewall` at a zone transition, `microsegmentation`
+  within a zone), derived from its type for everything that exists, and a
+  rule reports the enforcement of its components in the API and as a column
+  in the CSV export. A new generic component type **micro-segmentation**
+  documents platforms Permitra generates nothing for (NSX, Illumio,
+  Kubernetes NetworkPolicy, host-firewall fleets; `platform` names which); it
+  carries implementation status and drift upload like any other. The BSI
+  firewall requirement, the intra-zone component resolution, zone attachment
+  and the zone plan key on the model, not on the vendor. Migration adds two
+  columns; nothing to do.
+
 - **SECRET_KEY can be rotated, and an admin can reset a user's 2FA.** Rotating
   the key used to lock every 2FA user out (the seed no longer decrypted, every
   code failed, five codes later the account was locked, with no way back short

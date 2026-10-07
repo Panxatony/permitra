@@ -14,6 +14,7 @@ from ..models import (
     Role,
     SecurityComponent,
     User,
+    default_enforcement,
 )
 from ..schemas import ComponentCreate, ComponentOut
 
@@ -56,7 +57,10 @@ def create_component(
     if db.query(SecurityComponent).filter(SecurityComponent.name.ilike(payload.name)).first():
         raise HTTPException(status.HTTP_409_CONFLICT,
                             _("Component '{name}' already exists", name=payload.name))
-    component = SecurityComponent(**payload.model_dump())
+    data = payload.model_dump()
+    if data["enforcement"] is None:
+        data["enforcement"] = default_enforcement(data["type"])
+    component = SecurityComponent(**data)
     db.add(component)
     db.commit()
     db.refresh(component)
@@ -140,7 +144,10 @@ def update_component(
     if duplicate:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             _("Component '{name}' already exists", name=payload.name))
-    for key, value in payload.model_dump().items():
+    data = payload.model_dump()
+    if data["enforcement"] is None:
+        data["enforcement"] = default_enforcement(data["type"])
+    for key, value in data.items():
         setattr(component, key, value)
     db.commit()
     db.refresh(component)

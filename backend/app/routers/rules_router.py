@@ -21,7 +21,6 @@ from ..models import (
     IN_FORCE,
     AddressComponentMap,
     Comment,
-    ComponentType,
     Role,
     Rule,
     RuleAction,
@@ -220,11 +219,12 @@ def enforce_bsi_firewall(source_zone: str, destination_zone: str, components: li
     src, dst = (source_zone or "").strip(), (destination_zone or "").strip()
     if not src or not dst or src.upper() == dst.upper():
         return  # Intra-zone: ACI contracts are the right instrument here
-    if components and not any(c.type.value != "aci" for c in components):
+    if components and not any(c.is_firewall for c in components):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            _("A zone transition requires a firewall (BSI definition): Cisco ACI alone is not "
-              "sufficient for {src} → {dst}. Assign a firewall cluster.",
+            _("A zone transition requires a firewall (BSI definition): micro-segmentation "
+              "alone (ACI or another platform) is not sufficient for {src} → {dst}. "
+              "Assign a firewall cluster.",
               src=src, dst=dst),
         )
 
@@ -573,7 +573,7 @@ def path_analysis(
     )
     # Same mapping (same network) => intra-zone => ACI; otherwise firewalls
     intra = map_src is not None and map_dst is not None and map_src.id == map_dst.id
-    filtered = [c for c in components if (c.type == ComponentType.aci) == intra]
+    filtered = [c for c in components if (not c.is_firewall) == intra]
     components = filtered or components
 
     # Multi-hop ordering: source-side components -> both-sided -> destination-side

@@ -4,9 +4,9 @@ import { Modal, StatusBadge } from '../components/shared'
 import Gateways from './Gateways'
 import { useLang } from '../i18n'
 
-const TYPE_LABELS = { juniper: 'Juniper SRX', checkpoint: 'Check Point', aci: 'Cisco ACI' }
+const TYPE_LABELS = { juniper: 'Juniper SRX', checkpoint: 'Check Point', aci: 'Cisco ACI', microsegmentation: 'Micro-segmentation' }
 const EMPTY = {
-  name: '', type: 'checkpoint', location: '', mgmt_address: '',
+  name: '', type: 'checkpoint', platform: '', location: '', mgmt_address: '',
   ns_tier: 100, description: '', active: true,
 }
 
@@ -14,6 +14,7 @@ const NODE_COLORS = {
   juniper: 'fw-juniper',
   checkpoint: 'fw-checkpoint',
   aci: 'fw-aci',
+  microsegmentation: 'fw-microseg',
 }
 
 const LINK_TYPE_SUGGESTIONS = [
@@ -136,7 +137,7 @@ function TopologySection({ components }) {
                   <title>{`${c.name} (${TYPE_LABELS[c.type]}) – ${c.location} – Ebene ${c.ns_tier}`}</title>
                 </circle>
                 <text x={p.x} y={p.y + 4} className="topo-node-icon">
-                  {{ juniper: 'FW', checkpoint: 'FW', aci: 'ACI' }[c.type]}
+                  {{ juniper: 'FW', checkpoint: 'FW', aci: 'ACI', microsegmentation: 'µSeg' }[c.type]}
                 </text>
                 <text x={p.x} y={p.y + 48} className="topo-node-label">{c.name}</text>
               </g>
@@ -226,7 +227,7 @@ export default function Components() {
   }
   const openEdit = (c) => {
     setEditId(c.id)
-    setForm({ name: c.name, type: c.type, location: c.location, mgmt_address: c.mgmt_address,
+    setForm({ name: c.name, type: c.type, platform: c.platform || '', location: c.location, mgmt_address: c.mgmt_address,
       ns_tier: c.ns_tier, description: c.description, active: c.active })
     setModalError('')
     setShowModal(true)
@@ -273,7 +274,7 @@ export default function Components() {
         <table>
           <thead>
             <tr>
-              <th>{t('Name')}</th><th>{t('Type')}</th><th>{t('Site/zone')}</th><th>{t('Tier (N→S)')}</th>
+              <th>{t('Name')}</th><th>{t('Type')}</th><th>{t('Enforcement')}</th><th>{t('Site/zone')}</th><th>{t('Tier (N→S)')}</th>
               <th>{t('Management address')}</th><th>{t('Description')}</th><th>{t('Status')}</th><th></th>
             </tr>
           </thead>
@@ -281,7 +282,10 @@ export default function Components() {
             {components.map((c) => (
               <tr key={c.id} className={c.active ? '' : 'row-any'}>
                 <td><strong>{c.name}</strong></td>
-                <td><span className={`badge platform-${c.type}`}>{TYPE_LABELS[c.type]}</span></td>
+                <td><span className={`badge platform-${c.type}`}>{TYPE_LABELS[c.type]}{c.platform ? ` · ${c.platform}` : ''}</span></td>
+                <td><span className={`badge enforcement-${c.enforcement}`}>
+                  {c.enforcement === 'microsegmentation' ? t('Micro-segmentation') : t('Firewall')}
+                </span></td>
                 <td>{c.location}</td>
                 <td><code>{c.ns_tier}</code></td>
                 <td className="addr">{c.mgmt_address}</td>
@@ -294,7 +298,7 @@ export default function Components() {
                 </td>
               </tr>
             ))}
-            {!components.length && <tr><td colSpan={8} className="muted">{t('No components created.')}</td></tr>}
+            {!components.length && <tr><td colSpan={9} className="muted">{t('No components created.')}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -313,8 +317,13 @@ export default function Components() {
                   <option value="checkpoint">Check Point</option>
                   <option value="juniper">Juniper SRX</option>
                   <option value="aci">Cisco ACI</option>
+                  <option value="microsegmentation">{t('Micro-segmentation (generic)')}</option>
                 </select>
               </label>
+              {form.type === 'microsegmentation' && (
+                <label>{t('Platform')}<input value={form.platform} onChange={set('platform')}
+                  placeholder={t('e.g. NSX, Illumio, Kubernetes NetworkPolicy, host firewalls')} /></label>
+              )}
               <label>{t('Site/zone')}<input value={form.location} onChange={set('location')}
                 placeholder={t('e.g. Zone FFM')} /></label>
               <label>{t('North-south tier')}

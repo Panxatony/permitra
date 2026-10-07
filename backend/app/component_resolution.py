@@ -7,13 +7,14 @@ Entries that cannot be resolved are reported as "unknown" - the user then
 defines the mapping once.
 
 Rule components = union over all source/destination entries, then filtered:
-  - intra-zone rule (source zone == destination zone): ACI components only
-  - cross-zone: firewall components only (Juniper/Check Point)
+  - intra-zone rule (source zone == destination zone): micro-segmentation only
+    (ACI, or any component whose enforcement is micro-segmentation)
+  - cross-zone: firewall components only
   (falls back to the unfiltered set if the filter would yield nothing)
 """
 from sqlalchemy.orm import Session
 
-from .models import AddressComponentMap, ComponentType, SecurityComponent
+from .models import AddressComponentMap, SecurityComponent
 from .validation import parse_network
 
 
@@ -87,6 +88,6 @@ def resolve_rule_components(
     intra = bool(source_zone and destination_zone) and source_zone.upper() == destination_zone.upper()
     filtered = [
         c for c in components
-        if (c.type == ComponentType.aci) == intra
+        if (not c.is_firewall) == intra
     ]
     return sorted(filtered or components, key=lambda c: c.name), unknown

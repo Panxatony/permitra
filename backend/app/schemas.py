@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .domain_values import PAP_LEVELS, PROTECTION_LEVELS
 from .messages import _, render
-from .models import ComponentType, Role, RuleAction, RuleLogging, RuleStatus, ZonePolicyType
+from .models import ComponentType, Enforcement, Role, RuleAction, RuleLogging, RuleStatus, ZonePolicyType
 from .validation import validate_ip_entry, validate_service
 
 DATE_LABELS = {"valid_from": "Valid from", "valid_until": "Valid until"}
@@ -69,6 +69,8 @@ class ComponentBrief(BaseModel):
     id: int
     name: str
     type: ComponentType
+    enforcement: Enforcement = Enforcement.firewall
+    platform: str = ""
     location: str = ""
 
 
@@ -443,6 +445,9 @@ class ZoneCheckOut(BaseModel):
 class ComponentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     type: ComponentType
+    # None = follows from the type (models.default_enforcement)
+    enforcement: Enforcement | None = None
+    platform: str = Field("", max_length=64)
     location: str = ""
     mgmt_address: str = ""
     ns_tier: int = Field(100, ge=0, le=1000, description="North-south tier: 0 = northmost (closest to the internet)")
@@ -453,6 +458,7 @@ class ComponentCreate(BaseModel):
 class ComponentOut(ComponentCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    enforcement: Enforcement
 
 
 class AciGatewayCreate(BaseModel):

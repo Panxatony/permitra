@@ -105,10 +105,10 @@ def get_policy(db: Session, from_zone: Zone, to_zone: Zone) -> ZonePolicy | None
 
 
 def _aci_cross_zone_hint(result: ZoneCheckResult, platforms: list[str] | None):
-    if "aci" in (platforms or []):
+    if {"aci", "microsegmentation"} & set(platforms or []):
         result.messages.append(
-            _("ACI is only used within a single zone – this rule crosses zones, "
-              "check the ACI platform assignment")
+            _("Micro-segmentation (ACI or another platform) is only used within a single zone "
+              "– this rule crosses zones, check the component assignment")
         )
 
 

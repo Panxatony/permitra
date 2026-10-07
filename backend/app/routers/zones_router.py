@@ -8,6 +8,7 @@ from ..messages import _, render
 from ..models import (
     IN_FORCE,
     Comment,
+    Enforcement,
     Role,
     Rule,
     RuleStatus,
@@ -178,11 +179,11 @@ def set_zone_components(
     if missing:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             _("Unknown component(s): {components}", components=sorted(missing)))
-    non_fw = [c.name for c in components if c.type.value == "aci"]
+    non_fw = [c.name for c in components if not c.is_firewall]
     if non_fw:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            _("Zones attach to firewall clusters – ACI is not a zone transition: {components}",
+            _("Zones attach to firewall clusters – micro-segmentation is not a zone transition: {components}",
               components=", ".join(non_fw)),
         )
     zone.components = components
@@ -259,7 +260,7 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
     zones = db.query(Zone).order_by(Zone.sort_order, Zone.name).all()
     rules = active_rules(db).filter(Rule.status != RuleStatus.deactivated).all()
     firewalls_total = db.query(SecurityComponent).filter(
-        SecurityComponent.type != "aci"
+        SecurityComponent.enforcement == Enforcement.firewall
     ).count()
 
     result = []
@@ -271,7 +272,7 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
         ]
         # "Attached to": the zone's explicitly maintained firewall attachment;
         # ACI fabrics are still derived from the intra-zone rules
-        firewalls = {c.id: c for c in zone.components if c.type.value != "aci"}
+        firewalls = {c.id: c for c in zone.components if c.is_firewall}
         aci = {}
         for rule in zone_rules:
             # ACI contracts are provided at the destination segment (provider EPG) –
@@ -279,7 +280,7 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
             if (rule.destination_zone or "").upper() != zname:
                 continue
             for component in rule.components:
-                if component.type.value == "aci":
+                if not component.is_firewall:
                     aci[component.id] = component
         result.append(
             {
@@ -296,8 +297,10 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
                      "location": c.location, "ns_tier": c.ns_tier}
                     for c in sorted(firewalls.values(), key=lambda c: c.name)
                 ],
+                # Every micro-segmentation component enforcing within the zone;
+                # the key is historical, ACI was the only kind there was.
                 "aci": [
-                    {"id": c.id, "name": c.name}
+                    {"id": c.id, "name": c.name, "type": c.type.value, "platform": c.platform}
                     for c in sorted(aci.values(), key=lambda c: c.name)
                 ],
                 "networks": [
@@ -716,7 +719,7 @@ def _assess_rules(db: Session, rules, resolve) -> list[dict]:
         # SIM102 rationale: kept nested - the outer test scopes this to cross-zone rules,
         # the inner one is the separate BSI firewall requirement.
         if admissible and (src or "").upper() != (dst or "").upper():  # noqa: SIM102
-            if rule.components and not any(c.type.value != "aci" for c in rule.components):
+            if rule.components and not any(c.is_firewall for c in rule.components):
                 admissible = False
                 reason = _("A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)")
                 messages.append(reason)
