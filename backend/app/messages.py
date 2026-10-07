@@ -288,6 +288,7 @@ CATALOG: dict[str, dict[str, str]] = {
         "NetBox referred to a different host ({host}) – ignored":
             "NetBox verwies auf einen anderen Host ({host}) – ignoriert",
         "Only http:// and https:// are allowed": "Nur http:// und https:// sind erlaubt",
+        "The address is too long (at most 128 characters)": "Die Adresse ist zu lang (höchstens 128 Zeichen)",
         "The address has no host": "Die Adresse hat keinen Host",
         "Only {checked} entries accounted for, the checkpoint records {count}":
             "Nur {checked} Einträge nachweisbar, der Prüfpunkt verzeichnet {count}",

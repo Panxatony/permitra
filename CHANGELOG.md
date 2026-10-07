@@ -4,6 +4,17 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Fixed: an over-long value silently dropped an audit event on PostgreSQL.**
+  The columns for actor, object and source IP are enforced there, the failed
+  insert was swallowed (auditing must not take the business operation down),
+  and the event was simply gone - no row, no gap in the chain, nothing for the
+  SIEM. A login attempt with a username of 65 characters was enough to keep
+  that attempt out of the log. Values are now cut to their columns before the
+  entry is hashed, `detail` and its values are capped at 4096 characters, and
+  a cut entry names the fields under `extra.truncated`. A forwarded address
+  from a trusted proxy that is not an IP address is no longer recorded, and a
+  NetBox URL is limited to 128 characters.
+
 - **Forgotten-password requests are rate-limited and no longer reactivate
   accounts.** `/api/auth/forgot` sent a mail for every request from anyone,
   which made it a way to flood a mailbox and the operator's relay, and it did

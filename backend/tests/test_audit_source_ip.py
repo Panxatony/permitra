@@ -62,3 +62,11 @@ def test_a_forged_header_still_loses_even_with_a_proxy_configured(monkeypatch):
 
 def test_no_header_means_the_peer(monkeypatch):
     assert audit.client_ip(request_from("192.0.2.1")) == "192.0.2.1"
+
+
+def test_a_trusted_proxy_header_that_is_not_an_address_falls_back_to_the_peer(monkeypatch):
+    """The proxy is trusted, its header is still text headed for a String(64)
+    column and the evidence. What is not an address is not an observation."""
+    monkeypatch.setenv("PERMITRA_TRUSTED_PROXIES", "10.0.0.0/8")
+    req = request_from("10.0.0.5", xff="not-an-address-" + "x" * 100)
+    assert audit.client_ip(req) == "10.0.0.5"

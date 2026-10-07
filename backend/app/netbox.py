@@ -64,6 +64,10 @@ def validate_url(raw: str) -> str:
     url = (raw or "").strip()
     if not url:
         return ""
+    # NetboxConfig.url is String(256); the audit entry for a config change
+    # names the URL as its object, which holds less. Refusing here keeps both.
+    if len(url) > 128:
+        raise ValueError(_("The address is too long (at most 128 characters)"))
     parsed = urllib.parse.urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise ValueError(_("Only http:// and https:// are allowed"))

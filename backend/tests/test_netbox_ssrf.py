@@ -74,3 +74,10 @@ def test_a_redirect_is_not_followed():
     with pytest.raises(RuntimeError, match="redirect"):
         handler.redirect_request(None, None, 302, "Found", {},
                                  "http://169.254.169.254/latest/meta-data/")
+
+
+def test_an_over_long_address_is_refused():
+    """The config change is audited with the URL as its object, and that
+    column holds 128 characters; a longer URL silently lost the audit entry."""
+    with pytest.raises(ValueError):
+        netbox.validate_url("https://netbox.example.org/" + "a" * 200)
