@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .database import SessionLocal
 from .expiry import expire_rules
+from .key_rotation import reencrypt_at_startup
 from .migrations import run_migrations
 from .routers import (
     aci_gateways_router,
@@ -274,6 +275,7 @@ async def lifespan(_app: FastAPI):
     application is coming up. The background tasks are cancelled on shutdown so
     a reload does not leave orphaned jobs behind."""
     await asyncio.to_thread(run_migrations)
+    await asyncio.to_thread(reencrypt_at_startup)
     await asyncio.to_thread(seed_users)
     await asyncio.to_thread(_load_instance_language)
     tasks = [

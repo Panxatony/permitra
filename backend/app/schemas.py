@@ -555,6 +555,9 @@ class UserOut(BaseModel):
     roles: list[Role] = []
     is_active: bool = True
     totp_enabled: bool = False
+    # Set by the admin listing only: the seed is there but no configured key
+    # reads it, so the account needs an admin reset (see users_router).
+    totp_unreadable: bool = False
     notify_email: bool = True
 
 

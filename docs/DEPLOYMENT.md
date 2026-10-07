@@ -9,6 +9,7 @@
 cat > .env <<'EOF'
 DB_PASSWORD=<strong-password>
 SECRET_KEY=<long-random-string>   # e.g. openssl rand -hex 32
+SECRET_KEY_PREVIOUS=              # only during a key rotation, see ADMINISTRATION.md
 EOF
 
 docker compose up --build -d

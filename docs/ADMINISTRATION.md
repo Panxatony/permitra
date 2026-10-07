@@ -25,7 +25,7 @@ rather than a setting.
 
 - **Forgot password** on the login page (reset link, valid 2h; responses never reveal whether an account exists, not even when a request was dropped for rate limiting). A new link replaces the previous unused one. A reset link only changes the password: a **deactivated account stays deactivated** and gets no link at all, so the flow cannot undo an admin's decision. The admin's *send reset* on an inactive account therefore issues an activation link instead. Account page: change password.
 - **Passwords**: at least 8 and at most 128 characters, not one of the 10,000 most common passwords (SecLists list bundled under `backend/app/wordlists/`, MIT), and not containing the username or the local part of the e-mail address - enforced wherever a password is set (activation and reset link, account page, admin-created account). Hashes are PBKDF2-HMAC-SHA256 with 600,000 iterations, stored as `pbkdf2_sha256$<iterations>$<salt>$<digest>`; a hash made at a lower cost or in the older `<salt>$<digest>` format is rewritten on its owner's next successful login, so raising the cost needs no migration. About 0.4 s of CPU per login on a small VM. `PERMITRA_PBKDF2_ITERATIONS` overrides the count (the test suite lowers it); do not lower it in production.
-- **2FA (TOTP)**: self-service on the account page (secret for authenticator apps, activation by code); login then asks for the code as a second factor. Implemented per RFC 6238 without extra dependencies.
+- **2FA (TOTP)**: self-service on the account page (secret for authenticator apps, activation by code); login then asks for the code as a second factor. Implemented per RFC 6238 without extra dependencies. An admin can **reset a user's 2FA** in the admin area (`POST /api/users/{username}/reset-totp`, audited as `user.totp_reset`, not on the admin's own account): the user signs in with the password and sets 2FA up again. The admin list marks a seed that no configured key can read (⚠), which is what a key rotation without `SECRET_KEY_PREVIOUS` leaves behind; such a login is refused with a message naming the reset, and does not count towards the lockout.
 - **Passkeys (WebAuthn)**: registration on the account page, passwordless sign-in on the login page. Requires HTTPS (or localhost); configured via `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (default derived from `PERMITRA_BASE_URL`).
 
 ## Excel import (one-off migration)
@@ -35,6 +35,16 @@ rather than a setting.
 - **Status mapping is a trust decision**: rows marked *umgesetzt* are imported as **approved without a review**, *neu* goes straight into review, *deaktivieren*/*deaktiviert* become deactivated, anything else is a draft. The sheet is treated as the record of what was already decided; run a recertification campaign after the import if that is not the case.
 - **The requestor column is resolved to an account.** The four-eyes check keys on the requestor as an account username, so a typed name is matched against username, full name and e-mail address (case-insensitive) and stored as the username. A name that matches no account is kept as typed and listed at the end of the import; for such rules the requestor exclusion does not apply, and the recertification shows them as *requestor unknown* until a requestor handover assigns an account. `--requestor-map "Max Mustermann=mmustermann"` (repeatable) settles names the lookup cannot.
 - Rule IDs from the sheet are kept; a row whose ID already exists is skipped. `--wipe` removes all rules first. Rules go into the VRF named with `--vrf`, or the default (first) VRF.
+
+## Rotating SECRET_KEY
+
+`SECRET_KEY` signs session tokens and, through a per-purpose derivation (HKDF), encrypts the TOTP seeds and the NetBox token. Rotating it used to lock every 2FA user out and blank the NetBox token. The supported way:
+
+1. Set `SECRET_KEY_PREVIOUS` to the current key (comma-separated list, newest first, if several) and `SECRET_KEY` to the new one (`openssl rand -hex 32`).
+2. Restart. At startup every TOTP seed and the NetBox token are re-encrypted under the new key (`permitra.keys` logs how many); sessions signed with the previous key keep working until they expire (`TOKEN_LIFETIME_HOURS`, default 8). `python -m app.key_rotation` runs the same re-encryption on demand.
+3. After the sessions have expired, remove `SECRET_KEY_PREVIOUS` and restart.
+
+A seed that cannot be read under any configured key is logged per user at ERROR, left untouched (the right key may still be in a backup), shown in the admin list, and the user's login says that an admin has to reset 2FA. Values written before this version (one key for everything, derived as sha256 of the secret) are read and re-encrypted the same way, so the upgrade itself needs nothing.
 
 ## NetBox import (networks)
 

@@ -1,6 +1,7 @@
 """Sign-in and account security: login (with optional TOTP second factor),
 forgotten/new password, 2FA management and WebAuthn passkeys."""
 import base64
+import logging
 import os
 import secrets
 import time
@@ -19,6 +20,7 @@ from ..models import AuthToken, Passkey, User, utcnow
 from ..schemas import Token, UserOut
 from .users_router import consume_token, issue_token
 
+log = logging.getLogger("permitra.auth")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -96,8 +98,21 @@ async def login(
         otp = ((await request.form()).get("otp") or "").strip()
         if not otp:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_required")
-        counter = totp.verify(crypto.decrypt(user.totp_secret), otp,
-                              last_counter=user.totp_last_counter)
+        seed = crypto.decrypt(user.totp_secret, "totp")
+        if not seed:
+            # The seed exists but no configured key reads it - a rotation
+            # without SECRET_KEY_PREVIOUS, or a restored backup. This is not
+            # a wrong code: it does not count against the account, and the
+            # message names the way out, because a locked account with a
+            # second factor nobody can reset is exactly what used to happen.
+            log.error("TOTP seed of %s cannot be decrypted - an administrator has to reset 2FA",
+                      user.username)
+            audit.record(db, "auth", "auth.login_failed", actor=user.username,
+                         source_ip=audit.client_ip(request), detail="2FA seed unreadable")
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED,
+                                _("The second factor cannot be verified – an administrator "
+                                  "has to reset two-factor authentication for this account"))
+        counter = totp.verify(seed, otp, last_counter=user.totp_last_counter)
         if counter is None:
             _register_failure(db, user)
             audit.record(db, "auth", "auth.login_failed", actor=user.username,
@@ -256,7 +271,7 @@ def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_u
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             _("Two-factor authentication is already enabled"))
     secret = totp.new_secret()
-    user.totp_secret = crypto.encrypt(secret)
+    user.totp_secret = crypto.encrypt(secret, "totp")
     user.totp_last_counter = None
     db.commit()
     # The plaintext seed leaves the server exactly once, to be scanned. It is
@@ -269,7 +284,7 @@ def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_u
 def totp_enable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not user.totp_secret:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("Start the setup first"))
-    counter = totp.verify(crypto.decrypt(user.totp_secret), payload.get("code") or "",
+    counter = totp.verify(crypto.decrypt(user.totp_secret, "totp"), payload.get("code") or "",
                           last_counter=user.totp_last_counter)
     if counter is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("The code is invalid"))

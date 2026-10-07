@@ -289,6 +289,11 @@ CATALOG: dict[str, dict[str, str]] = {
             "NetBox verwies auf einen anderen Host ({host}) – ignoriert",
         "Only http:// and https:// are allowed": "Nur http:// und https:// sind erlaubt",
         "The address is too long (at most 128 characters)": "Die Adresse ist zu lang (höchstens 128 Zeichen)",
+        "The second factor cannot be verified – an administrator has to reset two-factor authentication for this account":
+            "Der zweite Faktor kann nicht geprüft werden – ein Administrator muss die Zwei-Faktor-Authentifizierung für dieses Konto zurücksetzen",
+        "You cannot reset your own second factor here – use the account page":
+            "Den eigenen zweiten Faktor kannst du hier nicht zurücksetzen – nutze die Kontoseite",
+        "2FA seed unreadable": "2FA-Geheimnis nicht lesbar",
         "The address has no host": "Die Adresse hat keinen Host",
         "Only {checked} entries accounted for, the checkpoint records {count}":
             "Nur {checked} Einträge nachweisbar, der Prüfpunkt verzeichnet {count}",

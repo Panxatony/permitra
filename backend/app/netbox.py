@@ -15,7 +15,7 @@ import urllib.request
 
 from sqlalchemy.orm import Session
 
-from .crypto import decrypt, encrypt
+from . import crypto
 from .messages import _
 from .models import NetboxConfig, NetboxPrefix, utcnow
 
@@ -24,8 +24,14 @@ MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 # Kept as names of their own: at the call sites "token" says what is being
 # handled, and the module stays readable when other secrets join it.
-encrypt_token = encrypt
-decrypt_token = decrypt
+
+
+def encrypt_token(raw: str) -> str:
+    return crypto.encrypt(raw, "netbox")
+
+
+def decrypt_token(enc: str) -> str:
+    return crypto.decrypt(enc, "netbox")
 
 
 def get_config(db: Session) -> NetboxConfig | None:

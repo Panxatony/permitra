@@ -4,6 +4,21 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **SECRET_KEY can be rotated, and an admin can reset a user's 2FA.** Rotating
+  the key used to lock every 2FA user out (the seed no longer decrypted, every
+  code failed, five codes later the account was locked, with no way back short
+  of editing the database) and silently blank the NetBox token. Now: session
+  signing, TOTP seeds and the NetBox token each get their own key derived from
+  `SECRET_KEY` (HKDF); `SECRET_KEY_PREVIOUS` keeps the old key(s) readable;
+  encrypted values are re-encrypted under the current key at startup (or with
+  `python -m app.key_rotation`); sessions signed with a previous key keep
+  working until they expire. A seed no configured key can read is logged, shown
+  in the admin list and refused at login with a message naming the reset,
+  without counting towards the lockout. `POST /api/users/{username}/reset-totp`
+  (admin, audited) switches a user's second factor off. Values written by
+  earlier versions are read and re-encrypted on the first start; **nothing to
+  do for the upgrade**. See ADMINISTRATION.md, "Rotating SECRET_KEY".
+
 - **Password hashes state their cost, and passwords have a policy.** Hashes
   are stored as `pbkdf2_sha256$<iterations>$<salt>$<digest>` at 600,000
   iterations (OWASP); existing hashes (200,000, no prefix) keep working and

@@ -197,6 +197,7 @@ export const api = {
   updateUser: (username, p) => request(`/api/users/${encodeURIComponent(username)}`, { method: 'PUT', body: p }),
   deleteUser: (username) => request(`/api/users/${encodeURIComponent(username)}`, { method: 'DELETE' }),
   sendReset: (username) => request(`/api/users/${encodeURIComponent(username)}/send-reset`, { method: 'POST' }),
+  resetTotp: (username) => request(`/api/users/${encodeURIComponent(username)}/reset-totp`, { method: 'POST' }),
   forgotPassword: (username) => request('/api/auth/forgot', { method: 'POST', body: { username } }),
   setPassword: (token, password) => request('/api/auth/set-password', { method: 'POST', body: { token, password } }),
   changePassword: (current, next) =>
