@@ -31,15 +31,56 @@ TOKEN_LIFETIME_HOURS = int(os.environ.get("TOKEN_LIFETIME_HOURS", "8"))
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-def hash_password(password: str, salt: str | None = None) -> str:
+# PBKDF2-HMAC-SHA256 cost. 600,000 is the OWASP figure (2023); the format
+# below records the count per hash, so raising this number upgrades every
+# hash on its owner's next login (see needs_rehash) and invalidates none.
+# The environment override exists for test runs, where hashing hundreds of
+# fixture users at full cost would cost minutes and prove nothing.
+PBKDF2_ITERATIONS = int(os.environ.get("PERMITRA_PBKDF2_ITERATIONS", "600000"))
+_LEGACY_ITERATIONS = 200_000   # what every hash without a prefix was made with
+_ALGORITHM = "pbkdf2_sha256"
+
+
+def hash_password(password: str, salt: str | None = None, iterations: int | None = None) -> str:
+    """`pbkdf2_sha256$<iterations>$<salt>$<digest>` - a hash that says how it was made.
+
+    The stored string used to be `<salt>$<digest>` with the iteration count
+    hard-coded in the code, so the cost could not be raised without either
+    guessing the format by its shape or invalidating every existing hash.
+    """
     salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
-    return f"{salt}${digest.hex()}"
+    iterations = iterations or PBKDF2_ITERATIONS
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations)
+    return f"{_ALGORITHM}${iterations}${salt}${digest.hex()}"
+
+
+def _parse(stored: str) -> tuple[int, str] | None:
+    """(iterations, salt) of a stored hash, in either format; None if unreadable."""
+    parts = (stored or "").split("$")
+    if len(parts) == 4 and parts[0] == _ALGORITHM and parts[1].isdigit():
+        return int(parts[1]), parts[2]
+    if len(parts) == 2 and parts[0]:
+        return _LEGACY_ITERATIONS, parts[0]
+    return None
 
 
 def verify_password(password: str, stored: str) -> bool:
-    salt, _, _digest = stored.partition("$")
-    return secrets.compare_digest(hash_password(password, salt), stored)
+    parsed = _parse(stored)
+    if parsed is None:
+        return False
+    iterations, salt = parsed
+    if stored.startswith(_ALGORITHM + "$"):
+        candidate = hash_password(password, salt, iterations)
+    else:
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations)
+        candidate = f"{salt}${digest.hex()}"
+    return secrets.compare_digest(candidate, stored)
+
+
+def needs_rehash(stored: str) -> bool:
+    """Whether a hash is below the current cost or in the old format."""
+    parsed = _parse(stored)
+    return parsed is None or parsed[0] < PBKDF2_ITERATIONS or not stored.startswith(_ALGORITHM + "$")
 
 
 def create_token(user: User) -> str:

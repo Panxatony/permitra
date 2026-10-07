@@ -561,7 +561,7 @@ class UserOut(BaseModel):
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     # Without a password an activation link is generated (mail or link for the admin)
-    password: str | None = Field(None, min_length=8)
+    password: str | None = Field(None, min_length=8, max_length=128)
     full_name: str = ""
     email: str = ""
     # `roles` is authoritative when given; `role` remains accepted so an older

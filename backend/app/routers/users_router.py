@@ -10,7 +10,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from .. import audit, mailer
+from .. import audit, mailer, passwords
 from ..auth import hash_password, require_roles
 from ..database import get_db
 from ..messages import _
@@ -94,6 +94,8 @@ def create_user(
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status.HTTP_409_CONFLICT, _("Username is already taken"))
     with_password = bool(payload.password)
+    if with_password:
+        passwords.enforce(payload.password, payload.username, payload.email)
     user = User(
         username=payload.username,
         # Without a password: an unusable random hash until the user activates via link

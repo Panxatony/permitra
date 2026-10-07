@@ -361,6 +361,10 @@ CATALOG: dict[str, dict[str, str]] = {
         "Passkey registered": "Passkey registriert",
         "Password changed": "Passwort geändert",
         "Password must be at least 8 characters long": "Passwort muss mindestens 8 Zeichen haben",
+        "Password must be at most 128 characters long": "Passwort darf höchstens 128 Zeichen haben",
+        "This password is too common – choose another one": "Dieses Passwort ist zu verbreitet – bitte ein anderes wählen",
+        "Password must not contain the username or e-mail address":
+            "Passwort darf den Benutzernamen oder die E-Mail-Adresse nicht enthalten",
         "PBR enabled: a target firewall (component) is required":
             "PBR aktiviert: Ziel-Firewall (Komponente) ist erforderlich",
         "PBR enabled: the PBR node IP is required": "PBR aktiviert: PBR-Node-IP ist erforderlich",

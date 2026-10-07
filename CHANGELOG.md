@@ -4,6 +4,16 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Password hashes state their cost, and passwords have a policy.** Hashes
+  are stored as `pbkdf2_sha256$<iterations>$<salt>$<digest>` at 600,000
+  iterations (OWASP); existing hashes (200,000, no prefix) keep working and
+  are rewritten on the next successful login, so there is no migration and
+  nobody is locked out. Expect about 0.4 s of CPU per login on a small VM
+  where it was 0.13 s. Wherever a password is set, it must now be 8 to 128
+  characters, not among the 10,000 most common (SecLists list bundled, MIT)
+  and not contain the username or e-mail local part; before, eight
+  characters of anything would do.
+
 - **Fixed: the four-eyes check excluded only the newest writer.** Whoever
   requested or created a rule could not approve it, nor could the writer of
   its newest version - and nobody else was excluded. An architect who edited

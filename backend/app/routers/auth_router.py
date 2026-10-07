@@ -11,8 +11,8 @@ from fastapi.responses import PlainTextResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from .. import audit, crypto, mailer, ratelimit, totp
-from ..auth import create_token, get_current_user, hash_password, verify_password
+from .. import audit, crypto, mailer, passwords, ratelimit, totp
+from ..auth import create_token, get_current_user, hash_password, needs_rehash, verify_password
 from ..database import get_db
 from ..messages import _
 from ..models import AuthToken, Passkey, User, utcnow
@@ -112,6 +112,12 @@ async def login(
         user.failed_logins = 0
         user.locked_until = None
         db.commit()
+    # The one moment the password is known in the clear: a hash made with a
+    # lower cost or in the old format is rewritten at the current cost, so
+    # raising the cost needs no migration - hashes catch up as people log in.
+    if needs_rehash(user.password_hash):
+        user.password_hash = hash_password(form.password)
+        db.commit()
     audit.record(db, "auth", "auth.login", actor=user.username,
                  source_ip=audit.client_ip(request))
     return _login_ok(user)
@@ -205,10 +211,8 @@ def set_password(request: Request, payload: dict, db: Session = Depends(get_db))
     reset flow cannot be used to undo what an admin decided.
     """
     password = payload.get("password") or ""
-    if len(password) < 8:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            _("Password must be at least 8 characters long"))
     user, purpose = consume_token(db, payload.get("token") or "")
+    passwords.enforce(password, user.username, user.email)
     user.password_hash = hash_password(password)
     if purpose == "activate":
         user.is_active = True
@@ -233,9 +237,7 @@ def change_password(
     if not verify_password(payload.get("current") or "", user.password_hash):
         raise HTTPException(status.HTTP_403_FORBIDDEN, _("The current password is wrong"))
     new = payload.get("new") or ""
-    if len(new) < 8:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            _("Password must be at least 8 characters long"))
+    passwords.enforce(new, user.username, user.email)
     user.password_hash = hash_password(new)
     user.token_valid_from = utcnow()  # revokes other existing sessions
     db.commit()
