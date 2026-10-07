@@ -4,6 +4,21 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Change-management webhook: every lifecycle step, retries, a signature,
+  and a write-back that keeps the approval.** The webhook fired on submit,
+  approve, reject and zone decisions only; an emergency declaration, an
+  implementation report, a removal proposal and an expiry sent nothing. New
+  events: `rule.emergency_declared`, `rule.implementation`,
+  `rule.removal_proposed`, `rule.expired`, `rule.emergency_expired`. Delivery
+  retries twice (10 s, 60 s) and can be signed (`CHANGE_WEBHOOK_SECRET`,
+  `X-Permitra-Signature`). `PATCH /api/rules/{id}/change-id` writes the ticket
+  number back as metadata; the documented way, `PUT /api/rules/{id}`, reset an
+  approved rule to draft. Payloads name the components' enforcement.
+
+- **Demo data**: a Kubernetes NetworkPolicy component (`K8s-NetPol-FFM`) and
+  an intra-zone rule in CICD it enforces (SR00106), showing a
+  micro-segmentation platform Permitra exports nothing for.
+
 - **A component says how it enforces: firewall or micro-segmentation.** The
   question an auditor asks — is this relation enforced, and how? — was
   answered with a zone pair and a component name. Every component now carries

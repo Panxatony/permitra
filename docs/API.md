@@ -61,11 +61,14 @@ Endpoints: `GET/POST/DELETE /api/api-tokens` (admin). The token itself is authen
 
 ## Change management integration (optional)
 
-Permitra sends a JSON webhook on approval events (fire-and-forget, never blocks):
+Permitra sends a JSON webhook on the steps of a rule's life a change process cares about. Delivery runs on a thread, never blocks the operation, retries twice (after 10 s and 60 s) and then gives up with an error in the log - so an adapter that must not miss anything reconciles by polling `GET /api/rules?updated_since=`.
 
 ```bash
 CHANGE_WEBHOOK_URL=https://instance.service-now.com/api/x_permitra/change   # empty = off
-CHANGE_WEBHOOK_TOKEN=…   # optional, sent as "Authorization: Bearer"
+CHANGE_WEBHOOK_TOKEN=…    # optional, sent as "Authorization: Bearer"
+CHANGE_WEBHOOK_SECRET=…   # optional; body signed with HMAC-SHA256, sent as "X-Permitra-Signature: sha256=<hex>"
 ```
 
-Events: `rule.submitted`, `rule.approved`, `rule.rejected`, `zone_change.approved`, `zone_change.rejected`. Payload: `{"event": …, "source": "permitra", "timestamp": …, "data": {…}}` — for rules this includes rule ID, zones, addresses, services, components and `change_id`; for batch requests the batch ID and individual changes. A ServiceNow adapter can create the change ticket and write the ticket number back into `change_id` via `PUT /api/rules/{id}`. Implementation: `backend/app/change_management.py`. The complete functionality is also available as a REST API (`/docs`) for CMDB/ticket integrations.
+Events: `rule.submitted`, `rule.approved`, `rule.rejected`, `rule.deactivated`, `rule.delete_approved`, `rule.emergency_declared`, `rule.implementation` (the implementation status changed; `status` says whether the rule is `active` now), `rule.removal_proposed` (an application was retired, or a network move made the rule inadmissible), `rule.expired`, `rule.emergency_expired`, `zone_change.approved`, `zone_change.rejected`. Payload: `{"event": …, "source": "permitra", "timestamp": …, "data": {…}}` - for rules this includes rule ID, zones, addresses, services, components, their `enforcement` (firewall / micro-segmentation) and `change_id`; for batch requests the batch ID and individual changes.
+
+**Writing the ticket number back**: `PATCH /api/rules/{id}/change-id` with `{"change_id": "CHG0042"}` (roles architect, operations or change approver). It changes that one field, records a version and an audit event (`rule.change_id_set`), and leaves the approval standing - unlike `PUT /api/rules/{id}`, which is a content edit and resets an approved rule to draft. Use a dedicated service account with the operations role for the adapter. Implementation: `backend/app/change_management.py`. The complete functionality is also available as a REST API (`/docs`) for CMDB/ticket integrations.

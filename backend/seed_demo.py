@@ -115,6 +115,13 @@ COMPONENTS = [
      "cpmgmt-ext.ber.demo.local - 10.10.80.23", 5,
      "Extranet-Cluster für Partner-Anbindungen: zwischen Provider-Übergang und Campus-Kern "
      "(BSI P-A-P – der zweite Filter hinter dem äußeren Paketfilter)"),
+    # A micro-segmentation platform Permitra generates nothing for: documented
+    # as the enforcing instance of the container platform's intra-zone rules.
+    ("K8s-NetPol-FFM", ComponentType.microsegmentation, "Zone FFM",
+     "kube-api.ffm.demo.local - 10.10.80.40", 32,
+     "Kubernetes NetworkPolicy (Calico) der Container-Plattform in Zone CICD – "
+     "Mikrosegmentierung ohne Exporter, Umsetzung wird im Cluster dokumentiert",
+     "Kubernetes NetworkPolicy"),
 ]
 
 # --- Building blocks for rules -----------------------------------------------
@@ -352,9 +359,10 @@ def seed(wipe: bool):
 
     # Security components
     components = {}
-    for name, ctype, location, mgmt, tier, descr in COMPONENTS:
+    for name, ctype, location, mgmt, tier, descr, *platform in COMPONENTS:
         component = SecurityComponent(name=name, type=ctype, location=location,
-                                      mgmt_address=mgmt, ns_tier=tier, description=descr)
+                                      mgmt_address=mgmt, ns_tier=tier, description=descr,
+                                      platform=platform[0] if platform else "")
         db.add(component)
         components[name] = component
     db.flush()
@@ -536,8 +544,11 @@ def seed(wipe: bool):
         "DMZ-WEB": fw_ber, "VPN": fw_ber, "MGMT": fw_ber, "TEST": fw_ber, "DEV": fw_ber, "CICD": fw_ber,
     }
     NO_ACI_ZONES = {"MGMT", "AUDIT", "EXTRANET"}  # pure FW zones without ACI segmentation
+    K8S_ZONES = {"CICD"}  # the container platform narrows traffic inside its zone itself
     for zone_name, fw in ZONE_FW.items():
         ids = {fw.id} if zone_name in NO_ACI_ZONES else {fw.id, aci_ffm.id}
+        if zone_name in K8S_ZONES:
+            ids.add(components["K8s-NetPol-FFM"].id)
         db.add(
             AddressComponentMap(
                 ip=zone_net(zone_name), alias=f"NET-{zone_name}", vrf_id=vrf_it.id,
@@ -720,6 +731,33 @@ def seed(wipe: bool):
         db.flush()
         db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
                            change_note="Demo rule created", changed_by="demo-seed"))
+
+    # An intra-zone rule enforced by micro-segmentation that is not ACI: the
+    # build runners reach the registry inside CICD, narrowed by Kubernetes
+    # NetworkPolicy. Nothing is exported for it; what is documented is who may
+    # talk to whom, and that the cluster enforces it.
+    rule = Rule(
+        rule_id="SR00106",
+        vrf_id=vrf_it.id, name="Build-Runner-Registry", application="CI/CD", app_id="CICD",
+        components=[components["K8s-NetPol-FFM"]],
+        source_zone=zc("CICD"), destination_zone=zc("CICD"),
+        source=[{"ip": "10.10.60.21", "alias": "runner01.demo.local"},
+                {"ip": "10.10.60.22", "alias": "runner02.demo.local"}],
+        destination=[{"ip": "10.10.60.30", "alias": "registry.demo.local"}],
+        services=[{"protocol": "TCP", "port": "5000"}], action=RuleAction.permit,
+        description="Container-Build-Runner pushen Images in die interne Registry",
+        justification="Build-Pipeline: Runner müssen Images in die Registry schreiben; "
+                      "innerhalb der CICD-Zone per Kubernetes NetworkPolicy auf die Runner "
+                      "eingeschränkt",
+        business_context="Interne IT", requestor="architekt", owner="betrieb",
+        change_id="CHN2027006", status=RuleStatus.active,
+        impl_status={"K8s-NetPol-FFM": "implemented"},
+        created_by="architekt",
+    )
+    db.add(rule)
+    db.flush()
+    db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
+                       change_note="Demo rule created", changed_by="demo-seed"))
 
     # Demo rule spanning all three components: MGMT (behind FW BER) -> PROD-APP (FFM).
     # Implementation: firewall rule on both clusters (site transit) plus an

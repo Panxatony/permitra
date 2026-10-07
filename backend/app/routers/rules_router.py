@@ -2,12 +2,12 @@ import re
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import audit, ping_baseline
+from .. import audit, change_management, ping_baseline
 from ..accounts import account_key
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
@@ -944,6 +944,10 @@ def declare_emergency_rule(
 
     from .. import notifications
     notifications.rule_submitted(db, rule)
+    change_management.notify(
+        "rule.emergency_declared",
+        {**change_management.rule_payload(rule), "declared_by": user.username,
+         "reason": rule.emergency_reason, "approval_due": rule.emergency_approval_due})
     return rule
 
 
@@ -1205,6 +1209,10 @@ def retire_application(
     from .. import notifications
     for rule in proposed:
         notifications.rule_submitted(db, rule)
+        change_management.notify(
+            "rule.removal_proposed",
+            {**change_management.rule_payload(rule), "proposed_by": user.username,
+             "reason": rule.removal_reason})
     return result
 
 
@@ -1613,6 +1621,48 @@ def extend_validity(
     return rule
 
 
+class ChangeIdIn(BaseModel):
+    change_id: str = Field("", max_length=128)
+
+    @field_validator("change_id")
+    @classmethod
+    def single_line(cls, v):
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+            raise ValueError(_("{field} must not contain line breaks or control characters",
+                               field="change_id"))
+        return v.strip()
+
+
+@router.patch("/{rule_id}/change-id", response_model=RuleOut)
+def set_change_id(
+    rule_id: str,
+    payload: ChangeIdIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect, Role.operations, Role.change_approver)),
+):
+    """Record the change ticket a rule travels under - metadata, nothing else.
+
+    The documented way for an adapter to write the ticket number back used to
+    be PUT /api/rules/{id}, which needs the architect role and the whole
+    payload, and resets an approved rule to draft. A ticket number is not a
+    content change: the approval stands, the history records who set it."""
+    rule = get_rule_or_404(db, rule_id)
+    if payload.change_id == (rule.change_id or ""):
+        return rule
+    previous = rule.change_id or ""
+    rule.change_id = payload.change_id
+    rule.version += 1
+    add_version(db, rule, user, "Change ID set to {change_id}", change_id=payload.change_id or "–")
+    db.commit()
+    db.refresh(rule)
+    audit.record(db, "rule", "rule.change_id_set", actor=user.username, object=rule.rule_id,
+                 detail="{previous} → {change_id}",
+                 detail_values={"previous": previous or "–", "change_id": payload.change_id or "–"},
+                 source_ip=audit.client_ip(request))
+    return rule
+
+
 @router.put("/{rule_id}/impl-status", response_model=RuleOut)
 def set_impl_status(
     rule_id: str,
@@ -1644,6 +1694,10 @@ def set_impl_status(
     _sync_active_status(db, rule, user)
     db.commit()
     db.refresh(rule)
+    change_management.notify(
+        "rule.implementation",
+        {**change_management.rule_payload(rule), "reported_by": user.username,
+         "impl_status": rule.impl_status, "changed": impl_status})
     return rule
 
 

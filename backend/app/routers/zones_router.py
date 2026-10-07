@@ -797,6 +797,11 @@ def _apply_reassessment(db: Session, network: ZoneNetwork, user, batch_id: str) 
             add_version(db, rule, user, template, **values)
             db.add(Comment(rule_pk=rule.id, author=user.username,
                            text=render(template, values)))
+            from .. import change_management
+            change_management.notify(
+                "rule.removal_proposed",
+                {**change_management.rule_payload(rule), "proposed_by": user.username,
+                 "reason": rule.removal_reason, "network": network.cidr})
         elif entry["zones_changed"]:
             rule.version += 1
             add_version(db, rule, user,
