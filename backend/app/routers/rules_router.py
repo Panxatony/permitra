@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import audit, ping_baseline
+from ..accounts import account_key
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
 from ..conflicts import find_conflicts
@@ -1399,7 +1400,12 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
     if new_status == RuleStatus.approved:
         last_version = max(rule.versions, key=lambda v: v.version, default=None)
         submitter = last_version.changed_by if last_version else rule.created_by
-        if user.username in {submitter, rule.created_by, rule.requestor}:
+        # Compared the way every other place compares names (accounts.py):
+        # a requestor that reached the rule through an import or an older
+        # record may differ from the account only in case, and that must not
+        # be the difference between refused and approved.
+        involved = {account_key(name) for name in (submitter, rule.created_by, rule.requestor)}
+        if account_key(user.username) in involved:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 _("Separation of duties: you cannot approve a rule you requested, "

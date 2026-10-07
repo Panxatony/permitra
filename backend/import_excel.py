@@ -2,6 +2,14 @@
 
 Aufruf:
     python import_excel.py <datei.xlsx> [--sheet Kommunikationsmatrix] [--wipe]
+                           [--requestor-map "Max Mustermann=mmustermann" ...]
+
+The requestor column is a typed name. The four-eyes check keys on account
+usernames, so a typed name is resolved against the accounts (username, full
+name, e-mail; case-insensitive) and stored as the username. A name that
+resolves to no account is kept as typed, listed in the summary, and shows up
+as "requestor unknown" in the recertification until somebody assigns it.
+--requestor-map settles names the lookup cannot, before the lookup runs.
 
 Spalten-Mapping (wie AP0400-Sicherheitsregeln):
     Rule-ID | Application | Sicherheitselement | Source SZ | Quelle/Quellsystem |
@@ -15,10 +23,12 @@ import sys
 
 import openpyxl
 
+from app.accounts import resolve_account
 from app.database import Base, SessionLocal, engine
 from app.domain_values import LEGACY_IMPL_STATUS
 from app.models import ComponentType, Rule, RuleStatus, RuleVersion, SecurityComponent
 from app.validation import extract_networks
+from app.vrf import get_vrf
 
 
 def parse_address_lines(text: str) -> list[dict]:
@@ -127,20 +137,42 @@ def parse_platforms(element: str) -> list[str]:
     return platforms
 
 
-def run(path: str, sheet: str, wipe: bool):
-    Base.metadata.create_all(bind=engine)
+def parse_requestor_map(pairs: list[str] | None) -> dict[str, str]:
+    """"Typed name=username" pairs from the command line, keyed case-insensitively."""
+    mapping = {}
+    for pair in pairs or []:
+        typed, _, username = pair.partition("=")
+        if typed.strip() and username.strip():
+            mapping[typed.strip().casefold()] = username.strip()
+    return mapping
+
+
+def run(path: str, sheet: str, wipe: bool, requestor_map: dict[str, str] | None = None,
+        session_factory=None, vrf: str | None = None) -> dict:
+    """Imports the sheet and returns a summary: imported, skipped and the
+    requestor names that resolved to no account, with their rule IDs.
+
+    Every rule belongs to a VRF; the sheet predates that and names none, so
+    the rules go into the VRF given on the command line, or the default one."""
+    if session_factory is None:
+        Base.metadata.create_all(bind=engine)
+        session_factory = SessionLocal
+    requestor_map = requestor_map or {}
     wb = openpyxl.load_workbook(path, data_only=True)
     if sheet not in wb.sheetnames:
         sys.exit(f"Sheet '{sheet}' nicht gefunden. Vorhanden: {wb.sheetnames}")
     ws = wb[sheet]
 
-    db = SessionLocal()
+    db = session_factory()
     if wipe:
         db.query(RuleVersion).delete()
         db.query(Rule).delete()
         db.commit()
 
+    vrf_id = get_vrf(db, vrf).id
     imported, skipped, last_rule = 0, 0, None
+    unresolved: dict[str, list[str]] = {}
+    resolved_cache: dict[str, str | None] = {}
     component_cache: dict = {}
     rows = ws.iter_rows(values_only=True)
     next(rows)  # Kopfzeile
@@ -168,8 +200,20 @@ def run(path: str, sheet: str, wipe: bool):
         if cell(row, 13):  # "Status ACI"
             impl_status[component_for(db, component_cache, "aci").name] = impl_value(cell(row, 13))
 
+        typed = cell(row, 10)
+        requestor = requestor_map.get(typed.casefold(), typed)
+        if typed.casefold() not in requestor_map:
+            if typed not in resolved_cache:
+                user = resolve_account(db, typed)
+                resolved_cache[typed] = user.username if user else None
+            if resolved_cache[typed]:
+                requestor = resolved_cache[typed]
+            elif typed:
+                unresolved.setdefault(typed, []).append(rule_id)
+
         rule = Rule(
             rule_id=rule_id,
+            vrf_id=vrf_id,
             name=cell(row, 9)[:64] or rule_id,
             application=cell(row, 1),
             components=rule_components,
@@ -179,7 +223,7 @@ def run(path: str, sheet: str, wipe: bool):
             destination=parse_address_lines(cell(row, 6)),
             services=parse_services(cell(row, 7), cell(row, 8)),
             justification=cell(row, 9),
-            requestor=cell(row, 10),
+            requestor=requestor,
             owner=cell(row, 11),
             status=status,
             impl_status=impl_status,
@@ -202,6 +246,15 @@ def run(path: str, sheet: str, wipe: bool):
     db.commit()
     db.close()
     print(f"Import fertig: {imported} Regeln importiert, {skipped} übersprungen (ID existiert).")
+    if unresolved:
+        print(f"{len(unresolved)} Requestor-Name(n) entsprechen keinem Konto und wurden "
+              "unverändert übernommen (Vier-Augen-Ausschluss greift dort nicht, "
+              "Rezertifizierung zeigt sie als unbekannt):")
+        for name, ids in sorted(unresolved.items()):
+            print(f"  {name!r}: {', '.join(ids)}")
+        print("Zuordnen mit --requestor-map \"Name=benutzername\" oder nach dem Import "
+              "per Requestor-Übergabe.")
+    return {"imported": imported, "skipped": skipped, "unresolved_requestors": unresolved}
 
 
 if __name__ == "__main__":
@@ -209,5 +262,8 @@ if __name__ == "__main__":
     parser.add_argument("file")
     parser.add_argument("--sheet", default="Kommunikationsmatrix")
     parser.add_argument("--wipe", action="store_true", help="Bestehende Regeln vorher löschen")
+    parser.add_argument("--requestor-map", action="append", metavar="NAME=USERNAME",
+                        help="Requestor-Name aus der Tabelle einem Konto zuordnen (mehrfach möglich)")
+    parser.add_argument("--vrf", default=None, help="Ziel-VRF (Name); Standard: der erste VRF")
     args = parser.parse_args()
-    run(args.file, args.sheet, args.wipe)
+    run(args.file, args.sheet, args.wipe, parse_requestor_map(args.requestor_map), vrf=args.vrf)

@@ -4,6 +4,19 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Excel import: the requestor is resolved to an account.** The four-eyes
+  check keys on the requestor as an account username; the import stored the
+  typed name from the sheet, which matched no account, so the exclusion that
+  names the person accountable for a rule applied to nothing that came in
+  through the import. Typed names are now matched against username, full
+  name and e-mail (case-insensitive), unresolved ones are listed at the end
+  of the import and can be settled with `--requestor-map`. Approval and
+  recertification compare names the same way now (case-insensitive), where
+  the approval used to compare exactly. The status mapping of the import
+  (*umgesetzt* = approved without review) is documented in ADMINISTRATION.md.
+  The import also sets the VRF now (`--vrf`, default: the first one); since
+  VRFs were introduced it had failed on the NOT NULL constraint.
+
 - **Fixed: an over-long value silently dropped an audit event on PostgreSQL.**
   The columns for actor, object and source IP are enforced there, the failed
   insert was swallowed (auditing must not take the business operation down),

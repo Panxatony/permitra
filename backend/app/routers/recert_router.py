@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import audit
+from ..accounts import account_key
 from ..auth import require_roles
 from ..database import get_db
 from ..messages import _, render
@@ -96,9 +97,9 @@ def _known_accounts(db: Session) -> set[str]:
     """
     names: set[str] = set()
     for user in db.query(User).filter(User.is_active.is_(True)).all():
-        names.add(user.username.lower())
+        names.add(account_key(user.username))
         if user.full_name:
-            names.add(user.full_name.lower())
+            names.add(account_key(user.full_name))
     return names
 
 
@@ -109,7 +110,7 @@ def _item_out(item: RecertItem, known: set[str]) -> dict:
         "rule_id": rule.rule_id,
         "name": rule.name,
         "requestor": item.requestor,
-        "requestor_unknown": bool(item.requestor) and item.requestor.lower() not in known,
+        "requestor_unknown": bool(item.requestor) and account_key(item.requestor) not in known,
         "rule_status": rule.status.value,
         "valid_until": rule.valid_until,
         "decision": item.decision,

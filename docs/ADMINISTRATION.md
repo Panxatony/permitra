@@ -27,6 +27,14 @@ rather than a setting.
 - **2FA (TOTP)**: self-service on the account page (secret for authenticator apps, activation by code); login then asks for the code as a second factor. Implemented per RFC 6238 without extra dependencies.
 - **Passkeys (WebAuthn)**: registration on the account page, passwordless sign-in on the login page. Requires HTTPS (or localhost); configured via `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (default derived from `PERMITRA_BASE_URL`).
 
+## Excel import (one-off migration)
+
+`backend/import_excel.py` reads an existing communication matrix (one sheet, the AP0400 column layout) straight into the database. It is a migration tool, not an API: it runs on the server, skips the rule form's checks (zone derivation, zone matrix, mandatory fields) and writes `created_by = excel-import`.
+
+- **Status mapping is a trust decision**: rows marked *umgesetzt* are imported as **approved without a review**, *neu* goes straight into review, *deaktivieren*/*deaktiviert* become deactivated, anything else is a draft. The sheet is treated as the record of what was already decided; run a recertification campaign after the import if that is not the case.
+- **The requestor column is resolved to an account.** The four-eyes check keys on the requestor as an account username, so a typed name is matched against username, full name and e-mail address (case-insensitive) and stored as the username. A name that matches no account is kept as typed and listed at the end of the import; for such rules the requestor exclusion does not apply, and the recertification shows them as *requestor unknown* until a requestor handover assigns an account. `--requestor-map "Max Mustermann=mmustermann"` (repeatable) settles names the lookup cannot.
+- Rule IDs from the sheet are kept; a row whose ID already exists is skipped. `--wipe` removes all rules first. Rules go into the VRF named with `--vrf`, or the default (first) VRF.
+
 ## NetBox import (networks)
 
 Permitra manages only the **network→zone mapping**; the networks themselves live in a
