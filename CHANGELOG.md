@@ -4,6 +4,19 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Fixed: free text reached generated configuration unescaped.** A line
+  break in a justification, a name or a change ID ended the comment line it
+  sat in (Juniper set file, nft and bash host-firewall scripts, Check Point
+  `mgmt_cli` script) and made the rest the next statement; the Check Point
+  rule name sat inside double quotes on a shell line, where `$(...)` and
+  backticks are live; Aerleon zone headers took the zone name as typed. Every
+  comment line now goes through `comment_text()`, the rule name through
+  `shell_word()`, Aerleon zones through `sanitize_name()`. One-line rule
+  fields refuse control characters on input and are bounded to their column
+  widths; justification, description and info keep their line breaks and are
+  flattened only in the export. **Re-export after upgrading** if you apply
+  exports by hand. See EXPORTS.md, "Free text in generated configuration".
+
 - **Excel import: the requestor is resolved to an account.** The four-eyes
   check keys on the requestor as an account username; the import stored the
   typed name from the sheet, which matched no account, so the exclusion that

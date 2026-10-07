@@ -101,14 +101,29 @@ class RuleFields(BaseModel):
     log_level: RuleLogging = RuleLogging.detailed
     description: str = ""
     justification: str = ""
-    business_context: str = ""
+    business_context: str = Field("", max_length=256)
     info: str = ""
-    requestor: str = ""
-    owner: str = ""
-    change_id: str = ""
+    requestor: str = Field("", max_length=128)
+    owner: str = Field("", max_length=128)
+    change_id: str = Field("", max_length=128)
     valid_from: str | None = None
     valid_until: str | None = None
     impl_status: dict[str, str] = {}
+
+    @field_validator("name", "application", "app_id", "business_context", "requestor", "owner",
+                     "change_id", "source_zone", "destination_zone")
+    @classmethod
+    def single_line(cls, v, info):
+        """These are one-line values wherever they appear - a badge, a column,
+        a comment in generated configuration. A line break or another control
+        character in them has no legitimate reading, and in an export it ends
+        the statement it sits in. The multi-line fields (description,
+        justification, info) keep their line breaks; the exporters flatten
+        them on the way out (exporters.common.comment_text)."""
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+            raise ValueError(_("{field} must not contain line breaks or control characters",
+                               field=info.field_name))
+        return v.strip()
 
     @field_validator("vrf", mode="before")
     @classmethod
@@ -123,9 +138,11 @@ class RuleBase(BaseModel):
     follows from their type.
     """
 
-    name: str = ""
-    application: str = ""
-    app_id: str = ""
+    # Lengths follow the columns (models.Rule); the database default, SQLite,
+    # does not enforce them, PostgreSQL does.
+    name: str = Field("", max_length=128)
+    application: str = Field("", max_length=128)
+    app_id: str = Field("", max_length=64)
     vrf: str = ""              # environment/VRF; empty = default (first VRF)
     component_ids: list[int] = []
     source_zone: str = ""
@@ -144,14 +161,29 @@ class RuleBase(BaseModel):
     log_level: RuleLogging = RuleLogging.detailed
     description: str = ""
     justification: str = ""
-    business_context: str = ""
+    business_context: str = Field("", max_length=256)
     info: str = ""
-    requestor: str = ""
-    owner: str = ""
-    change_id: str = ""
+    requestor: str = Field("", max_length=128)
+    owner: str = Field("", max_length=128)
+    change_id: str = Field("", max_length=128)
     valid_from: str | None = None
     valid_until: str | None = None
     impl_status: dict[str, str] = {}
+
+    @field_validator("name", "application", "app_id", "business_context", "requestor", "owner",
+                     "change_id", "source_zone", "destination_zone")
+    @classmethod
+    def single_line(cls, v, info):
+        """These are one-line values wherever they appear - a badge, a column,
+        a comment in generated configuration. A line break or another control
+        character in them has no legitimate reading, and in an export it ends
+        the statement it sits in. The multi-line fields (description,
+        justification, info) keep their line breaks; the exporters flatten
+        them on the way out (exporters.common.comment_text)."""
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+            raise ValueError(_("{field} must not contain line breaks or control characters",
+                               field=info.field_name))
+        return v.strip()
 
     @field_validator("valid_from", "valid_until")
     @classmethod

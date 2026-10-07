@@ -11,7 +11,7 @@ Every line carries the SR ID as a comment (traceability/drift).
 from ..messages import _
 from ..models import IN_FORCE, Rule, RuleAction
 from ..validation import parse_network
-from .common import icmp_echo_only, service_ports, split_protocols
+from .common import comment_text, icmp_echo_only, service_ports, split_protocols
 
 HOST_OS = {
     "debian": ("nftables.conf", "Debian (nftables)"),
@@ -76,7 +76,9 @@ def _services(rule: Rule) -> list[tuple[str, str]]:
 
 
 def _comment(rule: Rule) -> str:
-    return f"{rule.rule_id} {rule.justification or rule.name}".strip()[:80]
+    # 80 characters was the only limit here; it does not stop a line break,
+    # and the line after a comment in an nft or bash script is a statement.
+    return comment_text(f"{rule.rule_id} {rule.justification or rule.name}", 80)
 
 
 def export_debian(target_ip: str, matched: list[tuple[Rule, bool]]) -> str:

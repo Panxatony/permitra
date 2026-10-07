@@ -657,6 +657,8 @@ CATALOG: dict[str, dict[str, str]] = {
             "{field}: mindestens ein Adress-Eintrag erforderlich",
         "{field}: at least one entry is required": "{field}: mindestens ein Eintrag erforderlich",
         "{label} contains a very broad network (/{pfx})": "{label} enthält ein sehr breites Netz (/{pfx})",
+        "{field} must not contain line breaks or control characters":
+            "{field} darf keine Zeilenumbrüche oder Steuerzeichen enthalten",
         "{label} spans several zones ({zones}) – split the rule":
             "{label} umfasst mehrere Zonen ({zones}) – bitte aufteilen",
         "{label} spans several zones: {zones}": "{label} umfasst mehrere Zonen: {zones}",
