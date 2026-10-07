@@ -497,6 +497,11 @@ CATALOG: dict[str, dict[str, str]] = {
             "Zone mit ID '{code}' oder Name '{name}' existiert bereits",
         "Address object '{name}' already exists": "Adress-Objekt '{name}' existiert bereits",
         "Address object '{name}': IP {old_ip} → {new_ip}": "Adress-Objekt '{name}': IP {old_ip} → {new_ip}",
+        "Address object '{name}': IP {old_ip} → {new_ip} – the approval is withdrawn, the rule needs a new review":
+            "Adress-Objekt '{name}': IP {old_ip} → {new_ip} – die Freigabe ist zurückgezogen, die Regel braucht eine neue Prüfung",
+        "Address object '{name}': the new IP {ip} would leave rule(s) inadmissible – {problems}":
+            "Adress-Objekt '{name}': die neue IP {ip} würde Regel(n) unzulässig machen – {problems}",
+        "Unknown status '{status}'": "Unbekannter Status '{status}'",
         "Aerleon generation failed: {error}": "Aerleon-Generierung fehlgeschlagen: {error}",
         "Anchored entry {event_id} is missing – the chain was truncated after the checkpoint of {ts:%Y-%m-%d %H:%M}":
             "Verankerter Eintrag {event_id} fehlt – die Kette wurde nach dem Prüfpunkt vom {ts:%d.%m.%Y %H:%M} gekürzt",

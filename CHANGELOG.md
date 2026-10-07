@@ -18,6 +18,26 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
   reverse proxy, extend its sign-in rate limit to that path.** An admin's
   *send reset* on an inactive account now issues an activation link.
 
+- **Changing an address object no longer rewrites approved rules unreviewed.**
+  The new IP was written into every rule carrying the alias with no further
+  look: zones stayed as they were, the matrix was not asked, and the approval
+  stood - an architect or operations account could point an approved rule at a
+  new target without anyone approving it. The new address now faces the same
+  checks as an edit of the rule, a rule it would leave inadmissible refuses the
+  whole object change naming the rule, and a rule in force goes back to draft
+  for a new review.
+
+- **ACI export: rules without an EPG mapping are no longer exported as
+  contracts.** A contract no EPG provides or consumes enforces nothing, but it
+  carried the SR ID, so the drift comparison read the rule as implemented.
+  Such rules are named in the warnings and in the tenant description instead,
+  and the drift report shows them as *missing* until their addresses are mapped.
+
+- **`GET /api/rules` takes several statuses** (`status=approved,active`). The
+  documented Ansible/Terraform examples polled `approved` alone and lost every
+  rule the moment operations marked it implemented, because it had become
+  `active`. **Check your automation's query** - the examples now ask for both.
+
 - **Changed: CORS is off unless configured.** `PERMITRA_CORS_ORIGINS` used to
   fall back to three localhost development origins on every installation that
   did not set it. The shipped setup is same-origin and the Vite dev server

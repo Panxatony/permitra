@@ -20,6 +20,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base
 from app.drift import analyze_drift
 from app.models import (
+    AddressComponentMap,
     AddressObject,
     ComponentActualConfig,
     ComponentType,
@@ -46,6 +47,9 @@ def db():
     s.add(Zone(id=2, code="Z020", name="PROD", sort_order=20))
     s.add(ZoneNetwork(zone_id=1, vrf_id=1, cidr="10.0.0.0/24"))
     s.add(ZoneNetwork(zone_id=2, vrf_id=1, cidr="10.0.1.0/24"))
+    # An address change re-resolves the components of the rules it touches.
+    s.add(AddressComponentMap(vrf_id=1, ip="10.0.0.0/24", component_ids=[1]))
+    s.add(AddressComponentMap(vrf_id=1, ip="10.0.1.0/24", component_ids=[1]))
     s.commit()
     yield s
     s.close()

@@ -12,7 +12,7 @@ The ACI export models contracts idiomatically instead of "one contract per rule"
 - **Aggregation**: source → consumer, target → provider; all rules of a (consumer EPG, provider EPG) pair become **one contract** with one subject per filter — avoiding contract/TCAM explosion in the fabric.
 - **Filter reuse**: services are resolved against the service object catalog (`flt-https` instead of one duplicate per rule) and deduplicated across contracts.
 - **Service graph / PBR**: if the provider EPG's bridge domain carries an anycast gateway with PBR, the subject references its service graph template.
-- **EPG bindings**: the APIC JSON export contains `fvAp`/`fvAEPg` with provider/consumer references; SR IDs are kept in subject descriptions for traceability/drift. Rules without an EPG mapping fall back to single contracts and are listed in the warnings.
+- **EPG bindings**: the APIC JSON export contains `fvAp`/`fvAEPg` with provider/consumer references; SR IDs are kept in subject descriptions for traceability/drift. Rules without an EPG mapping are **not exported**: a contract no EPG provides or consumes enforces nothing, and because it carried the SR ID the drift comparison used to read it as implemented. They are named in the warnings, in the tenant description of the APIC JSON and under `not_exported_without_epg` in the YAML, and the drift report lists them as *missing* until their addresses are mapped.
 
 ## ICMP: echo is not "every ICMP type"
 

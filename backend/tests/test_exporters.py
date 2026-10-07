@@ -108,15 +108,16 @@ def test_checkpoint_host_object():
     assert '"name": "web01.example.de"' in out
 
 
-def test_aci_export_legacy_fallback():
-    # Without a DB/EPG mapping: single-contract fallback per rule
+def test_aci_export_without_epg_mapping_names_the_rule_instead_of_a_contract():
+    # Without a DB/EPG mapping nothing can bind a contract, so none is written;
+    # the rule is named in the tenant description instead.
     out_json = aci.export_json([make_rule()])
     assert '"fvTenant"' in out_json
-    assert '"vzBrCP"' in out_json
-    assert 'con-SR0900' in out_json
-    assert '"dFromPort": "443"' in out_json
+    assert '"vzBrCP"' not in out_json
+    assert "not exported" in out_json
+    assert "SR0900" in out_json
     out_yaml = aci.export_yaml([make_rule()])
-    assert "legacy_rules_without_epg:" in out_yaml
+    assert "not_exported_without_epg:" in out_yaml
     assert "SR0900" in out_yaml
 
 

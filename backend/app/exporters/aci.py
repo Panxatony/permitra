@@ -128,8 +128,12 @@ def build_contract_model(rules: list[Rule], db) -> dict:
         providers = {p for p in providers if p != "vzAny"}  # vzAny as provider makes no sense
         if not src_ok or not dst_ok or not consumers or not providers:
             legacy.append(rule)
+            # Not exported. A contract nothing provides or consumes enforces
+            # nothing, yet it carried the SR ID - so the drift comparison read
+            # it as implemented. Left out, the rule shows up as *missing*
+            # there, which is what it is until its addresses are mapped.
             warnings.append(
-                f"{rule.rule_id}: addresses without an EPG mapping – exported as a single contract"
+                f"{rule.rule_id}: addresses without an EPG mapping – not exported"
             )
             continue
 
@@ -189,31 +193,6 @@ def build_contract_model(rules: list[Rule], db) -> dict:
         "legacy": legacy,
         "warnings": warnings,
     }
-
-
-# --- Legacy fallback (rule without EPG mapping) -------------------------------
-
-def _legacy_tree(rule: Rule) -> list[dict]:
-    flt_name = sanitize_name(f"flt-{rule.rule_id}")
-    entries = []
-    for svc in rule.services or []:
-        entries.extend(_filter_entries_for_service(svc))
-    return [
-        {"vzFilter": {"attributes": {"name": flt_name, "descr": (rule.justification or "")[:128]},
-                      "children": [{"vzEntry": {"attributes": e}} for e in entries]}},
-        {"vzBrCP": {"attributes": {"name": sanitize_name(f"con-{rule.rule_id}"), "scope": "context",
-                                   "descr": f"{rule.rule_id} | no EPG mapping"[:128]},
-                    "children": [{"vzSubj": {"attributes": {"name": f"subj-{sanitize_name(rule.rule_id)}",
-                                                            "revFltPorts": "yes"},
-                                             "children": [{"vzRsSubjFiltAtt": {"attributes": {
-                                                 "tnVzFilterName": flt_name,
-                                                 # A rule without an EPG mapping falls back to its
-                                                 # own contract - it still has a logging setting,
-                                                 # and dropping it here would lose the attribute for
-                                                 # exactly the rules nobody has modelled properly.
-                                                 "directives": "log" if rule.effective_log_level != RuleLogging.none else "",
-                                             }}}]}}]}},
-    ]
 
 
 # --- Exports ------------------------------------------------------------------
@@ -278,14 +257,17 @@ def export_json(rules: list[Rule], db=None) -> str:
     for ap, epgs in sorted(by_ap.items()):
         children.append({"fvAp": {"attributes": {"name": ap}, "children": epgs}})
 
-    for rule in model["legacy"]:
-        children.extend(_legacy_tree(rule))
-
+    # The APIC document has no room for a warning list, so the rules that are
+    # not in it are named where an engineer looks first: the tenant description.
+    descr = "Permitra Export"
+    if model["legacy"]:
+        descr = ("Permitra Export; not exported (no EPG mapping): "
+                 + ", ".join(sorted(r.rule_id for r in model["legacy"])))[:128]
     doc = {
         "fvTenant": {
             "attributes": {
                 "name": model["tenant"],
-                "descr": "Permitra Export",
+                "descr": descr,
                 "annotation": f"permitra-warnings:{len(model['warnings'])}",
             },
             "children": children,
@@ -316,7 +298,7 @@ def export_yaml(rules: list[Rule], db=None) -> str:
             }
             for c in sorted(model["contracts"], key=lambda c: c["name"])
         ],
-        "legacy_rules_without_epg": [r.rule_id for r in model["legacy"]],
+        "not_exported_without_epg": [r.rule_id for r in model["legacy"]],
         "warnings": model["warnings"],
     }
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
