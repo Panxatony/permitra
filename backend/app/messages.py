@@ -390,8 +390,8 @@ CATALOG: dict[str, dict[str, str]] = {
         "Rule set to deleted": "Regel auf gelöscht gesetzt",
         "SECRET_KEY is not set – startup refused (fail-secure). Set SECRET_KEY (e.g. `openssl rand -hex 32`) or PERMITRA_DEV=1 for local development.":
             "SECRET_KEY ist nicht gesetzt – Start verweigert (fail-secure). Setze SECRET_KEY (z.B. `openssl rand -hex 32`) oder PERMITRA_DEV=1 für lokale Entwicklung.",
-        "Separation of duties: you cannot approve a rule you requested, created or submitted yourself":
-            "Vier-Augen-Prinzip: selbst beantragte, angelegte oder eingereichte Regeln "
+        "Separation of duties: you cannot approve a rule you requested, created, edited or submitted yourself":
+            "Vier-Augen-Prinzip: selbst beantragte, angelegte, bearbeitete oder eingereichte Regeln "
             "können nicht selbst freigegeben werden",
         "Separation of duties: you cannot approve your own request":
             "Vier-Augen-Prinzip: eigene Anträge können nicht selbst freigegeben werden",

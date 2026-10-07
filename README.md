@@ -48,7 +48,7 @@ teams do not have four people for four roles. This does not soften separation of
 duties, because the four-eyes checks key on the acting *account*, not on a role:
 
 - an account holding both `architect` and `change_approver` still cannot approve
-  a rule it requested, created or submitted (it may approve everyone else's), and
+  a rule it requested, created, edited or submitted (it may approve everyone else's), and
 - the two approvals on a zone, network or matrix change must come from two
   different accounts, so one multi-role account cannot supply both.
 

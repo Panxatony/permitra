@@ -4,6 +4,17 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Fixed: the four-eyes check excluded only the newest writer.** Whoever
+  requested or created a rule could not approve it, nor could the writer of
+  its newest version - and nobody else was excluded. An architect who edited
+  the draft could approve it once somebody else had submitted; the submitter
+  could approve once any later version (an implementation status, a
+  handover, an address propagation) had replaced them as newest. The
+  excluded set is now the current review cycle: creator, requestor, and
+  everyone who wrote a version or was requestor since the last decision
+  closed the previous cycle. Versions by the expiry job or the import count
+  for nobody. Names are compared case-insensitively, as everywhere else now.
+
 - **Fixed: free text reached generated configuration unescaped.** A line
   break in a justification, a name or a change ID ended the comment line it
   sat in (Juniper set file, nft and bash host-firewall scripts, Check Point

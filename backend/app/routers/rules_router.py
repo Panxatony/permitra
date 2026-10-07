@@ -1386,31 +1386,67 @@ def submit_for_review(
     return rule
 
 
+# Actors that write versions without being a person who shaped the content:
+# the expiry job, the Excel import. They never count as involved.
+_SYSTEM_ACTORS = {"system", "excel-import"}
+# A version carrying one of these statuses records a decision that closed a
+# review cycle; what was written before it is history, not the content now
+# under review.
+_CYCLE_CLOSED = {RuleStatus.approved.value, RuleStatus.active.value, RuleStatus.rejected.value,
+                 RuleStatus.deactivated.value, RuleStatus.deleted.value}
+
+
+def accounts_involved(rule: Rule) -> set[str]:
+    """Every account that shaped the content under review, as account keys.
+
+    Separation of duties used to exclude three names: the creator, the
+    current requestor and the writer of the newest version. Everyone else
+    could approve - including whoever edited the draft before somebody else
+    submitted it, and the submitter themselves once any later version (an
+    implementation status, a handover, an address propagation) had replaced
+    them as "newest". The set is now the current review cycle: the creator,
+    the current requestor, and whoever wrote a version or was requestor since
+    the last decision closed a cycle. A version by a system actor neither
+    counts nor clears anyone.
+    """
+    versions = sorted(rule.versions, key=lambda v: v.version)
+    cycle: list = []
+    for v in versions:
+        if (v.snapshot or {}).get("status") in _CYCLE_CLOSED:
+            cycle = []
+        else:
+            cycle.append(v)
+    names = {rule.created_by, rule.requestor}
+    for v in cycle:
+        names.add(v.changed_by)
+        names.add((v.snapshot or {}).get("requestor"))
+    if not cycle and versions:
+        # A rule with no version since its last decision is a legacy or an
+        # imported record; the newest writer is the best available answer.
+        names.add(versions[-1].changed_by)
+    return {account_key(n) for n in names if account_key(n) and account_key(n) not in _SYSTEM_ACTORS}
+
+
 def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus, note: str):
     rule = get_rule_or_404(db, rule_id)
     if new_status in (RuleStatus.approved, RuleStatus.rejected) and rule.status != RuleStatus.in_review:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("The rule is not in review"))
-    # Four-eyes principle: whoever requested, submitted or created the rule must
-    # not approve it themselves (admins included) – BSI separation of duties.
+    # Four-eyes principle: whoever requested, created, edited or submitted the
+    # content under review must not approve it (admins included) – BSI
+    # separation of duties. See accounts_involved() for what "involved" means.
     #
     # The check is on the acting *account*, which is what makes it survive
     # multi-role accounts (#78): one person holding architect and change_approver
     # still cannot approve their own rule, because it is the same account on both
-    # sides. They may approve everyone else's.
-    if new_status == RuleStatus.approved:
-        last_version = max(rule.versions, key=lambda v: v.version, default=None)
-        submitter = last_version.changed_by if last_version else rule.created_by
-        # Compared the way every other place compares names (accounts.py):
-        # a requestor that reached the rule through an import or an older
-        # record may differ from the account only in case, and that must not
-        # be the difference between refused and approved.
-        involved = {account_key(name) for name in (submitter, rule.created_by, rule.requestor)}
-        if account_key(user.username) in involved:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                _("Separation of duties: you cannot approve a rule you requested, "
-                  "created or submitted yourself"),
-            )
+    # sides. They may approve everyone else's. Names are compared the way every
+    # other place compares them (accounts.py), so a requestor that reached the
+    # rule through an import differing only in case is still the same person.
+    if new_status == RuleStatus.approved and account_key(user.username) in accounts_involved(rule):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            _("Separation of duties: you cannot approve a rule you requested, "
+              "created, edited or submitted yourself"),
+        )
     # If the rule's zone relation is set to block (e.g. after a change to the zone
     # matrix), "approve" means approving its removal: the rule is deactivated and
     # set to "to remove" for each component – so it shows up for operations as a
