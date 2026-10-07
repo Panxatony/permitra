@@ -281,7 +281,8 @@ def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_u
 
 
 @router.post("/totp/enable")
-def totp_enable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def totp_enable(request: Request, payload: dict, db: Session = Depends(get_db),
+                user: User = Depends(get_current_user)):
     if not user.totp_secret:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("Start the setup first"))
     counter = totp.verify(crypto.decrypt(user.totp_secret, "totp"), payload.get("code") or "",
@@ -291,19 +292,22 @@ def totp_enable(payload: dict, db: Session = Depends(get_db), user: User = Depen
     user.totp_last_counter = counter
     user.totp_enabled = True
     db.commit()
-    audit.record(db, "auth", "auth.totp_enabled", actor=user.username)
+    audit.record(db, "auth", "auth.totp_enabled", actor=user.username,
+                 source_ip=audit.client_ip(request))
     return {"detail": _("Two-factor authentication enabled")}
 
 
 @router.post("/totp/disable")
-def totp_disable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def totp_disable(request: Request, payload: dict, db: Session = Depends(get_db),
+                 user: User = Depends(get_current_user)):
     if not verify_password(payload.get("password") or "", user.password_hash):
         raise HTTPException(status.HTTP_403_FORBIDDEN, _("The password is wrong"))
     user.totp_enabled = False
     user.totp_secret = None
     user.totp_last_counter = None
     db.commit()
-    audit.record(db, "auth", "auth.totp_disabled", actor=user.username)
+    audit.record(db, "auth", "auth.totp_disabled", actor=user.username,
+                 source_ip=audit.client_ip(request))
     return {"detail": _("Two-factor authentication disabled")}
 
 

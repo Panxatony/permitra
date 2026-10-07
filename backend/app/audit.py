@@ -115,7 +115,8 @@ def client_ip(request) -> str:
     if request is None or request.client is None:
         return ""
     peer = request.client.host
-    fwd = request.headers.get("x-forwarded-for", "")
+    headers = getattr(request, "headers", None)
+    fwd = headers.get("x-forwarded-for", "") if headers is not None else ""
     if not fwd:
         return peer
     try:

@@ -134,7 +134,7 @@ Recommended for production: a managed PostgreSQL service or operator (e.g. Cloud
 
 ## Hardening (before production use)
 
-1. **SECRET_KEY is mandatory** — the app refuses to start without it (fail-secure). Generate with `openssl rand -hex 32`. Do **not** set `PERMITRA_DEMO`; leave it unset in production so no known demo accounts are created — instead a single `admin` with a random password is created on first start and printed once to the log (change it immediately). `PERMITRA_DEV=1` is for local development only (random per-process key).
+1. **SECRET_KEY is mandatory** — the app refuses to start without it (fail-secure). Generate with `openssl rand -hex 32`. Do **not** set `PERMITRA_DEMO`; leave it unset in production so no known demo accounts are created — instead a single `admin` with a random password is created on first start; the password is taken from `PERMITRA_INITIAL_ADMIN_PASSWORD` or written to a file with mode 0600 whose path is logged, never the password itself (change it immediately). `PERMITRA_DEV=1` is for local development only (random per-process key).
 2. Terminate **TLS** (reverse proxy/ingress); HTTP internal only. Passkeys/WebAuthn require HTTPS.
 3. Restrict **CORS** via `PERMITRA_CORS_ORIGINS` (comma-separated) to the real frontend origin; a wildcard is intentionally rejected (credentials are enabled).
 4. Enable **2FA/passkeys** for accounts, or connect **LDAP/AD** instead of local accounts (extension point: `auth.py`).

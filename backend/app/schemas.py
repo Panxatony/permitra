@@ -543,6 +543,11 @@ class ResolveRequest(BaseModel):
     source_zone: str = ""
     destination_zone: str = ""
     vrf: str = ""
+    # For the live risk assessment: what the rule would log and whether it
+    # declares itself the ping baseline - both change the verdict.
+    log_level: RuleLogging = RuleLogging.detailed
+    ping_baseline: bool = False
+    action: RuleAction = RuleAction.permit
 
 
 class ResolveOut(BaseModel):

@@ -971,7 +971,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                     # Re-run the integrity check at application time (fail-secure)
                     # Deliberately including soft-deleted rules (see above)
                     used = db.query(Rule).filter(
-                        (Rule.source_zone.ilike(zone.name)) | (Rule.destination_zone.ilike(zone.name))
+                        (Rule.source_zone.ilike(zone_ref(zone))) | (Rule.destination_zone.ilike(zone_ref(zone)))
                     ).count()
                     nets = db.query(ZoneNetwork).filter(ZoneNetwork.zone_id == zone.id).count()
                     if used or nets:
@@ -1042,7 +1042,10 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                 values = {"from_zone": zone_a.name, "to_zone": zone_b.name,
                           "request": change.batch_id[:8]}
                 note = render(template, values)
-                for rule in _affected_rules(db, zone_a.name, zone_b.name,
+                # Rules store the zone *reference* (the code, since rules
+                # reference zones by code) - the preview above asks by it,
+                # and asking here by name found nothing for every coded zone.
+                for rule in _affected_rules(db, zone_ref(zone_a), zone_ref(zone_b),
                                             statuses=IN_FORCE):
                     rule.status = RuleStatus.in_review
                     rule.version += 1

@@ -4,6 +4,21 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Fixes from the functional review of 2026-10-07.** A zone relation set
+  from Allow to Block did not send the relation's rules back into review
+  (the decision asked by zone name, rules store the code; the re-check on
+  zone deletion had the same flaw). The four-eyes set treated any version
+  carrying an approved status as a decision, so a requestor who handed an
+  approved rule over could approve its next revision; a cycle now ends only
+  on a transition into a decision. The live risk assessment for a draft
+  answered 500. A configuration in a format Permitra cannot read reported
+  `in_sync: true`; it never does now. Deny and reject rules are not rendered
+  as (permitting) ACI contracts. Approving a removal closes an emergency
+  window; deactivating a rule in force marks its components *to remove*.
+  `auth.totp_enabled/disabled` and `rule.deleted` record the source address
+  like every other event. The implementation view treats `active` as in
+  force and says so for platforms Permitra generates nothing for.
+
 - **Change-management webhook: every lifecycle step, retries, a signature,
   and a write-back that keeps the approval.** The webhook fired on submit,
   approve, reject and zone decisions only; an emergency declaration, an

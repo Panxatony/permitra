@@ -346,8 +346,8 @@ CATALOG: dict[str, dict[str, str]] = {
             "Für folgende Adressen ist noch keine Komponenten-Zuordnung festgelegt: ",
         "No enforcing components could be determined":
             "Es konnten keine Umsetzungs-Komponenten ermittelt werden",
-        "No EPG mapping maintained for source/destination – the export falls back to a single contract. Maintain it on the Objects page under ACI EPGs.":
-            "Keine EPG-Zuordnung für Quelle/Ziel gepflegt – Export erfolgt als Einzel-Contract (Fallback). EPG-Zuordnung: Seite Objekte → ACI EPGs.",
+        "No EPG mapping maintained for source/destination – the rule is not exported to the fabric. Maintain it on the Objects page under ACI EPGs.":
+            "Keine EPG-Zuordnung für Quelle/Ziel gepflegt – die Regel wird nicht in die Fabric exportiert. EPG-Zuordnung auf der Objekte-Seite unter ACI EPGs pflegen.",
         "No mail delivery configured – pass on the activation link manually":
             "Kein Mailversand konfiguriert – Aktivierungslink bitte manuell übermitteln",
         "No mail delivery configured – pass on the reset link manually":
@@ -514,6 +514,8 @@ CATALOG: dict[str, dict[str, str]] = {
         "Address object '{name}' already exists": "Adress-Objekt '{name}' existiert bereits",
         "Address object '{name}': IP {old_ip} → {new_ip}": "Adress-Objekt '{name}': IP {old_ip} → {new_ip}",
         "Change ID set to {change_id}": "Change-ID gesetzt auf {change_id}",
+        "Permitra generates nothing for {platform} – the implementation is documented in the platform itself":
+            "Permitra erzeugt für {platform} nichts – die Umsetzung wird in der Plattform selbst dokumentiert",
         "{previous} → {change_id}": "{previous} → {change_id}",
         "Address object '{name}': IP {old_ip} → {new_ip} – the approval is withdrawn, the rule needs a new review":
             "Adress-Objekt '{name}': IP {old_ip} → {new_ip} – die Freigabe ist zurückgezogen, die Regel braucht eine neue Prüfung",

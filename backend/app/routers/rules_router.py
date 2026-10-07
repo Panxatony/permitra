@@ -1291,7 +1291,7 @@ def delete_rule(
     db.commit()
     audit.record(db, "rule", "rule.deleted", actor=user.username, object=rule.rule_id,
                  detail="Rule deleted (soft delete): {name}", detail_values={"name": rule.name},
-                 source_ip=(request.client.host if request and request.client else ""))
+                 source_ip=audit.client_ip(request))
 
 
 # --- Review workflow ---------------------------------------------------------
@@ -1419,11 +1419,20 @@ def accounts_involved(rule: Rule) -> set[str]:
     """
     versions = sorted(rule.versions, key=lambda v: v.version)
     cycle: list = []
+    previous = RuleStatus.draft.value
     for v in versions:
-        if (v.snapshot or {}).get("status") in _CYCLE_CLOSED:
+        current = (v.snapshot or {}).get("status")
+        # A decision is the *transition* into a closed status. A version that
+        # merely carries one - a handover, a ticket number, an extension, an
+        # implementation report written while the rule was in force - is no
+        # decision, and treating it as one cleared everybody before it: a
+        # requestor who handed over an approved rule could approve its next
+        # revision.
+        if current in _CYCLE_CLOSED and previous not in _CYCLE_CLOSED:
             cycle = []
         else:
             cycle.append(v)
+        previous = current if current is not None else previous
     names = {rule.created_by, rule.requestor}
     for v in cycle:
         names.add(v.changed_by)
@@ -1498,6 +1507,10 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
                 note_values = {"from_zone": rule.source_zone,
                                "to_zone": rule.destination_zone}
             rule.removal_reason = ""   # the proposal has been decided
+            # This return skips the common tail below, where every decision
+            # closes an emergency window; without it the dashboard kept
+            # counting the removed rule as a pending emergency change.
+            rule.emergency_approval_due = None
             add_version(db, rule, user, note_template, **note_values)
             # The comment and the mail below are written now and read as they
             # were written, so those do get the language of the moment.
@@ -1517,7 +1530,17 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
             notifications.rule_implementation_pending(
                 db, rule, _("Removal approved – remove the rule on the components"))
             return rule
+    was_in_force = rule.status in IN_FORCE
     rule.status = new_status
+    if new_status == RuleStatus.deactivated and was_in_force:
+        # A rule in force stands on the devices. Deactivating it in Permitra
+        # does not take it off them, so the components show the removal as
+        # open work - as every other path out of service does.
+        rule.impl_status = {
+            **(rule.impl_status or {}),
+            **{c.name: "to remove" for c in rule.components
+               if (rule.impl_status or {}).get(c.name) not in ("deactivated", "new", "open")},
+        }
     if new_status == RuleStatus.approved:
         # Components already implemented have to be adjusted by operations after a
         # renewed approval -> implementation status "to change"
@@ -1759,7 +1782,15 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _user: User = De
                 line for line in lines
                 if line.startswith(("mgmt_cli add", "#")) and not line.startswith("#!")
             )
-        else:  # aci
+        elif component.type.value != "aci":
+            # A micro-segmentation platform Permitra generates nothing for:
+            # the implementation is documented, not rendered.
+            entry["format"] = "none"
+            entry["preview"] = ""
+            entry["note"] = _("Permitra generates nothing for {platform} – the implementation "
+                              "is documented in the platform itself",
+                              platform=component.platform or component.type.value)
+        else:
             model = aci.build_contract_model([rule], db)
             entry["format"] = "yaml"
             entry["preview"] = aci.export_yaml([rule], db)
@@ -1775,11 +1806,11 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _user: User = De
             else:
                 entry["aci"] = None
                 entry["warning"] = _(
-                    "No EPG mapping maintained for source/destination – the export falls back "
-                    "to a single contract. Maintain it on the Objects page under ACI EPGs."
+                    "No EPG mapping maintained for source/destination – the rule is not "
+                    "exported to the fabric. Maintain it on the Objects page under ACI EPGs."
                 )
         results.append(entry)
-    if rule.status.value != "approved":
+    if rule.status not in IN_FORCE:
         for entry in results:
             entry.setdefault(
                 "note", _("The rule is in status '{status}' – the preview shows the future implementation",
@@ -1855,5 +1886,11 @@ def risk_assess(payload: ResolveRequest, db: Session = Depends(get_db),
         source_zone=payload.source_zone or "",
         destination_zone=payload.destination_zone or "",
         vrf_id=vrf_obj.id,
+        # assess_rule reads these as it does on a stored rule; a draft without
+        # them answered 500, so the form had no live assessment at all.
+        effective_log_level=payload.log_level,
+        log_level=payload.log_level,
+        ping_baseline=payload.ping_baseline,
+        action=payload.action,
     )
     return assess_rule(db, draft)
