@@ -1,5 +1,6 @@
 #!/bin/sh
-# Generates the sign-in rate limit at container startup.
+# Generates the rate limit for the sign-in and the forgotten-password
+# request at container startup.
 #
 # The account lockout in the application protects one account at a time. This
 # limit is the other half: it slows down someone spreading a few guesses across

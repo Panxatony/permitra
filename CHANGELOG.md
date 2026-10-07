@@ -4,6 +4,20 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Forgotten-password requests are rate-limited and no longer reactivate
+  accounts.** `/api/auth/forgot` sent a mail for every request from anyone,
+  which made it a way to flood a mailbox and the operator's relay, and it did
+  not look at whether the account was deactivated - `set-password` then
+  activated it, so a deactivated user could let themselves back in. Now: at
+  most `FORGOT_MAX_REQUESTS` (default 5) per source address and one mail per
+  account within `FORGOT_WINDOW_MINUTES` (default 15), the response stays the
+  same either way, every request is recorded as `auth.reset_requested` with its
+  outcome, a new link replaces the previous unused one, deactivated accounts
+  get no link, and only an activation link activates. The shipped nginx applies
+  `PERMITRA_LOGIN_RATE` to `/api/auth/forgot` as well. **If you run your own
+  reverse proxy, extend its sign-in rate limit to that path.** An admin's
+  *send reset* on an inactive account now issues an activation link.
+
 - **Changing an address object no longer rewrites approved rules unreviewed.**
   The new IP was written into every rule carrying the alias with no further
   look: zones stayed as they were, the matrix was not asked, and the approval

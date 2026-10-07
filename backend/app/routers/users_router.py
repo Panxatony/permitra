@@ -23,8 +23,18 @@ TOKEN_HOURS = {"activate": 72, "reset": 2}
 
 
 def issue_token(db: Session, user: User, purpose: str) -> str:
-    """Create a one-time token (only its hash is stored) and return the link."""
+    """Create a one-time token (only its hash is stored) and return the link.
+
+    A new link replaces any earlier unused one of the same purpose. Otherwise
+    every request would leave another valid token behind for its full lifetime,
+    and the number of links that open an account would grow with the number of
+    times someone asked.
+    """
     raw = secrets.token_urlsafe(32)
+    (db.query(AuthToken)
+       .filter(AuthToken.user_id == user.id, AuthToken.purpose == purpose,
+               AuthToken.used == False)  # noqa: E712
+       .update({AuthToken.used: True}))
     db.add(AuthToken(
         user_id=user.id, purpose=purpose,
         token_hash=hashlib.sha256(raw.encode()).hexdigest(),
@@ -165,12 +175,21 @@ def send_reset(
     db: Session = Depends(get_db),
     _user: User = Depends(require_roles(Role.admin)),
 ):
-    """An admin triggers a password reset (e.g. when the user has lost access)."""
+    """An admin triggers a password reset (e.g. when the user has lost access).
+
+    For an account that is not active this is an activation link: a reset link
+    no longer activates anything, and the admin asking for it is the one who
+    decides that this account may sign in.
+    """
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _("User not found"))
-    link = issue_token(db, user, "reset")
-    mail_sent = mailer.reset_mail(user, link)
+    if user.is_active:
+        link = issue_token(db, user, "reset")
+        mail_sent = mailer.reset_mail(user, link)
+    else:
+        link = issue_token(db, user, "activate")
+        mail_sent = mailer.activation_mail(user, link)
     return {
         "reset_link": link,
         "mail_sent": mail_sent,

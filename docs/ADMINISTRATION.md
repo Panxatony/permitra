@@ -23,7 +23,7 @@ rather than a setting.
   PERMITRA_BASE_URL=https://permitra.example.org   # base for links in emails
   ```
 
-- **Forgot password** on the login page (reset link, valid 2h; responses never reveal whether an account exists). Account page: change password.
+- **Forgot password** on the login page (reset link, valid 2h; responses never reveal whether an account exists, not even when a request was dropped for rate limiting). A new link replaces the previous unused one. A reset link only changes the password: a **deactivated account stays deactivated** and gets no link at all, so the flow cannot undo an admin's decision. The admin's *send reset* on an inactive account therefore issues an activation link instead. Account page: change password.
 - **2FA (TOTP)**: self-service on the account page (secret for authenticator apps, activation by code); login then asks for the code as a second factor. Implemented per RFC 6238 without extra dependencies.
 - **Passkeys (WebAuthn)**: registration on the account page, passwordless sign-in on the login page. Requires HTTPS (or localhost); configured via `PERMITRA_RP_ID`/`PERMITRA_ORIGIN` (default derived from `PERMITRA_BASE_URL`).
 

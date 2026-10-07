@@ -134,6 +134,12 @@ CATALOG: dict[str, dict[str, str]] = {
         "Account activated – you can sign in now": "Konto aktiviert – du kannst dich jetzt anmelden",
         "account deactivated": "Konto deaktiviert",
         "account locked": "Konto gesperrt",
+        # Outcomes of a forgotten-password request, as recorded in the audit log
+        "sent": "versendet",
+        "unknown account": "unbekanntes Konto",
+        "no mail address": "keine E-Mail-Adresse",
+        "rate limited": "Limit pro Quelladresse erreicht",
+        "cooldown": "Wartezeit pro Konto läuft",
         "Account temporarily locked – try again later":
             "Konto vorübergehend gesperrt – bitte später erneut versuchen",
         "ACI gateway not found": "ACI Gateway nicht gefunden",
