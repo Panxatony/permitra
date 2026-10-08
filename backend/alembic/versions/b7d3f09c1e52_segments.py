@@ -14,6 +14,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = 'b7d3f09c1e52'
 down_revision: Union[str, Sequence[str], None] = 'a9c4e71d2b58'
@@ -40,14 +41,18 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_segments_zone_id'), ['zone_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_segments_group_id'), ['group_id'], unique=False)
     # The policy enum already exists (zone_policies); on PostgreSQL the column
-    # reuses it, which is why create_type is off.
+    # has to reuse it without creating it again, which only the dialect's
+    # ENUM with create_type=False guarantees.
+    bind = op.get_bind()
+    policy_type = (postgresql.ENUM(name='zonepolicytype', create_type=False)
+                   if bind.dialect.name == "postgresql"
+                   else sa.Enum('allow_only', 'block_all', name='zonepolicytype'))
     op.create_table(
         'segment_policies',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('from_segment_id', sa.Integer(), nullable=False),
         sa.Column('to_segment_id', sa.Integer(), nullable=False),
-        sa.Column('policy', sa.Enum('allow_only', 'block_all', name='zonepolicytype', create_type=False),
-                  nullable=False, server_default='block_all'),
+        sa.Column('policy', policy_type, nullable=False, server_default='block_all'),
         sa.Column('note', sa.Text(), nullable=False, server_default=''),
         sa.ForeignKeyConstraint(['from_segment_id'], ['segments.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['to_segment_id'], ['segments.id'], ondelete='CASCADE'),

@@ -14,6 +14,7 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = 'a9c4e71d2b58'
 down_revision: Union[str, Sequence[str], None] = 'f3a7c21d9e40'
@@ -25,16 +26,26 @@ GROUP_KIND = sa.Enum('static', 'selector', name='groupkind')
 
 
 def upgrade() -> None:
+    # On PostgreSQL the enum types are created once, explicitly, and the
+    # columns refer to them without creating them again (create_type=False):
+    # letting the table creation create them as well failed the fresh
+    # database in CI with "type already exists", and letting only the table
+    # create them fails a re-upgrade after a downgrade. The downgrade drops
+    # them, because dropping the tables does not.
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
         WORKLOAD_KIND.create(bind, checkfirst=True)
         GROUP_KIND.create(bind, checkfirst=True)
+        workload_kind = postgresql.ENUM(name='workloadkind', create_type=False)
+        group_kind = postgresql.ENUM(name='groupkind', create_type=False)
+    else:
+        workload_kind, group_kind = WORKLOAD_KIND, GROUP_KIND
     op.create_table(
         'workloads',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('vrf_id', sa.Integer(), nullable=False),
         sa.Column('name', sa.String(length=128), nullable=False),
-        sa.Column('kind', WORKLOAD_KIND, nullable=False, server_default='vm'),
+        sa.Column('kind', workload_kind, nullable=False, server_default='vm'),
         sa.Column('addresses', sa.JSON(), nullable=False),
         sa.Column('labels', sa.JSON(), nullable=False),
         sa.Column('description', sa.String(length=256), nullable=False, server_default=''),
@@ -54,7 +65,7 @@ def upgrade() -> None:
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('vrf_id', sa.Integer(), nullable=False),
         sa.Column('name', sa.String(length=128), nullable=False),
-        sa.Column('kind', GROUP_KIND, nullable=False, server_default='selector'),
+        sa.Column('kind', group_kind, nullable=False, server_default='selector'),
         sa.Column('selector', sa.String(length=256), nullable=False, server_default=''),
         sa.Column('members', sa.JSON(), nullable=False),
         sa.Column('description', sa.String(length=256), nullable=False, server_default=''),
