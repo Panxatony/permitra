@@ -13,6 +13,7 @@ from ..models import (
     Rule,
     RuleStatus,
     SecurityComponent,
+    SegmentPolicy,
     User,
     Zone,
     ZoneNetwork,
@@ -29,6 +30,7 @@ from ..schemas import (
     ZonePolicyOut,
     ZonePolicySet,
 )
+from ..segments import affected_intra_rules, get_segment_policy, zone_segments
 from ..zone_check import check_zone_pair, find_zone, get_policy, zone_ref
 
 router = APIRouter(prefix="/api/zones", tags=["zones"])
@@ -542,6 +544,9 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
                        "old_zone": network.zone.name},
             ))
             continue
+        if item.get("type") in ("segment_policy", "segment_default"):
+            rows.append(_segment_change(db, user, batch_id, item, comment))
+            continue
         # Zone matrix cell
         from_name, to_name = item.get("from_zone", ""), item.get("to_zone", "")
         zone_a, zone_b = find_zone(db, from_name), find_zone(db, to_name)
@@ -589,6 +594,94 @@ def _create_batch(db: Session, user: User, items: list[dict], comment: str) -> d
     return {"status": "pending", "batch_id": batch_id, "items": len(rows),
             "detail": _("{count} change(s) requested – waiting for approval by two change approvers",
                         count=len(rows))}
+
+
+def _segment_change(db: Session, user: User, batch_id: str, item: dict, comment: str) -> ZonePolicyChange:
+    """A segment matrix cell or a zone's intra-zone default as a batch row.
+
+    Same shape as a zone cell, one level down: from_zone carries the zone,
+    the segments travel in extra, the policy in new_policy. The impact a
+    block has on the zone's rules is applied in _decide_change, like for a
+    zone cell."""
+    zone = find_zone(db, (item.get("zone") or "").strip())
+    if not zone:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Zone '{name}' not found", name=item.get("zone") or ""))
+    if item["type"] == "segment_default":
+        new = (item.get("default") or "").strip().lower()
+        if new not in ("permit", "deny"):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                _("The intra-zone default must be 'permit' or 'deny'"))
+        if not zone_segments(db, zone):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                _("Zone '{name}' has no segments – create a segment first", name=zone.name))
+        if _pending_segment_change(db, "segment_default", zone):
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                _("A request for the intra-zone default of {zone} is already waiting for approval",
+                                  zone=zone.name))
+        if (zone.intra_zone_default or "permit") == new:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, _("No change compared to the current state"))
+        return ZonePolicyChange(
+            batch_id=batch_id, change_type="segment_default",
+            from_zone=zone_ref(zone), to_zone="", old_policy=zone.intra_zone_default, new_policy=new,
+            requested_by=user.username, comment=comment,
+        )
+    segments = {seg.name.lower(): seg for seg in zone_segments(db, zone)}
+    names = [(item.get("from_segment") or "").strip(), (item.get("to_segment") or "").strip()]
+    pair = []
+    for name in names:
+        seg = segments.get(name.lower())
+        if not seg:
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                _("Segment '{name}' not found in zone {zone}", name=name, zone=zone.name))
+        pair.append(seg)
+    a, b = pair
+    if a.id == b.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("A segment's relation to itself is not maintained"))
+    new_policy = item.get("policy")
+    if new_policy not in ("allow_only", "block_all"):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Invalid policy '{new_policy}'", new_policy=new_policy))
+    current = get_segment_policy(db, a, b)
+    if current and current.policy.value == new_policy:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, _("No change compared to the current state"))
+    if _pending_segment_change(db, "segment_policy", zone, a, b):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("A request for {from_zone} → {to_zone} is already waiting for approval",
+                              from_zone=a.name, to_zone=b.name))
+    return ZonePolicyChange(
+        batch_id=batch_id, change_type="segment_policy",
+        from_zone=zone_ref(zone), to_zone="",
+        old_policy=current.policy.value if current else None, new_policy=new_policy,
+        requested_by=user.username, comment=comment,
+        extra={"from_segment": a.name, "to_segment": b.name},
+    )
+
+
+def _pending_segment_change(db: Session, change_type: str, zone: Zone, a=None, b=None):
+    pending = (db.query(ZonePolicyChange)
+                 .filter(ZonePolicyChange.change_type == change_type,
+                         ZonePolicyChange.from_zone == zone_ref(zone),
+                         ZonePolicyChange.status == "pending").all())
+    if change_type == "segment_default":
+        return pending[0] if pending else None
+    for c in pending:
+        extra = c.extra or {}
+        if (extra.get("from_segment", "").lower(), extra.get("to_segment", "").lower()) \
+                == (a.name.lower(), b.name.lower()):
+            return c
+    return None
+
+
+def _segments_of_change(db: Session, c: ZonePolicyChange):
+    """(zone, from_segment, to_segment) of a segment change - any may be None
+    if it vanished since the request."""
+    zone = find_zone(db, c.from_zone)
+    if not zone:
+        return None, None, None
+    extra = c.extra or {}
+    by_name = {seg.name.lower(): seg for seg in zone_segments(db, zone)}
+    return zone, by_name.get((extra.get("from_segment") or "").lower()), \
+        by_name.get((extra.get("to_segment") or "").lower())
 
 
 @router.post("/matrix/changes")
@@ -851,6 +944,26 @@ def list_changes(db: Session = Depends(get_db), _: User = Depends(get_current_us
                     for r in rules[:50]
                 ],
             }
+        # Segment matrix to block, or a zone switching to default-deny: the
+        # intra-zone rules that would be sent back into review.
+        if (c.change_type == "segment_policy" and c.new_policy == "block_all") \
+                or (c.change_type == "segment_default" and c.new_policy == "deny"):
+            zone, a, b = _segments_of_change(db, c)
+            if not zone:
+                return {}
+            if c.change_type == "segment_default":
+                rules = affected_intra_rules(db, zone, None, None, only_unmaintained=True)
+            elif a and b:
+                rules = affected_intra_rules(db, zone, a, b)
+            else:
+                rules = []
+            return {
+                "affected_count": len(rules),
+                "affected_rules": [
+                    {"rule_id": r.rule_id, "name": r.name, "status": r.status.value}
+                    for r in rules[:50]
+                ],
+            }
         # Network move: preview of the reassessment (finding H6). It runs against
         # the FUTURE state, without changing anything.
         if c.change_type == "net_update":
@@ -1047,6 +1160,45 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                 # and asking here by name found nothing for every coded zone.
                 for rule in _affected_rules(db, zone_ref(zone_a), zone_ref(zone_b),
                                             statuses=IN_FORCE):
+                    rule.status = RuleStatus.in_review
+                    rule.version += 1
+                    add_version(db, rule, user, template, **values)
+                    db.add(Comment(rule_pk=rule.id, author=user.username, text=note))
+                    reviews_reset.append(rule.rule_id)
+        # Segment matrix cells and intra-zone defaults, after the zone cells
+        for item in batch:
+            if item.change_type not in ("segment_policy", "segment_default"):
+                continue
+            zone, a, b = _segments_of_change(db, item)
+            if not zone:
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    _("Zone '{name}' no longer exists", name=item.from_zone))
+            if item.change_type == "segment_default":
+                zone.intra_zone_default = item.new_policy
+                to_block = affected_intra_rules(db, zone, None, None, only_unmaintained=True) \
+                    if item.new_policy == "deny" else []
+                template = ("Zone {zone} switched to default-deny between its segments "
+                            "(request {request}): the rule has to be reassessed")
+                values = {"zone": zone.name, "request": change.batch_id[:8]}
+            else:
+                if not a or not b:
+                    raise HTTPException(status.HTTP_409_CONFLICT,
+                                        _("A segment of {zone} no longer exists", zone=zone.name))
+                policy = get_segment_policy(db, a, b)
+                if not policy:
+                    policy = SegmentPolicy(from_segment_id=a.id, to_segment_id=b.id)
+                    db.add(policy)
+                policy.policy = item.new_policy
+                to_block = affected_intra_rules(db, zone, a, b) if item.new_policy == "block_all" else []
+                template = ("Segment matrix change {from_segment} → {to_segment} in zone {zone} to Block "
+                            "(request {request}): the rule has to be reassessed")
+                values = {"from_segment": a.name, "to_segment": b.name, "zone": zone.name,
+                          "request": change.batch_id[:8]}
+            if to_block:
+                from .rules_router import add_version
+
+                note = render(template, values)
+                for rule in to_block:
                     rule.status = RuleStatus.in_review
                     rule.version += 1
                     add_version(db, rule, user, template, **values)

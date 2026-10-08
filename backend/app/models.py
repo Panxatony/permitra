@@ -145,6 +145,10 @@ class Zone(Base):
     cia_c: Mapped[str] = mapped_column(String(16), default="normal")  # confidentiality
     cia_i: Mapped[str] = mapped_column(String(16), default="normal")  # integrity
     cia_a: Mapped[str] = mapped_column(String(16), default="normal")  # availability
+    # What an unmaintained relation between two of this zone's segments means:
+    # "permit" or "deny". None for a zone that was never segmented - its
+    # intra-zone traffic is not asked at all (segments.py).
+    intra_zone_default: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     @property
     def protection_level(self) -> str:
@@ -179,6 +183,41 @@ class ZoneNetwork(Base):
 
     zone: Mapped[Zone] = relationship(back_populates="networks")
     vrf: Mapped[Vrf] = relationship()
+
+
+class Segment(Base):
+    """A segment: a group that belongs to a zone, so the zone's intra-zone
+    traffic can be governed one level below the zone matrix. The group says
+    who is in the segment (by label or by list); the segment says which
+    zone's matrix it sits in."""
+
+    __tablename__ = "segments"
+    __table_args__ = (UniqueConstraint("zone_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    zone_id: Mapped[int] = mapped_column(ForeignKey("zones.id", ondelete="CASCADE"), index=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("address_groups.id", ondelete="RESTRICT"), index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(String(256), default="")
+
+    zone: Mapped["Zone"] = relationship()
+    group: Mapped["AddressGroup"] = relationship()
+
+
+class SegmentPolicy(Base):
+    """The segment matrix of a zone: per (from, to) whether rules are allowed."""
+
+    __tablename__ = "segment_policies"
+    __table_args__ = (UniqueConstraint("from_segment_id", "to_segment_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    from_segment_id: Mapped[int] = mapped_column(ForeignKey("segments.id", ondelete="CASCADE"), index=True)
+    to_segment_id: Mapped[int] = mapped_column(ForeignKey("segments.id", ondelete="CASCADE"), index=True)
+    policy: Mapped[ZonePolicyType] = mapped_column(Enum(ZonePolicyType), default=ZonePolicyType.block_all)
+    note: Mapped[str] = mapped_column(Text, default="")
+
+    from_segment: Mapped[Segment] = relationship(foreign_keys=[from_segment_id])
+    to_segment: Mapped[Segment] = relationship(foreign_keys=[to_segment_id])
 
 
 class ZonePolicy(Base):

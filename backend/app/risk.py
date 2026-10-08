@@ -188,10 +188,16 @@ def assess_rule(db: Session, rule) -> dict:
 
     # 4) Service 'any' across zone boundaries
     cross = (rule.source_zone or "").upper() != (rule.destination_zone or "").upper()
-    if cross and any((s.get("protocol") or "").strip().lower() in ("any", "ip")
-                     for s in rule.services or []):
+    any_service = any((s.get("protocol") or "").strip().lower() in ("any", "ip")
+                      for s in rule.services or [])
+    if cross and any_service:
         findings.append({"severity": "medium", "code": "any-service",
                          "detail": _("Service 'any' on a cross-zone rule")})
+    elif any_service and dst_zone is not None and dst_zone.intra_zone_default == "deny":
+        # A segmented zone narrows traffic inside itself; "any service" between
+        # two of its segments is as broad as it is across zones.
+        findings.append({"severity": "medium", "code": "any-service",
+                         "detail": _("Service 'any' between segments of a segmented zone")})
 
     # 5) A rule into a protected zone that logs nothing (#37, BSI OPS.1.1.5).
     # "Are accesses into the zone with very high protection requirement logged?"

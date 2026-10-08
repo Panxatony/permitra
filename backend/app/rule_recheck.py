@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 from .component_resolution import resolve_rule_components
 from .messages import _
 from .models import IN_FORCE, Rule, RuleStatus, RuleVersion
-from .zone_check import check_zone_pair, resolve_zone_for_entries
+from .segments import check_rule_pair
+from .zone_check import resolve_zone_for_entries
 
 
 def reassess(db: Session, rule: Rule, source: list[dict], destination: list[dict]) -> tuple[dict, list[str]]:
@@ -46,7 +47,7 @@ def reassess(db: Session, rule: Rule, source: list[dict], destination: list[dict
     if not reasons:
         if src.upper() != dst.upper() and not any(c.is_firewall for c in components):
             reasons.append(_("A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)"))
-        verdict = check_zone_pair(db, src, dst, [c.type.value for c in components])
+        verdict = check_rule_pair(db, src, dst, [c.type.value for c in components], source, destination)
         if not verdict.allowed:
             reasons.append(_("Zone matrix: ") + "; ".join(verdict.messages))
     state = {"source": source, "destination": destination,

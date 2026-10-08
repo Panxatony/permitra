@@ -430,6 +430,37 @@ class ZoneOut(ZoneCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
     protection_level: str = "normal"  # maximum of C/I/A
+    intra_zone_default: str | None = None
+
+
+class SegmentIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    group: str = Field(..., min_length=1, max_length=128, description="name of the address group that is the segment")
+    description: str = Field("", max_length=256)
+
+
+class SegmentOut(BaseModel):
+    id: int
+    zone: str
+    name: str
+    group: str
+    group_kind: str
+    description: str
+    member_count: int
+
+
+class SegmentPolicyOut(BaseModel):
+    from_segment: str
+    to_segment: str
+    policy: ZonePolicyType
+    note: str = ""
+
+
+class SegmentMatrixOut(BaseModel):
+    zone: str
+    intra_zone_default: str | None
+    segments: list[SegmentOut]
+    policies: list[SegmentPolicyOut]
 
 
 class ZonePolicySet(BaseModel):

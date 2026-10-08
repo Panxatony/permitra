@@ -49,6 +49,7 @@ from ..schemas import (
     RuleUpdate,
     RuleVersionOut,
 )
+from ..segments import check_rule_pair
 from ..settings import get_setting
 from ..validation import format_entry, parse_network
 from ..vrf import get_vrf
@@ -251,14 +252,23 @@ def enforce_bsi_firewall(source_zone: str, destination_zone: str, components: li
         )
 
 
-def enforce_zone_matrix(db: Session, source_zone: str, destination_zone: str, platforms: list[str]):
-    """Block rules that the zone communication matrix declares inadmissible."""
-    result = check_zone_pair(db, source_zone, destination_zone, platforms)
+def enforce_zone_matrix(db: Session, source_zone: str, destination_zone: str, platforms: list[str],
+                        source: list | None = None, destination: list | None = None):
+    """Block rules that the zone communication matrix declares inadmissible -
+    and, inside a segmented zone, rules the segment matrix forbids."""
+    result = check_rule_pair(db, source_zone, destination_zone, platforms,
+                             _plain_entries(source), _plain_entries(destination))
     if not result.allowed:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             _("Zone matrix: ") + "; ".join(result.messages),
         )
+
+
+def _plain_entries(value):
+    if value is None:
+        return None
+    return [e.model_dump() if hasattr(e, "model_dump") else dict(e) for e in value]
 
 
 def enforce_required_fields(db: Session, payload):
@@ -828,6 +838,13 @@ def resolve_components_endpoint(
     out = ResolveOut(components=components, unknown=unknown).model_dump()
     out.update({"source_zone": src_zone, "destination_zone": dst_zone,
                 "zone_issues": zone_issues, "unassigned": unassigned})
+    # Inside a segmented zone the form needs the segment matrix's verdict as
+    # well; the zone check alone would say "intra-zone, allowed".
+    if src_zone and dst_zone and src_zone.upper() == dst_zone.upper():
+        verdict = check_rule_pair(db, src_zone, dst_zone, [c.type.value for c in components],
+                                  src_entries, dst_entries)
+        out["segment_check"] = {"allowed": verdict.allowed, "policy": verdict.policy,
+                                "messages": verdict.messages}
     return out
 
 
@@ -861,11 +878,12 @@ def _create_rule(db: Session, payload, user: User, *,
         if matrix_blocking:
             enforce_zone_matrix(
                 db, payload.source_zone, payload.destination_zone,
-                [c.type.value for c in components]
+                [c.type.value for c in components], payload.source, payload.destination,
             )
         else:
-            verdict = check_zone_pair(db, payload.source_zone, payload.destination_zone,
-                                      [c.type.value for c in components])
+            verdict = check_rule_pair(db, payload.source_zone, payload.destination_zone,
+                                      [c.type.value for c in components],
+                                      _plain_entries(payload.source), _plain_entries(payload.destination))
             if not verdict.allowed:
                 matrix_violation = "; ".join(verdict.messages)
 
@@ -1263,7 +1281,8 @@ def update_rule(
     components = determine_components(db, payload, vrf.id)
     enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
     enforce_zone_matrix(
-        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
+        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components],
+        payload.source, payload.destination,
     )
     # impl_status is maintained by operations through its own endpoint – an edit must
     # not reset it (approval sets already implemented components to "to change")
@@ -1371,7 +1390,8 @@ def restore_version(
     components = determine_components(db, payload, rule.vrf_id)
     enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
     enforce_zone_matrix(
-        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
+        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components],
+        payload.source, payload.destination,
     )
 
     # requestor and owner are deliberately not restored: the creator does not
@@ -1505,8 +1525,8 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
             lapsed = ping_baseline.zone_problems(db, rule.source_zone, rule.destination_zone)
             if lapsed:
                 rule.removal_reason = "; ".join(lapsed)[:255]
-        verdict = check_zone_pair(db, rule.source_zone, rule.destination_zone,
-                                  rule.platforms or [])
+        verdict = check_rule_pair(db, rule.source_zone, rule.destination_zone,
+                                  rule.platforms or [], rule.source or [], rule.destination or [])
         # An explicit removal proposal counts here as well: it arises e.g. when a
         # network was moved to another zone and the rule became inadmissible as a
         # result – because one side now spans several zones, or because the zone
