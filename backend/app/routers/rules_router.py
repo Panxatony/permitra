@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import audit, change_management, ping_baseline
+from .. import audit, change_management, groups, ping_baseline
 from ..accounts import account_key
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
@@ -114,14 +114,14 @@ def expand_groups(db: Session, payload, vrf_id: int) -> None:
     Runs before derive_zones on every path that writes a rule, so a group is
     one more way to say which addresses a rule is about - and never a way
     around the checks those addresses face."""
-    from .. import groups as _groups
+
 
     def entries_of(value):
         return [e.model_dump() if hasattr(e, "model_dump") else dict(e) for e in value]
 
     problems = []
     for field in ("source", "destination"):
-        expanded, issues = _groups.expand_entries(db, entries_of(getattr(payload, field)), vrf_id)
+        expanded, issues = groups.expand_entries(db, entries_of(getattr(payload, field)), vrf_id)
         problems.extend(issues)
         # Back into the schema type: downstream code dumps the payload again.
         setattr(payload, field, [AddressEntry(**e) for e in expanded])
@@ -819,10 +819,15 @@ def resolve_components_endpoint(
     _user: User = Depends(get_current_user),
 ):
     """Determine the components from source/destination; report addresses without a mapping."""
-    src_entries = [e.model_dump() for e in payload.source]
-    dst_entries = [e.model_dump() for e in payload.destination]
     vrf_obj = get_vrf(db, payload.vrf or None)
+    # The form sends group references as it will send them on submit; the
+    # verdicts below are about the members, so they are expanded here the
+    # same way. A group that cannot be expanded is a zone issue, not a 422:
+    # the form is still being filled in.
     zone_issues = []
+    src_entries, src_problems = groups.expand_entries(db, [e.model_dump() for e in payload.source], vrf_obj.id)
+    dst_entries, dst_problems = groups.expand_entries(db, [e.model_dump() for e in payload.destination], vrf_obj.id)
+    zone_issues.extend(src_problems + dst_problems)
     src_zone, src_un, src_hits = resolve_zone_for_entries(db, src_entries, vrf_obj.id)
     dst_zone, dst_un, dst_hits = resolve_zone_for_entries(db, dst_entries, vrf_obj.id)
     for label, un, hits in ((_("Source"), src_un, src_hits), (_("Destination"), dst_un, dst_hits)):

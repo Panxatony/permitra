@@ -288,6 +288,27 @@ export const SECTIONS = [
       ],
     },
   },
+  {
+    id: 'segmentation',
+    de: {
+      title: 'Workloads, Gruppen und Segmente',
+      body: [
+        'Eine Mikrosegmentierungs-Policy spricht von **Gruppen** („die Web-Schicht darf die Datenbank-Schicht erreichen"), nicht von Adressen. Die Regeln in Permitra bleiben trotzdem adressbasiert — eine Adresse ist, was eine Firewall durchsetzt und ein Soll-Ist-Abgleich prüfen kann. Deshalb wird eine Gruppe **beim Schreiben der Regel in ihre Mitglieder aufgelöst**, und jeder Eintrag merkt sich, aus welcher Gruppe er stammt.',
+        'Das **Workload-Inventar** sind die Hosts, VMs und Dienste mit ihren **Labels** (`app=shop, tier=web`), von Hand gepflegt oder aus NetBox importiert (Geräte und VMs mit Rollen, Tenants, Standorten und Tags). Eine **Selektor-Gruppe** ist jeder Workload, dessen Labels passen; eine **statische Gruppe** listet Workloads oder Adressen auf.',
+        'Ändert sich die Mitgliedschaft — ein neuer Workload bekommt das passende Label, ein Import bringt einen Host mit —, **folgen die Regeln**: ihre Adressen werden neu berechnet und genauso geprüft wie bei einer Bearbeitung (Zonen, Matrix, Firewall-Pflicht). Eine Regel, die dadurch unzulässig würde, verhindert die ganze Änderung. Die Freigabe bleibt bestehen, denn sie galt dem Selektor — umgesetzte Komponenten stehen danach auf „zu ändern". Ändert jemand dagegen die **Definition** einer Gruppe (Selektor oder Liste), ist das eine inhaltliche Änderung an jeder Regel, die sie nutzt: zurück auf Entwurf.',
+        '**Segmente** holen die Matrix in die Zone: Ein Segment ist eine Gruppe, die vollständig in einer Zone liegt, und die **Segment-Matrix** legt je gerichtetem Paar fest, ob Regeln zulässig sind — gleiche Form wie die Zonenmatrix, gleicher Antrag mit zwei Freigaben. Eine Zone ohne Segmente verhält sich wie bisher. Eine Zone mit Segmenten startet bei „permit" (ungepflegte Beziehungen erlaubt, mit Hinweis), damit das Anlegen eines Segments keine Regel unbemerkt entwertet; die Umstellung auf **Default-Deny** ist ein Antrag, dessen Vorschau die betroffenen Regeln nennt und der sie nach der zweiten Freigabe in den Review schickt.',
+      ],
+    },
+    en: {
+      title: 'Workloads, groups and segments',
+      body: [
+        'A micro-segmentation policy speaks of **groups** ("the web tier may reach the database tier"), not of addresses. Permitra\'s rules stay address-based all the same — an address is what a firewall enforces and a drift comparison can check. So a group is **resolved to its members when the rule is written**, and every entry remembers the group it came from.',
+        'The **workload inventory** is the hosts, VMs and services with their **labels** (`app=shop, tier=web`), maintained by hand or imported from NetBox (devices and VMs with their roles, tenants, sites and tags). A **selector group** is every workload whose labels match; a **static group** lists workloads or addresses.',
+        'When the membership moves — a new workload gets the matching label, an import brings a host along — **the rules follow**: their addresses are recomputed and checked the way an edit would be (zones, matrix, firewall requirement). One rule the change would make inadmissible refuses the whole change. The approval stands, because it covered the selector — implemented components go to "to change". Changing a group\'s **definition** (selector or list), on the other hand, is a content change to every rule using it: back to draft.',
+        '**Segments** bring the matrix inside the zone: a segment is a group lying entirely inside a zone, and the **segment matrix** says per directed pair whether rules are admissible — the same shape as the zone matrix, the same request with two approvals. A zone without segments behaves as before. A zone with segments starts at "permit" (unmaintained relations allowed, with a notice) so that adding a segment never silently invalidates a rule; the switch to **default-deny** is a request whose preview names the affected rules and which sends them into review after the second approval.',
+      ],
+    },
+  },
 ]
 
 /* The first sentence of a section is its teaser on the card - written to

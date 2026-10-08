@@ -236,6 +236,17 @@ class GroupOut(BaseModel):
     members: list[dict]
     description: str
     vrf_id: int
+    member_count: int = 0
+    # The rules a write here rewrote - the page says so instead of staying
+    # silent about a change that moved an approved rule.
+    rules_updated: list[str] = []
+
+
+def _group_out(db: Session, group: AddressGroup, rules_updated: list[str] | None = None) -> GroupOut:
+    out = GroupOut.model_validate(group)
+    out.member_count = len(groups.resolve_group(db, group))
+    out.rules_updated = rules_updated or []
+    return out
 
 
 def resync_groups(db: Session, names: set[str], username: str, *, reset_review: bool) -> list[str]:
@@ -288,7 +299,7 @@ def list_groups(vrf: str | None = None, db: Session = Depends(get_db), _user: Us
     query = db.query(AddressGroup)
     if vrf:
         query = query.filter(AddressGroup.vrf_id == get_vrf(db, vrf).id)
-    return query.order_by(AddressGroup.name).all()
+    return [_group_out(db, g) for g in query.order_by(AddressGroup.name).all()]
 
 
 @router.get("/groups/{group_id}/members")
@@ -316,7 +327,7 @@ def create_group(
     db.add(group)
     db.commit()
     db.refresh(group)
-    return group
+    return _group_out(db, group)
 
 
 @router.put("/groups/{group_id}", response_model=GroupOut)
@@ -340,13 +351,14 @@ def update_group(
     group.name, group.kind, group.selector = payload.name, payload.kind, payload.selector
     group.members, group.description = payload.members, payload.description
     db.flush()
+    updated: list[str] = []
     if definition_changed:
         # Somebody changed what the group *means*: that is a content change
         # to every rule using it, and the approval is withdrawn.
-        resync_groups(db, {group.name}, user.username, reset_review=True)
+        updated = resync_groups(db, {group.name}, user.username, reset_review=True)
     db.commit()
     db.refresh(group)
-    return group
+    return _group_out(db, group, updated)
 
 
 @router.delete("/groups/{group_id}", status_code=204)

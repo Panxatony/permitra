@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, getUser, hasRole } from '../api'
+import SegmentsDialog from '../components/SegmentsDialog'
 import { HelpLink, Modal, SB_BADGE } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
@@ -369,6 +370,8 @@ export default function ZoneMatrix() {
   const [saving, setSaving] = useState('')
   const [settings, setSettings] = useState({})
   const [metaZone, setMetaZone] = useState(null)  // zone in the BSI documentation editor
+  const [segmentZone, setSegmentZone] = useState(null)  // zone whose segments are open
+  const [groups, setGroups] = useState([])
   const [editMode, setEditMode] = useState(false)
   const [draft, setDraft] = useState({})        // "from|to" -> new policy
   const [draftZones, setDraftZones] = useState([])  // [{name, pap_level}]
@@ -409,6 +412,14 @@ export default function ZoneMatrix() {
       if (oldZone && oldZone !== c.from_zone) parts.push(`${t('zone')} ${oldZone} → ${c.from_zone}`)
       return `${t('Network')} ${oldCidr || c.to_zone}: ${parts.join(', ') || `${t('zone')} ${c.from_zone}`}`
     }
+    if (c.change_type === 'segment_policy') {
+      return `${t('Segments')} ${c.from_zone}: ${c.extra?.from_segment} → ${c.extra?.to_segment}: `
+        + `${c.old_policy ? (c.old_policy === 'allow_only' ? 'Allow' : 'Block') : t('new')}`
+        + ` → ${c.new_policy === 'allow_only' ? 'Allow' : 'Block'}`
+    }
+    if (c.change_type === 'segment_default') {
+      return `${t('Segments')} ${c.from_zone}: ${t('unmaintained relations')} ${c.old_policy || 'permit'} → ${c.new_policy}`
+    }
     return `${c.from_zone} → ${c.to_zone}: ${c.old_policy ? (c.old_policy === 'allow_only' ? 'Allow' : 'Block') : t('new')}`
       + ` → ${c.new_policy === 'allow_only' ? 'Allow' : 'Block'}`
   }
@@ -418,6 +429,7 @@ export default function ZoneMatrix() {
       api.zoneOverview().then(setOverview).catch(() => setOverview(null))
       api.components().then((cs) => setFwComponents(cs.filter((c) => c.enforcement === 'firewall'))).catch(() => {})
       api.matrixChanges().then(setChanges).catch(() => setChanges([]))
+      api.groups().then(setGroups).catch(() => setGroups([]))
       api.settings().then(setSettings).catch(() => setSettings({}))
       api.zoneNextCode().then((r) => setNewZoneCode((c) => c || r.code)).catch(() => {})
       const data = await api.zoneMatrix()
@@ -642,6 +654,10 @@ export default function ZoneMatrix() {
                           {t('Edit')}
                         </button>
                       )}
+                      <button className="btn btn-ghost" onClick={() => setSegmentZone(z)}
+                        title={t('Segments inside the zone and the matrix between them')}>
+                        {t('Segments')}{z.segment_count ? ` (${z.segment_count}${z.intra_zone_default === 'deny' ? ', deny' : ''})` : ''}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -650,6 +666,11 @@ export default function ZoneMatrix() {
           </div>
         )}
       </section>
+
+      {segmentZone && (
+        <SegmentsDialog zone={segmentZone} groups={groups} changes={changes}
+          onClose={() => setSegmentZone(null)} onChanged={load} />
+      )}
 
       {metaZone && (
         <Modal title={`${t('Edit zone')}: ${metaZone.name}`} onClose={() => setMetaZone(null)}>
@@ -949,6 +970,7 @@ export default function ZoneMatrix() {
                       <div key={c.id}>
                         {(c.change_type === 'zone_create' || c.change_type === 'zone_delete') && <span className="badge platform-unknown comp-badge">Zone</span>}
                         {c.change_type.startsWith('net_') && <span className="badge platform-unknown comp-badge">Netz</span>}
+                        {c.change_type.startsWith('segment_') && <span className="badge platform-unknown comp-badge">Segment</span>}
                         {itemLabel(c)}
                         {c.affected_count > 0 && (
                           <span className="badge status-rejected comp-badge"

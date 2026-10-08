@@ -128,6 +128,9 @@ export function AddressList({ entries, max = 0 }) {
         <div key={i}>
           <code>{typeof e === 'string' ? e : e.ip}</code>
           {e.alias ? <span className="muted"> {e.alias}</span> : null}
+          {/* The group the entry was resolved from: the rule was written
+              about "the web tier", and the address is what that meant then. */}
+          {e.group ? <span className="badge group-badge" title="Group">{e.group}</span> : null}
         </div>
       ))}
       {max > 0 && list.length > max ? <div className="muted">… +{list.length - max}</div> : null}

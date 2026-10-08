@@ -325,3 +325,15 @@ def test_netbox_devices_and_vms_become_labelled_workloads(client):
         db.close()
     finally:
         server.shutdown()
+
+
+def test_the_form_preview_resolves_a_group_to_its_zone(client):
+    """resolve-components is what the form asks while it is being filled in;
+    a group reference has to derive the zone the way the submit will."""
+    c, _ = client
+    r = c.post("/api/rules/resolve-components",
+               json={"source": [{"group": "shop-web"}], "destination": [{"group": "nope"}]},
+               headers=auth(c, "arch"))
+    assert r.status_code == 200, r.text
+    assert r.json()["source_zone"] == "Z010"
+    assert any("nope" in m for m in r.json()["zone_issues"])

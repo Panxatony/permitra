@@ -89,6 +89,14 @@ export default function Approvals() {
       if (oldZone && oldZone !== c.from_zone) parts.push(`${t('Zone')} ${oldZone} → ${c.from_zone}`)
       return `${t('Network')} ${oldCidr || c.to_zone}: ${parts.join(', ') || c.from_zone}`
     }
+    if (c.change_type === 'segment_policy') {
+      return `${t('Segments')} ${c.from_zone}: ${c.extra?.from_segment} → ${c.extra?.to_segment}: `
+        + `${c.old_policy ? (c.old_policy === 'allow_only' ? 'Allow' : 'Block') : t('new')}`
+        + ` → ${c.new_policy === 'allow_only' ? 'Allow' : 'Block'}`
+    }
+    if (c.change_type === 'segment_default') {
+      return `${t('Segments')} ${c.from_zone}: ${t('unmaintained relations')} ${c.old_policy || 'permit'} → ${c.new_policy}`
+    }
     return `${c.from_zone} → ${c.to_zone}: `
       + `${c.old_policy ? (c.old_policy === 'allow_only' ? 'Allow' : 'Block') : t('new')}`
       + ` → ${c.new_policy === 'allow_only' ? 'Allow' : 'Block'}`

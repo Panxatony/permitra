@@ -53,6 +53,25 @@ const EMPTY = {
   valid_until: '',
 }
 
+/* A stored rule carries a group's members, each marked with the group's name.
+   The form shows the reference, not the members: the rule was written about
+   "the web tier", and sending the reference back re-expands it against the
+   current membership rather than keeping stale members. */
+function collapseGroups(entries) {
+  const out = []
+  const seen = new Set()
+  for (const e of entries || []) {
+    if (e.group) {
+      if (seen.has(e.group.toLowerCase())) continue
+      seen.add(e.group.toLowerCase())
+      out.push({ ip: '', alias: '', group: e.group })
+    } else {
+      out.push(e)
+    }
+  }
+  return out.length ? out : [{ ip: '', alias: '' }]
+}
+
 /* Picking a zone, for the one rule that has no addresses to derive it from.
    A ping baseline covers whole zones, so the zones are what it says - see
    backend/app/ping_baseline.py. The value is the zone's authoritative
@@ -132,20 +151,25 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
 
   const [addressObjects, setAddressObjects] = useState([])
   const [serviceObjects, setServiceObjects] = useState([])
+  const [groups, setGroups] = useState([])
 
   useEffect(() => {
     api.zones().then(setZones).catch(() => setZones([]))
     api.components().then(setComponents).catch(() => setComponents([]))
     api.addressObjects().then(setAddressObjects).catch(() => setAddressObjects([]))
     api.serviceObjects().then(setServiceObjects).catch(() => setServiceObjects([]))
+    api.groups().then(setGroups).catch(() => setGroups([]))
   }, [])
 
-  // Only send syntactically valid entries to the resolver
+  // Only send syntactically valid entries to the resolver; a group reference
+  // goes as it is, the server expands it
   const validEntries = (entries) =>
     entries.filter((e) => {
+      if (e.group) return true
       const ip = (e.ip || '').trim()
       return ip && (ip.toLowerCase() === 'any' || /^[0-9a-fA-F.:]+(\/\d{1,3})?$/.test(ip))
-    }).map((e) => ({ ip: e.ip.trim(), alias: (e.alias || '').trim() }))
+    }).map((e) => (e.group ? { ip: '', alias: '', group: e.group }
+      : { ip: e.ip.trim(), alias: (e.alias || '').trim() }))
 
   // Derive components automatically from source/destination (debounced)
   useEffect(() => {
@@ -214,8 +238,8 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
         setForm({
           ...r,
           component_ids: (r.components || []).map((c) => c.id),
-          source: r.source?.length ? r.source : [{ ip: '', alias: '' }],
-          destination: r.destination?.length ? r.destination : [{ ip: '', alias: '' }],
+          source: collapseGroups(r.source),
+          destination: collapseGroups(r.destination),
           valid_from: r.valid_from || '',
           valid_until: r.valid_until || '',
         }),
@@ -251,18 +275,43 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
     <div className="address-editor">
       <span className="field-label">{label}</span>
       {form[field].map((e, i) => (
+        e.group ? (
+          /* A group reference: the members are resolved on the server when
+             the rule is written, and follow the inventory afterwards. */
+          <div key={i} className="service-row group-row">
+            <span className="badge group-badge">{e.group}</span>
+            <span className="muted small">
+              {(() => { const g = groups.find((x) => x.name.toLowerCase() === e.group.toLowerCase())
+                return g ? `${g.member_count} ${t('members')} · ${g.kind === 'selector' ? g.selector : t('static')}` : t('unknown group') })()}
+            </span>
+            <button type="button" className="btn btn-ghost" onClick={() => removeEntry(field, i)}>✕</button>
+          </div>
+        ) : (
         <div key={i} className="service-row">
           <input placeholder={t('IP or network, e.g. 10.10.30.5 or 10.10.20.0/24 or "any"')}
             value={e.ip} onChange={(ev) => setEntry(field, i, 'ip', ev.target.value)} />
-          <input placeholder="Alias (Hostname / Netzwerkname, optional)"
+          <input placeholder={t('Alias (hostname / network name, optional)')}
             value={e.alias} onChange={(ev) => setEntry(field, i, 'alias', ev.target.value)} />
           {form[field].length > 1 && (
             <button type="button" className="btn btn-ghost" onClick={() => removeEntry(field, i)}>✕</button>
           )}
         </div>
+        )
       ))}
       <div className="catalog-pick">
         <button type="button" className="btn btn-ghost" onClick={() => addEntry(field)}>{t('+ Entry')}</button>
+        {groups.length > 0 && (
+          <select value="" onChange={(ev) => {
+            const g = groups.find((o) => String(o.id) === ev.target.value)
+            if (!g) return
+            const entries = form[field].filter((e) => e.ip || e.alias || e.group)
+            if (entries.some((e) => (e.group || '').toLowerCase() === g.name.toLowerCase())) return
+            setForm({ ...form, [field]: [...entries, { ip: '', alias: '', group: g.name }] })
+          }}>
+            <option value="">{t('+ group…')}</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name} ({g.member_count})</option>)}
+          </select>
+        )}
         {addressObjects.length > 0 && (
           <select value="" onChange={(ev) => {
             const obj = addressObjects.find((o) => String(o.id) === ev.target.value)
@@ -481,6 +530,16 @@ export default function RuleForm({ embedded = false, onClose, onCreated }) {
         {(resolved.zone_issues || []).length > 0 && (
           <div className="warnbox">
             {resolved.zone_issues.map((m, i) => <div key={i}>{m}</div>)}
+          </div>
+        )}
+        {/* Inside a segmented zone the zone check alone says "intra-zone,
+            allowed"; the segment matrix's verdict comes with the resolver. */}
+        {resolved.segment_check && (
+          <div className={resolved.segment_check.allowed ? (resolved.segment_check.policy === 'allow_only' ? 'okbox' : 'warnbox') : 'error'}>
+            {resolved.segment_check.allowed ? '✓ ' : '✕ '}{t('Segment matrix:')}{' '}
+            {resolved.segment_check.messages.length
+              ? resolved.segment_check.messages.map((m, i) => <div key={i} className="small">{m}</div>)
+              : t('relation between the segments is allowed')}
           </div>
         )}
         {zoneCheck && (

@@ -72,6 +72,13 @@ class WorkloadOut(BaseModel):
     description: str
     source: str
     vrf_id: int
+    rules_updated: list[str] = []
+
+
+def _out(w: Workload, updated: list[str] | None = None) -> WorkloadOut:
+    out = WorkloadOut.model_validate(w)
+    out.rules_updated = updated or []
+    return out
 
 
 def _get(db: Session, workload_id: int) -> Workload:
@@ -119,10 +126,10 @@ def create_workload(
     db.add(w)
     db.flush()
     affected = groups.groups_affected_by_labels(db, vrf.id, None, w.labels)
-    resync_groups(db, affected, user.username, reset_review=False)
+    updated = resync_groups(db, affected, user.username, reset_review=False)
     db.commit()
     db.refresh(w)
-    return w
+    return _out(w, updated)
 
 
 @router.put("/{workload_id}", response_model=WorkloadOut)
@@ -146,10 +153,10 @@ def update_workload(
     w.labels, w.description = payload.labels, payload.description
     db.flush()
     affected |= groups.groups_listing_workload(db, w.vrf_id, w.name)
-    resync_groups(db, affected, user.username, reset_review=False)
+    updated = resync_groups(db, affected, user.username, reset_review=False)
     db.commit()
     db.refresh(w)
-    return w
+    return _out(w, updated)
 
 
 @router.delete("/{workload_id}", status_code=204)

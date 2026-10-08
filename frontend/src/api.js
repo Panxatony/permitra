@@ -269,6 +269,25 @@ export const api = {
   upsertEpgMap: (p) => request('/api/epgs/address-map', { method: 'POST', body: p }),
   deleteEpgMap: (id) => request(`/api/epgs/address-map/${id}`, { method: 'DELETE' }),
   serviceObjects: () => request('/api/objects/services'),
+  // Workloads, labels and groups (#35); segments and their matrix (#36)
+  workloads: (params = {}) => {
+    const q = new URLSearchParams(Object.entries({ vrf: getVrfName(), ...params }).filter(([, v]) => v))
+    return request(`/api/workloads?${q}`)
+  },
+  createWorkload: (p) => request('/api/workloads', { method: 'POST', body: { vrf: getVrfName(), ...p } }),
+  updateWorkload: (id, p) => request(`/api/workloads/${id}`, { method: 'PUT', body: { vrf: getVrfName(), ...p } }),
+  deleteWorkload: (id) => request(`/api/workloads/${id}`, { method: 'DELETE' }),
+  netboxImportWorkloads: () => request('/api/netbox/import-workloads', { method: 'POST' }),
+  groups: () => request('/api/objects/groups'),
+  groupMembers: (id) => request(`/api/objects/groups/${id}/members`),
+  createGroup: (p) => request('/api/objects/groups', { method: 'POST', body: { vrf: getVrfName(), ...p } }),
+  updateGroup: (id, p) => request(`/api/objects/groups/${id}`, { method: 'PUT', body: { vrf: getVrfName(), ...p } }),
+  deleteGroup: (id) => request(`/api/objects/groups/${id}`, { method: 'DELETE' }),
+  segments: (zone) => request(`/api/zones/${encodeURIComponent(zone)}/segments`),
+  segmentsCsvUrl: (zone) => `/api/zones/${encodeURIComponent(zone)}/segments/matrix.csv`,
+  createSegment: (zone, p) => request(`/api/zones/${encodeURIComponent(zone)}/segments`, { method: 'POST', body: p }),
+  updateSegment: (zone, id, p) => request(`/api/zones/${encodeURIComponent(zone)}/segments/${id}`, { method: 'PUT', body: p }),
+  deleteSegment: (zone, id) => request(`/api/zones/${encodeURIComponent(zone)}/segments/${id}`, { method: 'DELETE' }),
   createServiceObject: (p) => request('/api/objects/services', { method: 'POST', body: p }),
   deleteServiceObject: (id) => request(`/api/objects/services/${id}`, { method: 'DELETE' }),
   createComponent: (payload) => request('/api/components', { method: 'POST', body: payload }),

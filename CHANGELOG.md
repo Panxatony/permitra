@@ -4,6 +4,37 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Workloads, labels and groups: a rule can refer to "the web tier".** A
+  workload inventory (hosts, VMs, containers, services with addresses and
+  labels; manual or imported from NetBox devices and VMs) and groups built on
+  it - by selector (`app=shop, tier=web`) or by list. A rule names a group in
+  its source or destination; the group is expanded to its members when the
+  rule is written, every member entry carries the group's name, and when the
+  membership moves (a label, an import, a list) the rules follow: re-expanded
+  and re-checked like an edit, one inadmissible rule refuses the whole change.
+  An inventory change keeps the approval and sets implemented components to
+  *to change*; a change to a group's definition withdraws it. New pages
+  *Workloads*, a group picker in the rule form, `/api/workloads`,
+  `/api/objects/groups`, `POST /api/netbox/import-workloads`. Migration
+  `a9c4e71d2b58` (GitLab #35).
+
+- **Segments inside a zone, with a matrix of their own and default-deny.** A
+  segment is a group lying entirely inside a zone; the segment matrix says per
+  directed pair whether rules are admissible, changed by the same request with
+  two approvals as the zone matrix (`segment_policy`, `segment_default` items),
+  with the same impact preview and the same reset of affected rules into
+  review. A zone with segments starts at *permit* so that adding a segment
+  never silently invalidates its rules; the switch to *deny* is a request.
+  Under deny an intra-zone rule needs an Allow cell between its segments,
+  every address has to belong to a segment, and service `any` between
+  segments is a risk finding. Every rule path asks the segment matrix
+  (create, edit, restore, approve, re-check after a membership change); the
+  form shows the verdict live. Segments dialog per zone on the zones page,
+  CSV export of the matrix. Migration `b7d3f09c1e52` (GitLab #36).
+
+- **Demo data**: a workload inventory with labels, selector groups, a rule
+  written against groups, and the PROD-APP zone segmented with default-deny.
+
 - **Fixes from the functional review of 2026-10-07.** A zone relation set
   from Allow to Block did not send the relation's rules back into review
   (the decision asked by zone name, rules store the code; the re-check on

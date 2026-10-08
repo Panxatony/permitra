@@ -310,6 +310,10 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
                     for n in zone.networks
                 ],
                 "has_firewall": bool(firewalls),
+                # Segmented zones (#36): how many segments, and what an
+                # unmaintained relation between them means
+                "segment_count": len(zone_segments(db, zone)),
+                "intra_zone_default": zone.intra_zone_default,
             }
         )
     return {"zones": result, "firewalls_total": firewalls_total}
