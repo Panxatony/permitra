@@ -92,6 +92,9 @@ spec:
               value: postgresql+psycopg2://permitra:$(DB_PASSWORD)@db:5432/permitra
             - name: SECRET_KEY
               valueFrom: { secretKeyRef: { name: permitra-secrets, key: SECRET_KEY } }
+            # Only during a key rotation (docs/ADMINISTRATION.md); absent otherwise.
+            - name: SECRET_KEY_PREVIOUS
+              valueFrom: { secretKeyRef: { name: permitra-secrets, key: SECRET_KEY_PREVIOUS, optional: true } }
           ports: [{ containerPort: 8000 }]
           readinessProbe:
             httpGet: { path: /api/health, port: 8000 }

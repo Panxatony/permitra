@@ -4,6 +4,123 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Fixes from the functional review of 2026-10-07.** A zone relation set
+  from Allow to Block did not send the relation's rules back into review
+  (the decision asked by zone name, rules store the code; the re-check on
+  zone deletion had the same flaw). The four-eyes set treated any version
+  carrying an approved status as a decision, so a requestor who handed an
+  approved rule over could approve its next revision; a cycle now ends only
+  on a transition into a decision. The live risk assessment for a draft
+  answered 500. A configuration in a format Permitra cannot read reported
+  `in_sync: true`; it never does now. Deny and reject rules are not rendered
+  as (permitting) ACI contracts. Approving a removal closes an emergency
+  window; deactivating a rule in force marks its components *to remove*.
+  `auth.totp_enabled/disabled` and `rule.deleted` record the source address
+  like every other event. The implementation view treats `active` as in
+  force and says so for platforms Permitra generates nothing for.
+
+- **Change-management webhook: every lifecycle step, retries, a signature,
+  and a write-back that keeps the approval.** The webhook fired on submit,
+  approve, reject and zone decisions only; an emergency declaration, an
+  implementation report, a removal proposal and an expiry sent nothing. New
+  events: `rule.emergency_declared`, `rule.implementation`,
+  `rule.removal_proposed`, `rule.expired`, `rule.emergency_expired`. Delivery
+  retries twice (10 s, 60 s) and can be signed (`CHANGE_WEBHOOK_SECRET`,
+  `X-Permitra-Signature`). `PATCH /api/rules/{id}/change-id` writes the ticket
+  number back as metadata; the documented way, `PUT /api/rules/{id}`, reset an
+  approved rule to draft. Payloads name the components' enforcement.
+
+- **Demo data**: a Kubernetes NetworkPolicy component (`K8s-NetPol-FFM`) and
+  an intra-zone rule in CICD it enforces (SR00106), showing a
+  micro-segmentation platform Permitra exports nothing for.
+
+- **A component says how it enforces: firewall or micro-segmentation.** The
+  question an auditor asks — is this relation enforced, and how? — was
+  answered with a zone pair and a component name. Every component now carries
+  an `enforcement` model (`firewall` at a zone transition, `microsegmentation`
+  within a zone), derived from its type for everything that exists, and a
+  rule reports the enforcement of its components in the API and as a column
+  in the CSV export. A new generic component type **micro-segmentation**
+  documents platforms Permitra generates nothing for (NSX, Illumio,
+  Kubernetes NetworkPolicy, host-firewall fleets; `platform` names which); it
+  carries implementation status and drift upload like any other. The BSI
+  firewall requirement, the intra-zone component resolution, zone attachment
+  and the zone plan key on the model, not on the vendor. Migration adds two
+  columns; nothing to do.
+
+- **SECRET_KEY can be rotated, and an admin can reset a user's 2FA.** Rotating
+  the key used to lock every 2FA user out (the seed no longer decrypted, every
+  code failed, five codes later the account was locked, with no way back short
+  of editing the database) and silently blank the NetBox token. Now: session
+  signing, TOTP seeds and the NetBox token each get their own key derived from
+  `SECRET_KEY` (HKDF); `SECRET_KEY_PREVIOUS` keeps the old key(s) readable;
+  encrypted values are re-encrypted under the current key at startup (or with
+  `python -m app.key_rotation`); sessions signed with a previous key keep
+  working until they expire. A seed no configured key can read is logged, shown
+  in the admin list and refused at login with a message naming the reset,
+  without counting towards the lockout. `POST /api/users/{username}/reset-totp`
+  (admin, audited) switches a user's second factor off. Values written by
+  earlier versions are read and re-encrypted on the first start; **nothing to
+  do for the upgrade**. See ADMINISTRATION.md, "Rotating SECRET_KEY".
+
+- **Password hashes state their cost, and passwords have a policy.** Hashes
+  are stored as `pbkdf2_sha256$<iterations>$<salt>$<digest>` at 600,000
+  iterations (OWASP); existing hashes (200,000, no prefix) keep working and
+  are rewritten on the next successful login, so there is no migration and
+  nobody is locked out. Expect about 0.4 s of CPU per login on a small VM
+  where it was 0.13 s. Wherever a password is set, it must now be 8 to 128
+  characters, not among the 10,000 most common (SecLists list bundled, MIT)
+  and not contain the username or e-mail local part; before, eight
+  characters of anything would do.
+
+- **Fixed: the four-eyes check excluded only the newest writer.** Whoever
+  requested or created a rule could not approve it, nor could the writer of
+  its newest version - and nobody else was excluded. An architect who edited
+  the draft could approve it once somebody else had submitted; the submitter
+  could approve once any later version (an implementation status, a
+  handover, an address propagation) had replaced them as newest. The
+  excluded set is now the current review cycle: creator, requestor, and
+  everyone who wrote a version or was requestor since the last decision
+  closed the previous cycle. Versions by the expiry job or the import count
+  for nobody. Names are compared case-insensitively, as everywhere else now.
+
+- **Fixed: free text reached generated configuration unescaped.** A line
+  break in a justification, a name or a change ID ended the comment line it
+  sat in (Juniper set file, nft and bash host-firewall scripts, Check Point
+  `mgmt_cli` script) and made the rest the next statement; the Check Point
+  rule name sat inside double quotes on a shell line, where `$(...)` and
+  backticks are live; Aerleon zone headers took the zone name as typed. Every
+  comment line now goes through `comment_text()`, the rule name through
+  `shell_word()`, Aerleon zones through `sanitize_name()`. One-line rule
+  fields refuse control characters on input and are bounded to their column
+  widths; justification, description and info keep their line breaks and are
+  flattened only in the export. **Re-export after upgrading** if you apply
+  exports by hand. See EXPORTS.md, "Free text in generated configuration".
+
+- **Excel import: the requestor is resolved to an account.** The four-eyes
+  check keys on the requestor as an account username; the import stored the
+  typed name from the sheet, which matched no account, so the exclusion that
+  names the person accountable for a rule applied to nothing that came in
+  through the import. Typed names are now matched against username, full
+  name and e-mail (case-insensitive), unresolved ones are listed at the end
+  of the import and can be settled with `--requestor-map`. Approval and
+  recertification compare names the same way now (case-insensitive), where
+  the approval used to compare exactly. The status mapping of the import
+  (*umgesetzt* = approved without review) is documented in ADMINISTRATION.md.
+  The import also sets the VRF now (`--vrf`, default: the first one); since
+  VRFs were introduced it had failed on the NOT NULL constraint.
+
+- **Fixed: an over-long value silently dropped an audit event on PostgreSQL.**
+  The columns for actor, object and source IP are enforced there, the failed
+  insert was swallowed (auditing must not take the business operation down),
+  and the event was simply gone - no row, no gap in the chain, nothing for the
+  SIEM. A login attempt with a username of 65 characters was enough to keep
+  that attempt out of the log. Values are now cut to their columns before the
+  entry is hashed, `detail` and its values are capped at 4096 characters, and
+  a cut entry names the fields under `extra.truncated`. A forwarded address
+  from a trusted proxy that is not an IP address is no longer recorded, and a
+  NetBox URL is limited to 128 characters.
+
 - **Forgotten-password requests are rate-limited and no longer reactivate
   accounts.** `/api/auth/forgot` sent a mail for every request from anyone,
   which made it a way to flood a mailbox and the operator's relay, and it did

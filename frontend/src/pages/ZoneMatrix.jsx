@@ -416,7 +416,7 @@ export default function ZoneMatrix() {
   const load = useCallback(async () => {
     try {
       api.zoneOverview().then(setOverview).catch(() => setOverview(null))
-      api.components().then((cs) => setFwComponents(cs.filter((c) => c.type !== 'aci'))).catch(() => {})
+      api.components().then((cs) => setFwComponents(cs.filter((c) => c.enforcement === 'firewall'))).catch(() => {})
       api.matrixChanges().then(setChanges).catch(() => setChanges([]))
       api.settings().then(setSettings).catch(() => setSettings({}))
       api.zoneNextCode().then((r) => setNewZoneCode((c) => c || r.code)).catch(() => {})

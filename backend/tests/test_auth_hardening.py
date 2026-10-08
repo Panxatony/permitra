@@ -68,7 +68,7 @@ def test_the_seed_is_not_stored_in_plaintext(client):
     stored = db.query(User).filter(User.username == "arch").one().totp_secret
     db.close()
     assert stored != seed, "the seed is readable straight from the database"
-    assert crypto.decrypt(stored) == seed, "and it has to remain usable"
+    assert crypto.decrypt(stored, "totp") == seed, "and it has to remain usable"
 
 
 def test_a_code_cannot_be_used_twice(client):

@@ -10,7 +10,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
-from .. import audit, mailer
+from .. import audit, crypto, mailer, passwords
 from ..auth import hash_password, require_roles
 from ..database import get_db
 from ..messages import _
@@ -81,7 +81,44 @@ def list_architects(db: Session = Depends(get_db),
 
 @router.get("", response_model=list[UserOut])
 def list_users(db: Session = Depends(get_db), _user: User = Depends(require_roles(Role.admin))):
-    return db.query(User).order_by(User.username).all()
+    out = []
+    for user in db.query(User).order_by(User.username).all():
+        item = UserOut.model_validate(user)
+        # A seed no configured key can read is the state a rotation without
+        # SECRET_KEY_PREVIOUS leaves behind; the admin sees it here first.
+        item.totp_unreadable = bool(user.totp_enabled and user.totp_secret
+                                    and not crypto.decrypt(user.totp_secret, "totp"))
+        out.append(item)
+    return out
+
+
+@router.post("/{username}/reset-totp", response_model=UserOut)
+def reset_totp(
+    request: Request,
+    username: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_roles(Role.admin)),
+):
+    """Switch off a user's second factor so they can sign in with the
+    password and set it up again. The one way back in when the seed is
+    gone - lost phone, or a rotation nobody could read it after - that does
+    not involve editing the database. Not on the admin's own account: that
+    would make the admin's second factor optional to the admin."""
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("User not found"))
+    if username == admin.username:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            _("You cannot reset your own second factor here – use the account page"))
+    user.totp_enabled = False
+    user.totp_secret = None
+    user.totp_last_counter = None
+    user.token_valid_from = utcnow()   # whoever holds a session for it starts over too
+    db.commit()
+    db.refresh(user)
+    audit.record(db, "admin", "user.totp_reset", actor=admin.username, object=user.username,
+                 source_ip=audit.client_ip(request))
+    return user
 
 
 @router.post("", status_code=201)
@@ -94,6 +131,8 @@ def create_user(
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status.HTTP_409_CONFLICT, _("Username is already taken"))
     with_password = bool(payload.password)
+    if with_password:
+        passwords.enforce(payload.password, payload.username, payload.email)
     user = User(
         username=payload.username,
         # Without a password: an unusable random hash until the user activates via link

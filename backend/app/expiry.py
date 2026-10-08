@@ -96,6 +96,9 @@ def expire_rules(db: Session) -> int:
         )
     if expired:
         db.commit()
+        from . import change_management
+        for rule in expired:
+            change_management.notify("rule.expired", change_management.rule_payload(rule))
     return len(expired)
 
 
@@ -142,6 +145,9 @@ def expire_emergency_rules(db: Session) -> int:
                     rule.rule_id)
     if overdue:
         db.commit()
+        from . import change_management
+        for rule in overdue:
+            change_management.notify("rule.emergency_expired", change_management.rule_payload(rule))
     return len(overdue)
 
 

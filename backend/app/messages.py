@@ -129,6 +129,12 @@ CATALOG: dict[str, dict[str, str]] = {
             "Eine Ping-Basisregel erlaubt – eine, die verbietet, gewährt nichts und "
             "verdeckt die Regel, die es täte",
         "A service from the list below is used": "Ein Dienst aus der Liste unten wird verwendet",
+        "A zone transition requires a firewall (BSI definition): micro-segmentation alone (ACI or another platform) is not sufficient for {src} → {dst}. Assign a firewall cluster.":
+            "Ein Zonenübergang braucht eine Firewall (BSI-Definition): Mikrosegmentierung allein (ACI oder eine andere Plattform) reicht für {src} → {dst} nicht aus. Bitte ein Firewall-Cluster zuweisen.",
+        "Zones attach to firewall clusters – micro-segmentation is not a zone transition: {components}":
+            "Zonen werden an Firewall-Cluster angebunden – Mikrosegmentierung ist kein Zonenübergang: {components}",
+        "Micro-segmentation (ACI or another platform) is only used within a single zone – this rule crosses zones, check the component assignment":
+            "Mikrosegmentierung (ACI oder eine andere Plattform) wird nur innerhalb einer Zone eingesetzt – diese Regel überschreitet Zonen, bitte die Komponentenzuordnung prüfen",
         "A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)":
             "Zonenübergang erfordert eine Firewall – Cisco ACI allein genügt nicht (BSI)",
         "Account activated – you can sign in now": "Konto aktiviert – du kannst dich jetzt anmelden",
@@ -288,6 +294,12 @@ CATALOG: dict[str, dict[str, str]] = {
         "NetBox referred to a different host ({host}) – ignored":
             "NetBox verwies auf einen anderen Host ({host}) – ignoriert",
         "Only http:// and https:// are allowed": "Nur http:// und https:// sind erlaubt",
+        "The address is too long (at most 128 characters)": "Die Adresse ist zu lang (höchstens 128 Zeichen)",
+        "The second factor cannot be verified – an administrator has to reset two-factor authentication for this account":
+            "Der zweite Faktor kann nicht geprüft werden – ein Administrator muss die Zwei-Faktor-Authentifizierung für dieses Konto zurücksetzen",
+        "You cannot reset your own second factor here – use the account page":
+            "Den eigenen zweiten Faktor kannst du hier nicht zurücksetzen – nutze die Kontoseite",
+        "2FA seed unreadable": "2FA-Geheimnis nicht lesbar",
         "The address has no host": "Die Adresse hat keinen Host",
         "Only {checked} entries accounted for, the checkpoint records {count}":
             "Nur {checked} Einträge nachweisbar, der Prüfpunkt verzeichnet {count}",
@@ -334,8 +346,8 @@ CATALOG: dict[str, dict[str, str]] = {
             "Für folgende Adressen ist noch keine Komponenten-Zuordnung festgelegt: ",
         "No enforcing components could be determined":
             "Es konnten keine Umsetzungs-Komponenten ermittelt werden",
-        "No EPG mapping maintained for source/destination – the export falls back to a single contract. Maintain it on the Objects page under ACI EPGs.":
-            "Keine EPG-Zuordnung für Quelle/Ziel gepflegt – Export erfolgt als Einzel-Contract (Fallback). EPG-Zuordnung: Seite Objekte → ACI EPGs.",
+        "No EPG mapping maintained for source/destination – the rule is not exported to the fabric. Maintain it on the Objects page under ACI EPGs.":
+            "Keine EPG-Zuordnung für Quelle/Ziel gepflegt – die Regel wird nicht in die Fabric exportiert. EPG-Zuordnung auf der Objekte-Seite unter ACI EPGs pflegen.",
         "No mail delivery configured – pass on the activation link manually":
             "Kein Mailversand konfiguriert – Aktivierungslink bitte manuell übermitteln",
         "No mail delivery configured – pass on the reset link manually":
@@ -360,6 +372,10 @@ CATALOG: dict[str, dict[str, str]] = {
         "Passkey registered": "Passkey registriert",
         "Password changed": "Passwort geändert",
         "Password must be at least 8 characters long": "Passwort muss mindestens 8 Zeichen haben",
+        "Password must be at most 128 characters long": "Passwort darf höchstens 128 Zeichen haben",
+        "This password is too common – choose another one": "Dieses Passwort ist zu verbreitet – bitte ein anderes wählen",
+        "Password must not contain the username or e-mail address":
+            "Passwort darf den Benutzernamen oder die E-Mail-Adresse nicht enthalten",
         "PBR enabled: a target firewall (component) is required":
             "PBR aktiviert: Ziel-Firewall (Komponente) ist erforderlich",
         "PBR enabled: the PBR node IP is required": "PBR aktiviert: PBR-Node-IP ist erforderlich",
@@ -389,8 +405,8 @@ CATALOG: dict[str, dict[str, str]] = {
         "Rule set to deleted": "Regel auf gelöscht gesetzt",
         "SECRET_KEY is not set – startup refused (fail-secure). Set SECRET_KEY (e.g. `openssl rand -hex 32`) or PERMITRA_DEV=1 for local development.":
             "SECRET_KEY ist nicht gesetzt – Start verweigert (fail-secure). Setze SECRET_KEY (z.B. `openssl rand -hex 32`) oder PERMITRA_DEV=1 für lokale Entwicklung.",
-        "Separation of duties: you cannot approve a rule you requested, created or submitted yourself":
-            "Vier-Augen-Prinzip: selbst beantragte, angelegte oder eingereichte Regeln "
+        "Separation of duties: you cannot approve a rule you requested, created, edited or submitted yourself":
+            "Vier-Augen-Prinzip: selbst beantragte, angelegte, bearbeitete oder eingereichte Regeln "
             "können nicht selbst freigegeben werden",
         "Separation of duties: you cannot approve your own request":
             "Vier-Augen-Prinzip: eigene Anträge können nicht selbst freigegeben werden",
@@ -497,6 +513,10 @@ CATALOG: dict[str, dict[str, str]] = {
             "Zone mit ID '{code}' oder Name '{name}' existiert bereits",
         "Address object '{name}' already exists": "Adress-Objekt '{name}' existiert bereits",
         "Address object '{name}': IP {old_ip} → {new_ip}": "Adress-Objekt '{name}': IP {old_ip} → {new_ip}",
+        "Change ID set to {change_id}": "Change-ID gesetzt auf {change_id}",
+        "Permitra generates nothing for {platform} – the implementation is documented in the platform itself":
+            "Permitra erzeugt für {platform} nichts – die Umsetzung wird in der Plattform selbst dokumentiert",
+        "{previous} → {change_id}": "{previous} → {change_id}",
         "Address object '{name}': IP {old_ip} → {new_ip} – the approval is withdrawn, the rule needs a new review":
             "Adress-Objekt '{name}': IP {old_ip} → {new_ip} – die Freigabe ist zurückgezogen, die Regel braucht eine neue Prüfung",
         "Address object '{name}': the new IP {ip} would leave rule(s) inadmissible – {problems}":
@@ -656,6 +676,8 @@ CATALOG: dict[str, dict[str, str]] = {
             "{field}: mindestens ein Adress-Eintrag erforderlich",
         "{field}: at least one entry is required": "{field}: mindestens ein Eintrag erforderlich",
         "{label} contains a very broad network (/{pfx})": "{label} enthält ein sehr breites Netz (/{pfx})",
+        "{field} must not contain line breaks or control characters":
+            "{field} darf keine Zeilenumbrüche oder Steuerzeichen enthalten",
         "{label} spans several zones ({zones}) – split the rule":
             "{label} umfasst mehrere Zonen ({zones}) – bitte aufteilen",
         "{label} spans several zones: {zones}": "{label} umfasst mehrere Zonen: {zones}",

@@ -1,5 +1,6 @@
 """Shared helpers for all exporters."""
 import re
+import shlex
 from dataclasses import dataclass
 
 from ..validation import is_ping_port, parse_network
@@ -16,6 +17,35 @@ class AddressObject:
 def sanitize_name(text: str, max_len: int = 60) -> str:
     name = re.sub(r"[^A-Za-z0-9_.-]+", "-", text.strip()).strip("-.")
     return name[:max_len] or "obj"
+
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]+")
+
+
+def comment_text(text: str | None, max_len: int = 120) -> str:
+    """Free text made safe for a comment line in generated configuration.
+
+    A justification, a name or a change ID is typed by a rule author and ends
+    up as `# ...` in a set file, an nft script or a bash script. A line break
+    inside it ends the comment, and whatever follows is the next statement
+    the device or the shell runs - the one place the four-eyes review is
+    least likely to look is the second line of a long justification. Line
+    breaks and every other control character collapse to one space, and the
+    text is cut to a length a comment can carry.
+    """
+    return _CONTROL.sub(" ", str(text or "")).strip()[:max_len]
+
+
+def shell_word(text: str | None, max_len: int = 200) -> str:
+    """Free text as ONE shell word, however it is spelled.
+
+    Double quotes in bash still expand `$(...)`, backticks and `\\`, and a
+    `"` inside the text closes them - so a rule name inside double quotes was
+    a command. shlex.quote() yields a single-quoted word the shell hands over
+    verbatim; control characters are removed first because a line break would
+    otherwise end the command before the closing quote.
+    """
+    return shlex.quote(comment_text(text, max_len))
 
 
 def parse_address_entries(entries: list, prefix: str) -> list[AddressObject]:

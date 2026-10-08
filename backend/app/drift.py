@@ -133,7 +133,8 @@ def analyze_drift(db: Session, component: SecurityComponent) -> dict:
     # it must not be allowed to claim it either: in_sync then means only what it
     # meant before, and the report says the coverage is unknown.
     in_sync = (not missing and not stale and not unknown
-               and not coverage["unjustified"] and not widened)
+               and not coverage["unjustified"] and not widened
+               and bool(coverage.get("recognised")))
     return {
         "has_config": True,
         "component_id": component.id,

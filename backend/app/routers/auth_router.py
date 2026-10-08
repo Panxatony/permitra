@@ -1,6 +1,7 @@
 """Sign-in and account security: login (with optional TOTP second factor),
 forgotten/new password, 2FA management and WebAuthn passkeys."""
 import base64
+import logging
 import os
 import secrets
 import time
@@ -11,14 +12,15 @@ from fastapi.responses import PlainTextResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
-from .. import audit, crypto, mailer, ratelimit, totp
-from ..auth import create_token, get_current_user, hash_password, verify_password
+from .. import audit, crypto, mailer, passwords, ratelimit, totp
+from ..auth import create_token, get_current_user, hash_password, needs_rehash, verify_password
 from ..database import get_db
 from ..messages import _
 from ..models import AuthToken, Passkey, User, utcnow
 from ..schemas import Token, UserOut
 from .users_router import consume_token, issue_token
 
+log = logging.getLogger("permitra.auth")
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
@@ -96,8 +98,21 @@ async def login(
         otp = ((await request.form()).get("otp") or "").strip()
         if not otp:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "otp_required")
-        counter = totp.verify(crypto.decrypt(user.totp_secret), otp,
-                              last_counter=user.totp_last_counter)
+        seed = crypto.decrypt(user.totp_secret, "totp")
+        if not seed:
+            # The seed exists but no configured key reads it - a rotation
+            # without SECRET_KEY_PREVIOUS, or a restored backup. This is not
+            # a wrong code: it does not count against the account, and the
+            # message names the way out, because a locked account with a
+            # second factor nobody can reset is exactly what used to happen.
+            log.error("TOTP seed of %s cannot be decrypted - an administrator has to reset 2FA",
+                      user.username)
+            audit.record(db, "auth", "auth.login_failed", actor=user.username,
+                         source_ip=audit.client_ip(request), detail="2FA seed unreadable")
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED,
+                                _("The second factor cannot be verified – an administrator "
+                                  "has to reset two-factor authentication for this account"))
+        counter = totp.verify(seed, otp, last_counter=user.totp_last_counter)
         if counter is None:
             _register_failure(db, user)
             audit.record(db, "auth", "auth.login_failed", actor=user.username,
@@ -111,6 +126,12 @@ async def login(
     if user.failed_logins or user.locked_until:
         user.failed_logins = 0
         user.locked_until = None
+        db.commit()
+    # The one moment the password is known in the clear: a hash made with a
+    # lower cost or in the old format is rewritten at the current cost, so
+    # raising the cost needs no migration - hashes catch up as people log in.
+    if needs_rehash(user.password_hash):
+        user.password_hash = hash_password(form.password)
         db.commit()
     audit.record(db, "auth", "auth.login", actor=user.username,
                  source_ip=audit.client_ip(request))
@@ -205,10 +226,8 @@ def set_password(request: Request, payload: dict, db: Session = Depends(get_db))
     reset flow cannot be used to undo what an admin decided.
     """
     password = payload.get("password") or ""
-    if len(password) < 8:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            _("Password must be at least 8 characters long"))
     user, purpose = consume_token(db, payload.get("token") or "")
+    passwords.enforce(password, user.username, user.email)
     user.password_hash = hash_password(password)
     if purpose == "activate":
         user.is_active = True
@@ -233,9 +252,7 @@ def change_password(
     if not verify_password(payload.get("current") or "", user.password_hash):
         raise HTTPException(status.HTTP_403_FORBIDDEN, _("The current password is wrong"))
     new = payload.get("new") or ""
-    if len(new) < 8:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
-                            _("Password must be at least 8 characters long"))
+    passwords.enforce(new, user.username, user.email)
     user.password_hash = hash_password(new)
     user.token_valid_from = utcnow()  # revokes other existing sessions
     db.commit()
@@ -254,7 +271,7 @@ def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_u
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             _("Two-factor authentication is already enabled"))
     secret = totp.new_secret()
-    user.totp_secret = crypto.encrypt(secret)
+    user.totp_secret = crypto.encrypt(secret, "totp")
     user.totp_last_counter = None
     db.commit()
     # The plaintext seed leaves the server exactly once, to be scanned. It is
@@ -264,29 +281,33 @@ def totp_setup(db: Session = Depends(get_db), user: User = Depends(get_current_u
 
 
 @router.post("/totp/enable")
-def totp_enable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def totp_enable(request: Request, payload: dict, db: Session = Depends(get_db),
+                user: User = Depends(get_current_user)):
     if not user.totp_secret:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("Start the setup first"))
-    counter = totp.verify(crypto.decrypt(user.totp_secret), payload.get("code") or "",
+    counter = totp.verify(crypto.decrypt(user.totp_secret, "totp"), payload.get("code") or "",
                           last_counter=user.totp_last_counter)
     if counter is None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, _("The code is invalid"))
     user.totp_last_counter = counter
     user.totp_enabled = True
     db.commit()
-    audit.record(db, "auth", "auth.totp_enabled", actor=user.username)
+    audit.record(db, "auth", "auth.totp_enabled", actor=user.username,
+                 source_ip=audit.client_ip(request))
     return {"detail": _("Two-factor authentication enabled")}
 
 
 @router.post("/totp/disable")
-def totp_disable(payload: dict, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+def totp_disable(request: Request, payload: dict, db: Session = Depends(get_db),
+                 user: User = Depends(get_current_user)):
     if not verify_password(payload.get("password") or "", user.password_hash):
         raise HTTPException(status.HTTP_403_FORBIDDEN, _("The password is wrong"))
     user.totp_enabled = False
     user.totp_secret = None
     user.totp_last_counter = None
     db.commit()
-    audit.record(db, "auth", "auth.totp_disabled", actor=user.username)
+    audit.record(db, "auth", "auth.totp_disabled", actor=user.username,
+                 source_ip=audit.client_ip(request))
     return {"detail": _("Two-factor authentication disabled")}
 
 

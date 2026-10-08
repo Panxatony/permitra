@@ -130,7 +130,9 @@ export default function Admin() {
                     {u.is_active ? t('active') : t('inactive')}
                   </span>
                 </td>
-                <td>{u.totp_enabled ? '✓' : '–'}</td>
+                <td title={u.totp_unreadable ? t('2FA secret unreadable – reset required') : ''}>
+                  {u.totp_enabled ? (u.totp_unreadable ? '⚠' : '✓') : '–'}
+                </td>
                 <td className="row-actions">
                   {u.username !== me.username && (
                     <>
@@ -142,6 +144,12 @@ export default function Admin() {
                       <button className="btn btn-ghost" onClick={() => act(() => api.sendReset(u.username))}>
                         {t('Password reset')}
                       </button>
+                      {u.totp_enabled && (
+                        <button className="btn btn-ghost"
+                          onClick={() => act(() => api.resetTotp(u.username), t('Two-factor authentication reset'))}>
+                          {t('Reset 2FA')}
+                        </button>
+                      )}
                       <button className="btn btn-ghost" onClick={() => remove(u)}>{t('Delete')}</button>
                     </>
                   )}

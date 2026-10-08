@@ -43,7 +43,7 @@ def upgrade() -> None:
         if looks_encrypted(secret):
             continue
         conn.execute(sa.text("UPDATE users SET totp_secret = :s WHERE id = :i"),
-                     {"s": encrypt(secret), "i": user_id})
+                     {"s": encrypt(secret, "totp"), "i": user_id})
 
 
 def downgrade() -> None:
@@ -56,7 +56,7 @@ def downgrade() -> None:
     for user_id, secret in rows:
         if looks_encrypted(secret):
             conn.execute(sa.text("UPDATE users SET totp_secret = :s WHERE id = :i"),
-                         {"s": decrypt(secret), "i": user_id})
+                         {"s": decrypt(secret, "totp"), "i": user_id})
 
     with op.batch_alter_table("users") as batch:
         batch.drop_column("totp_last_counter")

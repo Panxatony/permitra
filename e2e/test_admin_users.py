@@ -17,7 +17,7 @@ def test_deleting_a_user_reports_success_not_a_parser_error(open_page, sessions)
     token = sessions["admin"]["access_token"]
     request = urllib.request.Request(
         f"{BASE_URL}/api/users",
-        data=json.dumps({"username": "wegwerf", "password": "Wegwerf2026!x",
+        data=json.dumps({"username": "wegwerf", "password": "Einmalig-2026!x",
                          "full_name": "Wegwerf", "role": "architect"}).encode(),
         headers={"Authorization": f"Bearer {token}",
                  "Content-Type": "application/json"})

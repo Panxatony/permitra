@@ -30,6 +30,8 @@ services:
       # ':?' is the error compose prints when it is unset.
       DATABASE_URL: postgresql+psycopg2://permitra:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/permitra
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set (openssl rand -hex 32)}
+      # Previous SECRET_KEY(s) after a rotation, comma-separated; see docs/ADMINISTRATION.md
+      SECRET_KEY_PREVIOUS: ${SECRET_KEY_PREVIOUS:-}
       # Demo/test operation: creates the well-known demo users. Do NOT set this
       # in production – an initial admin with a random password is created (log).
       PERMITRA_DEMO: ${PERMITRA_DEMO:-}

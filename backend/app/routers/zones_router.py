@@ -8,6 +8,7 @@ from ..messages import _, render
 from ..models import (
     IN_FORCE,
     Comment,
+    Enforcement,
     Role,
     Rule,
     RuleStatus,
@@ -178,11 +179,11 @@ def set_zone_components(
     if missing:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             _("Unknown component(s): {components}", components=sorted(missing)))
-    non_fw = [c.name for c in components if c.type.value == "aci"]
+    non_fw = [c.name for c in components if not c.is_firewall]
     if non_fw:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            _("Zones attach to firewall clusters – ACI is not a zone transition: {components}",
+            _("Zones attach to firewall clusters – micro-segmentation is not a zone transition: {components}",
               components=", ".join(non_fw)),
         )
     zone.components = components
@@ -259,7 +260,7 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
     zones = db.query(Zone).order_by(Zone.sort_order, Zone.name).all()
     rules = active_rules(db).filter(Rule.status != RuleStatus.deactivated).all()
     firewalls_total = db.query(SecurityComponent).filter(
-        SecurityComponent.type != "aci"
+        SecurityComponent.enforcement == Enforcement.firewall
     ).count()
 
     result = []
@@ -271,7 +272,7 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
         ]
         # "Attached to": the zone's explicitly maintained firewall attachment;
         # ACI fabrics are still derived from the intra-zone rules
-        firewalls = {c.id: c for c in zone.components if c.type.value != "aci"}
+        firewalls = {c.id: c for c in zone.components if c.is_firewall}
         aci = {}
         for rule in zone_rules:
             # ACI contracts are provided at the destination segment (provider EPG) –
@@ -279,7 +280,7 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
             if (rule.destination_zone or "").upper() != zname:
                 continue
             for component in rule.components:
-                if component.type.value == "aci":
+                if not component.is_firewall:
                     aci[component.id] = component
         result.append(
             {
@@ -296,8 +297,10 @@ def overview(db: Session = Depends(get_db), _user: User = Depends(get_current_us
                      "location": c.location, "ns_tier": c.ns_tier}
                     for c in sorted(firewalls.values(), key=lambda c: c.name)
                 ],
+                # Every micro-segmentation component enforcing within the zone;
+                # the key is historical, ACI was the only kind there was.
                 "aci": [
-                    {"id": c.id, "name": c.name}
+                    {"id": c.id, "name": c.name, "type": c.type.value, "platform": c.platform}
                     for c in sorted(aci.values(), key=lambda c: c.name)
                 ],
                 "networks": [
@@ -716,7 +719,7 @@ def _assess_rules(db: Session, rules, resolve) -> list[dict]:
         # SIM102 rationale: kept nested - the outer test scopes this to cross-zone rules,
         # the inner one is the separate BSI firewall requirement.
         if admissible and (src or "").upper() != (dst or "").upper():  # noqa: SIM102
-            if rule.components and not any(c.type.value != "aci" for c in rule.components):
+            if rule.components and not any(c.is_firewall for c in rule.components):
                 admissible = False
                 reason = _("A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)")
                 messages.append(reason)
@@ -794,6 +797,11 @@ def _apply_reassessment(db: Session, network: ZoneNetwork, user, batch_id: str) 
             add_version(db, rule, user, template, **values)
             db.add(Comment(rule_pk=rule.id, author=user.username,
                            text=render(template, values)))
+            from .. import change_management
+            change_management.notify(
+                "rule.removal_proposed",
+                {**change_management.rule_payload(rule), "proposed_by": user.username,
+                 "reason": rule.removal_reason, "network": network.cidr})
         elif entry["zones_changed"]:
             rule.version += 1
             add_version(db, rule, user,
@@ -963,7 +971,7 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                     # Re-run the integrity check at application time (fail-secure)
                     # Deliberately including soft-deleted rules (see above)
                     used = db.query(Rule).filter(
-                        (Rule.source_zone.ilike(zone.name)) | (Rule.destination_zone.ilike(zone.name))
+                        (Rule.source_zone.ilike(zone_ref(zone))) | (Rule.destination_zone.ilike(zone_ref(zone)))
                     ).count()
                     nets = db.query(ZoneNetwork).filter(ZoneNetwork.zone_id == zone.id).count()
                     if used or nets:
@@ -1034,7 +1042,10 @@ def _decide_change(db: Session, change_id: int, user: User, approve: bool, comme
                 values = {"from_zone": zone_a.name, "to_zone": zone_b.name,
                           "request": change.batch_id[:8]}
                 note = render(template, values)
-                for rule in _affected_rules(db, zone_a.name, zone_b.name,
+                # Rules store the zone *reference* (the code, since rules
+                # reference zones by code) - the preview above asks by it,
+                # and asking here by name found nothing for every coded zone.
+                for rule in _affected_rules(db, zone_ref(zone_a), zone_ref(zone_b),
                                             statuses=IN_FORCE):
                     rule.status = RuleStatus.in_review
                     rule.version += 1

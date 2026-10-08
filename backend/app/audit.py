@@ -115,7 +115,8 @@ def client_ip(request) -> str:
     if request is None or request.client is None:
         return ""
     peer = request.client.host
-    fwd = request.headers.get("x-forwarded-for", "")
+    headers = getattr(request, "headers", None)
+    fwd = headers.get("x-forwarded-for", "") if headers is not None else ""
     if not fwd:
         return peer
     try:
@@ -126,7 +127,15 @@ def client_ip(request) -> str:
         # The header exists but reached us from an untrusted hop - ignore it.
         return peer
     hops = [h.strip() for h in fwd.split(",") if h.strip()]
-    return hops[-1] if hops else peer
+    if not hops:
+        return peer
+    # The proxy is trusted; the header is still text that ends up in a
+    # String(64) column and in the evidence. Anything that is not an address
+    # is not an observation the proxy made, so the peer is recorded instead.
+    try:
+        return str(ipaddress.ip_address(hops[-1]))
+    except ValueError:
+        return peer
 
 
 # ---------- Hash chain (integrity) -----------------------------------------
@@ -177,6 +186,55 @@ def _advisory_lock(db: Session) -> None:
 
 
 DETAIL_VALUES = "detail_values"   # reserved key in `extra`, see record()
+TRUNCATED = "truncated"           # reserved key in `extra`: the fields that were cut
+
+# What the chained text columns hold, read from the model so a migration that
+# widens a column widens the clamp with it. PostgreSQL enforces these widths,
+# SQLite does not - which is why an overflow never showed up in a test run.
+_WIDTHS = {
+    name: AuditEvent.__table__.columns[name].type.length
+    for name in ("category", "event", "actor", "object", "source_ip")
+}
+# `detail` and its values are Text, so nothing enforces a width; the cap keeps
+# a single entry (and its copy in every SIEM payload) within reason.
+DETAIL_MAX = 4096
+
+
+def _cut(value: str, width: int) -> str:
+    return value[: width - 1] + "…"
+
+
+def _clamp(fields: dict, detail: str, detail_values: dict | None) -> tuple[dict, str, dict | None, list[str]]:
+    """Cut every value to what its column holds, and say which ones were cut.
+
+    This runs BEFORE the hash is computed: hashed and stored values have to be
+    the same bytes, or verify_chain() would report the entry as modified. An
+    entry that exceeded a column used to fail the INSERT on PostgreSQL, and
+    because auditing must not take the business operation down, the failure
+    was swallowed - the event was simply gone, with no gap in the chain to
+    show for it. A login attempt with a 65-character username was enough to
+    keep that attempt out of the log.
+    """
+    truncated: list[str] = []
+    out = {}
+    for name, width in _WIDTHS.items():
+        value = fields.get(name) or ""
+        if len(value) > width:
+            value = _cut(value, width)
+            truncated.append(name)
+        out[name] = value
+    if detail and len(detail) > DETAIL_MAX:
+        detail = _cut(detail, DETAIL_MAX)
+        truncated.append("detail")
+    if detail_values:
+        cut_values = {}
+        for key, value in detail_values.items():
+            if isinstance(value, str) and len(value) > DETAIL_MAX:
+                value = _cut(value, DETAIL_MAX)
+                truncated.append(f"{DETAIL_VALUES}.{key}")
+            cut_values[key] = value
+        detail_values = cut_values
+    return out, detail, detail_values, truncated
 
 
 def record(db: Session, category: str, event: str, actor: str = "", object: str = "",
@@ -193,9 +251,24 @@ def record(db: Session, category: str, event: str, actor: str = "", object: str 
     it - see collect(). Translating on the way in froze each entry in whatever
     language the instance was set to that day, which is how an instance running
     in German ends up with an audit log half in English.
+
+    The entry is written in the caller's session and committed with whatever
+    the caller has pending. A caller that records before its own commit
+    therefore has its change committed here - and, should the INSERT fail,
+    rolled back here. Value length used to be the one realistic way for the
+    INSERT to fail; it is clamped below, so what remains are the genuine
+    database errors the caller would not survive either.
     """
+    fields, detail, detail_values, truncated = _clamp(
+        {"category": category, "event": event, "actor": actor, "object": object,
+         "source_ip": source_ip},
+        detail, detail_values)
+    category, event, actor, object, source_ip = (
+        fields["category"], fields["event"], fields["actor"], fields["object"], fields["source_ip"])
     if detail_values:
         extra = {**(extra or {}), DETAIL_VALUES: detail_values}
+    if truncated:
+        extra = {**(extra or {}), TRUNCATED: truncated}
     ts = utcnow()
     with _write_lock:
         try:

@@ -7,7 +7,14 @@ session with a concluding publish.
 import json
 
 from ..models import Rule, RuleAction, RuleLogging
-from .common import icmp_echo_only, parse_address_entries, service_ports, split_protocols
+from .common import (
+    comment_text,
+    icmp_echo_only,
+    parse_address_entries,
+    service_ports,
+    shell_word,
+    split_protocols,
+)
 
 ACCESS_LAYER = "Network"
 
@@ -115,7 +122,7 @@ def export_cli(rules: list[Rule]) -> str:
     ]
     seen = set()
     for rule in rules:
-        lines.append(f"# --- {rule.rule_id}: {rule.justification or rule.name} ---")
+        lines.append(f"# --- {rule.rule_id}: {comment_text(rule.justification or rule.name)} ---")
         net_objs, _, _ = _network_objects(rule)
         svc_objs, _ = _service_objects(rule)
         for obj in net_objs + svc_objs:
@@ -144,9 +151,11 @@ def export_cli(rules: list[Rule]) -> str:
         def indexed(key: str, values: list[str]) -> str:
             return " ".join(f'{key}.{i} "{v}"' for i, v in enumerate(values, 1))
 
+        # The rule name is the one free-text value on this line: a single
+        # shell word (see shell_word), never inside double quotes.
         lines.append(
             f'mgmt_cli add access-rule layer "{ACCESS_LAYER}" position top'
-            f' name "{payload["name"]}"'
+            f" name {shell_word(payload['name'])}"
             f" {indexed('source', payload['source'])}"
             f" {indexed('destination', payload['destination'])}"
             f" {indexed('service', payload['service'])}"

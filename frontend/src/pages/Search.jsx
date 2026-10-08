@@ -4,7 +4,7 @@ import { api } from '../api'
 import { ServiceList, StatusBadge, formatEntry, useZoneLabels } from '../components/shared'
 import { dateLocale, useLang } from '../i18n'
 
-const TYPE_LABELS = { juniper: 'Juniper SRX', checkpoint: 'Check Point', aci: 'Cisco ACI' }
+const TYPE_LABELS = { juniper: 'Juniper SRX', checkpoint: 'Check Point', aci: 'Cisco ACI', microsegmentation: 'Micro-segmentation' }
 
 function highlight(entries, matched) {
   return (entries || []).map((e, i) => {

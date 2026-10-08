@@ -2,12 +2,13 @@ import re
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import audit, ping_baseline
+from .. import audit, change_management, ping_baseline
+from ..accounts import account_key
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
 from ..conflicts import find_conflicts
@@ -20,7 +21,6 @@ from ..models import (
     IN_FORCE,
     AddressComponentMap,
     Comment,
-    ComponentType,
     Role,
     Rule,
     RuleAction,
@@ -219,11 +219,12 @@ def enforce_bsi_firewall(source_zone: str, destination_zone: str, components: li
     src, dst = (source_zone or "").strip(), (destination_zone or "").strip()
     if not src or not dst or src.upper() == dst.upper():
         return  # Intra-zone: ACI contracts are the right instrument here
-    if components and not any(c.type.value != "aci" for c in components):
+    if components and not any(c.is_firewall for c in components):
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            _("A zone transition requires a firewall (BSI definition): Cisco ACI alone is not "
-              "sufficient for {src} → {dst}. Assign a firewall cluster.",
+            _("A zone transition requires a firewall (BSI definition): micro-segmentation "
+              "alone (ACI or another platform) is not sufficient for {src} → {dst}. "
+              "Assign a firewall cluster.",
               src=src, dst=dst),
         )
 
@@ -572,7 +573,7 @@ def path_analysis(
     )
     # Same mapping (same network) => intra-zone => ACI; otherwise firewalls
     intra = map_src is not None and map_dst is not None and map_src.id == map_dst.id
-    filtered = [c for c in components if (c.type == ComponentType.aci) == intra]
+    filtered = [c for c in components if (not c.is_firewall) == intra]
     components = filtered or components
 
     # Multi-hop ordering: source-side components -> both-sided -> destination-side
@@ -943,6 +944,10 @@ def declare_emergency_rule(
 
     from .. import notifications
     notifications.rule_submitted(db, rule)
+    change_management.notify(
+        "rule.emergency_declared",
+        {**change_management.rule_payload(rule), "declared_by": user.username,
+         "reason": rule.emergency_reason, "approval_due": rule.emergency_approval_due})
     return rule
 
 
@@ -1204,6 +1209,10 @@ def retire_application(
     from .. import notifications
     for rule in proposed:
         notifications.rule_submitted(db, rule)
+        change_management.notify(
+            "rule.removal_proposed",
+            {**change_management.rule_payload(rule), "proposed_by": user.username,
+             "reason": rule.removal_reason})
     return result
 
 
@@ -1282,7 +1291,7 @@ def delete_rule(
     db.commit()
     audit.record(db, "rule", "rule.deleted", actor=user.username, object=rule.rule_id,
                  detail="Rule deleted (soft delete): {name}", detail_values={"name": rule.name},
-                 source_ip=(request.client.host if request and request.client else ""))
+                 source_ip=audit.client_ip(request))
 
 
 # --- Review workflow ---------------------------------------------------------
@@ -1385,26 +1394,76 @@ def submit_for_review(
     return rule
 
 
+# Actors that write versions without being a person who shaped the content:
+# the expiry job, the Excel import. They never count as involved.
+_SYSTEM_ACTORS = {"system", "excel-import"}
+# A version carrying one of these statuses records a decision that closed a
+# review cycle; what was written before it is history, not the content now
+# under review.
+_CYCLE_CLOSED = {RuleStatus.approved.value, RuleStatus.active.value, RuleStatus.rejected.value,
+                 RuleStatus.deactivated.value, RuleStatus.deleted.value}
+
+
+def accounts_involved(rule: Rule) -> set[str]:
+    """Every account that shaped the content under review, as account keys.
+
+    Separation of duties used to exclude three names: the creator, the
+    current requestor and the writer of the newest version. Everyone else
+    could approve - including whoever edited the draft before somebody else
+    submitted it, and the submitter themselves once any later version (an
+    implementation status, a handover, an address propagation) had replaced
+    them as "newest". The set is now the current review cycle: the creator,
+    the current requestor, and whoever wrote a version or was requestor since
+    the last decision closed a cycle. A version by a system actor neither
+    counts nor clears anyone.
+    """
+    versions = sorted(rule.versions, key=lambda v: v.version)
+    cycle: list = []
+    previous = RuleStatus.draft.value
+    for v in versions:
+        current = (v.snapshot or {}).get("status")
+        # A decision is the *transition* into a closed status. A version that
+        # merely carries one - a handover, a ticket number, an extension, an
+        # implementation report written while the rule was in force - is no
+        # decision, and treating it as one cleared everybody before it: a
+        # requestor who handed over an approved rule could approve its next
+        # revision.
+        if current in _CYCLE_CLOSED and previous not in _CYCLE_CLOSED:
+            cycle = []
+        else:
+            cycle.append(v)
+        previous = current if current is not None else previous
+    names = {rule.created_by, rule.requestor}
+    for v in cycle:
+        names.add(v.changed_by)
+        names.add((v.snapshot or {}).get("requestor"))
+    if not cycle and versions:
+        # A rule with no version since its last decision is a legacy or an
+        # imported record; the newest writer is the best available answer.
+        names.add(versions[-1].changed_by)
+    return {account_key(n) for n in names if account_key(n) and account_key(n) not in _SYSTEM_ACTORS}
+
+
 def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus, note: str):
     rule = get_rule_or_404(db, rule_id)
     if new_status in (RuleStatus.approved, RuleStatus.rejected) and rule.status != RuleStatus.in_review:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, _("The rule is not in review"))
-    # Four-eyes principle: whoever requested, submitted or created the rule must
-    # not approve it themselves (admins included) – BSI separation of duties.
+    # Four-eyes principle: whoever requested, created, edited or submitted the
+    # content under review must not approve it (admins included) – BSI
+    # separation of duties. See accounts_involved() for what "involved" means.
     #
     # The check is on the acting *account*, which is what makes it survive
     # multi-role accounts (#78): one person holding architect and change_approver
     # still cannot approve their own rule, because it is the same account on both
-    # sides. They may approve everyone else's.
-    if new_status == RuleStatus.approved:
-        last_version = max(rule.versions, key=lambda v: v.version, default=None)
-        submitter = last_version.changed_by if last_version else rule.created_by
-        if user.username in {submitter, rule.created_by, rule.requestor}:
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                _("Separation of duties: you cannot approve a rule you requested, "
-                  "created or submitted yourself"),
-            )
+    # sides. They may approve everyone else's. Names are compared the way every
+    # other place compares them (accounts.py), so a requestor that reached the
+    # rule through an import differing only in case is still the same person.
+    if new_status == RuleStatus.approved and account_key(user.username) in accounts_involved(rule):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            _("Separation of duties: you cannot approve a rule you requested, "
+              "created, edited or submitted yourself"),
+        )
     # If the rule's zone relation is set to block (e.g. after a change to the zone
     # matrix), "approve" means approving its removal: the rule is deactivated and
     # set to "to remove" for each component – so it shows up for operations as a
@@ -1448,6 +1507,10 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
                 note_values = {"from_zone": rule.source_zone,
                                "to_zone": rule.destination_zone}
             rule.removal_reason = ""   # the proposal has been decided
+            # This return skips the common tail below, where every decision
+            # closes an emergency window; without it the dashboard kept
+            # counting the removed rule as a pending emergency change.
+            rule.emergency_approval_due = None
             add_version(db, rule, user, note_template, **note_values)
             # The comment and the mail below are written now and read as they
             # were written, so those do get the language of the moment.
@@ -1467,7 +1530,17 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
             notifications.rule_implementation_pending(
                 db, rule, _("Removal approved – remove the rule on the components"))
             return rule
+    was_in_force = rule.status in IN_FORCE
     rule.status = new_status
+    if new_status == RuleStatus.deactivated and was_in_force:
+        # A rule in force stands on the devices. Deactivating it in Permitra
+        # does not take it off them, so the components show the removal as
+        # open work - as every other path out of service does.
+        rule.impl_status = {
+            **(rule.impl_status or {}),
+            **{c.name: "to remove" for c in rule.components
+               if (rule.impl_status or {}).get(c.name) not in ("deactivated", "new", "open")},
+        }
     if new_status == RuleStatus.approved:
         # Components already implemented have to be adjusted by operations after a
         # renewed approval -> implementation status "to change"
@@ -1571,6 +1644,48 @@ def extend_validity(
     return rule
 
 
+class ChangeIdIn(BaseModel):
+    change_id: str = Field("", max_length=128)
+
+    @field_validator("change_id")
+    @classmethod
+    def single_line(cls, v):
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+            raise ValueError(_("{field} must not contain line breaks or control characters",
+                               field="change_id"))
+        return v.strip()
+
+
+@router.patch("/{rule_id}/change-id", response_model=RuleOut)
+def set_change_id(
+    rule_id: str,
+    payload: ChangeIdIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect, Role.operations, Role.change_approver)),
+):
+    """Record the change ticket a rule travels under - metadata, nothing else.
+
+    The documented way for an adapter to write the ticket number back used to
+    be PUT /api/rules/{id}, which needs the architect role and the whole
+    payload, and resets an approved rule to draft. A ticket number is not a
+    content change: the approval stands, the history records who set it."""
+    rule = get_rule_or_404(db, rule_id)
+    if payload.change_id == (rule.change_id or ""):
+        return rule
+    previous = rule.change_id or ""
+    rule.change_id = payload.change_id
+    rule.version += 1
+    add_version(db, rule, user, "Change ID set to {change_id}", change_id=payload.change_id or "–")
+    db.commit()
+    db.refresh(rule)
+    audit.record(db, "rule", "rule.change_id_set", actor=user.username, object=rule.rule_id,
+                 detail="{previous} → {change_id}",
+                 detail_values={"previous": previous or "–", "change_id": payload.change_id or "–"},
+                 source_ip=audit.client_ip(request))
+    return rule
+
+
 @router.put("/{rule_id}/impl-status", response_model=RuleOut)
 def set_impl_status(
     rule_id: str,
@@ -1602,6 +1717,10 @@ def set_impl_status(
     _sync_active_status(db, rule, user)
     db.commit()
     db.refresh(rule)
+    change_management.notify(
+        "rule.implementation",
+        {**change_management.rule_payload(rule), "reported_by": user.username,
+         "impl_status": rule.impl_status, "changed": impl_status})
     return rule
 
 
@@ -1663,7 +1782,15 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _user: User = De
                 line for line in lines
                 if line.startswith(("mgmt_cli add", "#")) and not line.startswith("#!")
             )
-        else:  # aci
+        elif component.type.value != "aci":
+            # A micro-segmentation platform Permitra generates nothing for:
+            # the implementation is documented, not rendered.
+            entry["format"] = "none"
+            entry["preview"] = ""
+            entry["note"] = _("Permitra generates nothing for {platform} – the implementation "
+                              "is documented in the platform itself",
+                              platform=component.platform or component.type.value)
+        else:
             model = aci.build_contract_model([rule], db)
             entry["format"] = "yaml"
             entry["preview"] = aci.export_yaml([rule], db)
@@ -1679,11 +1806,11 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _user: User = De
             else:
                 entry["aci"] = None
                 entry["warning"] = _(
-                    "No EPG mapping maintained for source/destination – the export falls back "
-                    "to a single contract. Maintain it on the Objects page under ACI EPGs."
+                    "No EPG mapping maintained for source/destination – the rule is not "
+                    "exported to the fabric. Maintain it on the Objects page under ACI EPGs."
                 )
         results.append(entry)
-    if rule.status.value != "approved":
+    if rule.status not in IN_FORCE:
         for entry in results:
             entry.setdefault(
                 "note", _("The rule is in status '{status}' – the preview shows the future implementation",
@@ -1759,5 +1886,11 @@ def risk_assess(payload: ResolveRequest, db: Session = Depends(get_db),
         source_zone=payload.source_zone or "",
         destination_zone=payload.destination_zone or "",
         vrf_id=vrf_obj.id,
+        # assess_rule reads these as it does on a stored rule; a draft without
+        # them answered 500, so the form had no live assessment at all.
+        effective_log_level=payload.log_level,
+        log_level=payload.log_level,
+        ping_baseline=payload.ping_baseline,
+        action=payload.action,
     )
     return assess_rule(db, draft)

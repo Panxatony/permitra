@@ -25,21 +25,98 @@ if not SECRET_KEY:
             _("SECRET_KEY is not set – startup refused (fail-secure). "
               "Set SECRET_KEY (e.g. `openssl rand -hex 32`) or PERMITRA_DEV=1 for local development.")
         )
+# Keys that were SECRET_KEY before a rotation, newest first. What they signed
+# or encrypted is still accepted; nothing new is made with them. Drop a key
+# from this list once the re-encryption on startup has reported nothing left
+# under it and its sessions have expired (TOKEN_LIFETIME_HOURS).
+PREVIOUS_SECRET_KEYS = [k.strip() for k in os.environ.get("SECRET_KEY_PREVIOUS", "").split(",") if k.strip()]
 ALGORITHM = "HS256"
 TOKEN_LIFETIME_HOURS = int(os.environ.get("TOKEN_LIFETIME_HOURS", "8"))
+
+
+def derive_key(secret: str, purpose: str) -> bytes:
+    """A 32-byte key for one purpose, from one secret.
+
+    SECRET_KEY used to be the JWT signing key as it is, and sha256(SECRET_KEY)
+    the Fernet key for both the TOTP seeds and the NetBox token: one secret,
+    three uses, no separation. HKDF with the purpose as `info` gives each use
+    its own key; a weakness or leak in one use says nothing about the others.
+    """
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=b"permitra-keys-v1",
+                info=purpose.encode()).derive(secret.encode())
+
+
+def secrets_in_order() -> list[str]:
+    """The current secret first, then the previous ones, newest first."""
+    return [SECRET_KEY, *PREVIOUS_SECRET_KEYS]
+
+
+def _signing_keys() -> list[bytes | str]:
+    """Keys a session token may have been signed with, current first. The raw
+    secrets are in the list because tokens issued before the derivation
+    existed were signed with SECRET_KEY itself - they keep working until
+    they expire, so an upgrade logs nobody out."""
+    keys: list[bytes | str] = []
+    for secret in secrets_in_order():
+        keys.append(derive_key(secret, "jwt"))
+    keys.extend(secrets_in_order())
+    return keys
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 
-def hash_password(password: str, salt: str | None = None) -> str:
+# PBKDF2-HMAC-SHA256 cost. 600,000 is the OWASP figure (2023); the format
+# below records the count per hash, so raising this number upgrades every
+# hash on its owner's next login (see needs_rehash) and invalidates none.
+# The environment override exists for test runs, where hashing hundreds of
+# fixture users at full cost would cost minutes and prove nothing.
+PBKDF2_ITERATIONS = int(os.environ.get("PERMITRA_PBKDF2_ITERATIONS", "600000"))
+_LEGACY_ITERATIONS = 200_000   # what every hash without a prefix was made with
+_ALGORITHM = "pbkdf2_sha256"
+
+
+def hash_password(password: str, salt: str | None = None, iterations: int | None = None) -> str:
+    """`pbkdf2_sha256$<iterations>$<salt>$<digest>` - a hash that says how it was made.
+
+    The stored string used to be `<salt>$<digest>` with the iteration count
+    hard-coded in the code, so the cost could not be raised without either
+    guessing the format by its shape or invalidating every existing hash.
+    """
     salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 200_000)
-    return f"{salt}${digest.hex()}"
+    iterations = iterations or PBKDF2_ITERATIONS
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations)
+    return f"{_ALGORITHM}${iterations}${salt}${digest.hex()}"
+
+
+def _parse(stored: str) -> tuple[int, str] | None:
+    """(iterations, salt) of a stored hash, in either format; None if unreadable."""
+    parts = (stored or "").split("$")
+    if len(parts) == 4 and parts[0] == _ALGORITHM and parts[1].isdigit():
+        return int(parts[1]), parts[2]
+    if len(parts) == 2 and parts[0]:
+        return _LEGACY_ITERATIONS, parts[0]
+    return None
 
 
 def verify_password(password: str, stored: str) -> bool:
-    salt, _, _digest = stored.partition("$")
-    return secrets.compare_digest(hash_password(password, salt), stored)
+    parsed = _parse(stored)
+    if parsed is None:
+        return False
+    iterations, salt = parsed
+    if stored.startswith(_ALGORITHM + "$"):
+        candidate = hash_password(password, salt, iterations)
+    else:
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), iterations)
+        candidate = f"{salt}${digest.hex()}"
+    return secrets.compare_digest(candidate, stored)
+
+
+def needs_rehash(stored: str) -> bool:
+    """Whether a hash is below the current cost or in the old format."""
+    parsed = _parse(stored)
+    return parsed is None or parsed[0] < PBKDF2_ITERATIONS or not stored.startswith(_ALGORITHM + "$")
 
 
 def create_token(user: User) -> str:
@@ -54,7 +131,7 @@ def create_token(user: User) -> str:
         "iat": int(now.timestamp()),
         "exp": now + timedelta(hours=TOKEN_LIFETIME_HOURS),
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, derive_key(SECRET_KEY, "jwt"), algorithm=ALGORITHM)
 
 
 API_TOKEN_PREFIX = "pat_"  # noqa: S105 - identifying prefix of a token, not a secret
@@ -93,13 +170,27 @@ def _service_principal_from_pat(request, token: str, db: Session) -> User:
     return principal
 
 
+def decode_token(token: str) -> dict:
+    """Decode a session token under the current key, else under a previous
+    one. Only a signature mismatch moves on to the next key; an expired or
+    malformed token is reported as such under the first."""
+    keys = _signing_keys()
+    for i, key in enumerate(keys):
+        try:
+            return jwt.decode(token, key, algorithms=[ALGORITHM])
+        except jwt.InvalidSignatureError:
+            if i == len(keys) - 1:
+                raise
+    raise jwt.InvalidSignatureError("no key")
+
+
 def get_current_user(request: Request = None, token: str = Depends(oauth2_scheme),
                      db: Session = Depends(get_db)) -> User:
     # Read-only service token (automation) instead of a JWT
     if token and token.startswith(API_TOKEN_PREFIX):
         return _service_principal_from_pat(request, token, db)
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = decode_token(token)
     except jwt.PyJWTError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Token is invalid or expired")) from exc
     user = db.query(User).filter(User.username == payload.get("sub")).first()

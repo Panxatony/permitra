@@ -8,13 +8,21 @@ from ..validation import format_entry
 from .common import csv_safe
 
 CSV_COLUMNS = [
-    "Rule-ID", "Application", "APP-ID", "Platform", "Components", "Source SZ",
+    "Rule-ID", "Application", "APP-ID", "Platform", "Enforcement", "Components", "Source SZ",
     "Source system", "Destination-SZ", "Destination system", "Protocol", "Port",
     "Justification", "Requestor", "Owner", "Implementation status", "Status",
     "Change-ID", "Last change", "Info", "Business context",
 ]
 
-PLATFORM_LABELS = {"juniper": "Juniper", "checkpoint": "Check Point", "aci": "ACI"}
+PLATFORM_LABELS = {"juniper": "Juniper", "checkpoint": "Check Point", "aci": "ACI",
+                   "microsegmentation": "Micro-segmentation"}
+
+
+def enforcement_of(rule: Rule) -> list[str]:
+    """How the rule is enforced, per the components it is rolled out on:
+    "firewall", "microsegmentation", or both for a rule that crosses a zone
+    and is also narrowed inside one."""
+    return sorted({c.enforcement.value for c in rule.components if c.enforcement})
 
 
 def rule_to_dict(rule: Rule, with_meta: bool = True) -> dict:
@@ -26,6 +34,7 @@ def rule_to_dict(rule: Rule, with_meta: bool = True) -> dict:
         "vrf": rule.vrf.name if rule.vrf else None,
         "components": [c.name for c in rule.components],
         "platforms": rule.platforms,
+        "enforcement": enforcement_of(rule),
         "source_zone": rule.source_zone,
         "destination_zone": rule.destination_zone,
         "source": rule.source,
@@ -70,6 +79,7 @@ def export_csv(rules: list[Rule]) -> str:
                 r.application,
                 r.app_id,
                 "/".join(PLATFORM_LABELS.get(p, p) for p in r.platforms),
+                "/".join(enforcement_of(r)),
                 " | ".join(c.name for c in r.components),
                 r.source_zone,
                 " | ".join(format_entry(e) for e in r.source or []),

@@ -48,7 +48,7 @@ teams do not have four people for four roles. This does not soften separation of
 duties, because the four-eyes checks key on the acting *account*, not on a role:
 
 - an account holding both `architect` and `change_approver` still cannot approve
-  a rule it requested, created or submitted (it may approve everyone else's), and
+  a rule it requested, created, edited or submitted (it may approve everyone else's), and
 - the two approvals on a zone, network or matrix change must come from two
   different accounts, so one multi-role account cannot supply both.
 
@@ -120,7 +120,7 @@ docker compose exec backend python seed_demo.py --wipe
 
 ### Demo dataset (`backend/seed_demo.py`)
 
-Deterministic (fixed seed), entirely fictional (networks from `10.10.0.0/16`, hosts `*.demo.local`): 13 zones with a complete allow/block matrix and BSI documentation (owner, C/I/A), ~100 rules across all workflow states, firewall rules between zones (Juniper/Check Point), intra-zonal ACI rules, two deliberately overlapping rules (SR00101/SR00102) for testing conflict warnings, and one rule (SR00103) spanning all three components, plus two ping baselines (SR00104 in service, SR00105 in review) showing the one rule that is allowed to be any-to-any. It also uploads device configurations generated with the real exporters — some carrying rules nobody documented, so the drift comparison has something to find — and leaves one rule standing as an emergency change awaiting approval. A demo that shows only the happy path demonstrates none of what the tool is for.
+Deterministic (fixed seed), entirely fictional (networks from `10.10.0.0/16`, hosts `*.demo.local`): 13 zones with a complete allow/block matrix and BSI documentation (owner, C/I/A), ~100 rules across all workflow states, firewall rules between zones (Juniper/Check Point), intra-zonal ACI rules, two deliberately overlapping rules (SR00101/SR00102) for testing conflict warnings, one rule (SR00103) spanning all three components, one intra-zone rule (SR00106) enforced by Kubernetes NetworkPolicy — a micro-segmentation component Permitra exports nothing for — plus two ping baselines (SR00104 in service, SR00105 in review) showing the one rule that is allowed to be any-to-any. It also uploads device configurations generated with the real exporters — some carrying rules nobody documented, so the drift comparison has something to find — and leaves one rule standing as an emergency change awaiting approval. A demo that shows only the happy path demonstrates none of what the tool is for.
 
 ## Example workflow
 

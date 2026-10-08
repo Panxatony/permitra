@@ -264,6 +264,9 @@ tr.row-deleted td { opacity: .55; }
 .platform-juniper { background: var(--blue-bg); color: var(--blue-fg); margin-right: .25rem; }
 .platform-checkpoint { background: var(--red-bg); color: var(--red); margin-right: .25rem; }
 .platform-aci { background: var(--green-bg-2); color: var(--green); margin-right: .25rem; }
+.platform-microsegmentation { background: var(--green-bg-2); color: var(--green); margin-right: .25rem; }
+.enforcement-firewall { background: var(--blue-bg, #dbe9ff); color: var(--blue, #1c53b8); }
+.enforcement-microsegmentation { background: var(--green-bg-2); color: var(--green); }
 .role-architect { background: var(--blue-bg); color: var(--blue-fg); }
 .role-operations { background: var(--green-bg-2); color: var(--green); }
 .role-admin { background: var(--purple-bg); color: var(--purple-fg); }
@@ -624,6 +627,7 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
 .fw-box.fw-juniper { fill: var(--blue-bg); stroke: var(--blue-fg); }
 .fw-box.fw-checkpoint { fill: var(--red-bg); stroke: var(--red); }
 .fw-box.fw-aci { fill: var(--green-bg-2); stroke: var(--green); }
+.fw-box.fw-microseg { fill: var(--green-bg-2); stroke: var(--green); stroke-dasharray: 4 2; }
 .fw-text { font-weight: 700; }
 
 /* Component topology */

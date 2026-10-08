@@ -204,11 +204,14 @@ def test_a_fully_documented_device_is_in_sync(db):
 
 def test_an_unreadable_config_does_not_make_the_report_fail(db):
     """Coverage unknown, but missing/stale/unknown still work as before - the
-    old answer is not lost just because the new one is unavailable."""
+    old answer is not lost just because the new one is unavailable. What an
+    unreadable configuration can never be is *in sync*: it cannot disprove
+    compliance, so it must not claim it (the review of 2026-10-07 found an
+    ACI upload reading as in sync with coverage unknown)."""
     add_rule(db, "SR00001", component_id=2)
     upload(db, "SR00001 appears here but the format is not one we parse", component_id=2)
 
     result = analyze_drift(db, db.get(SecurityComponent, 2))
     assert result["coverage"]["recognised"] is False
-    assert result["in_sync"] is True
+    assert result["in_sync"] is False
     assert result["missing"] == []

@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .domain_values import PAP_LEVELS, PROTECTION_LEVELS
 from .messages import _, render
-from .models import ComponentType, Role, RuleAction, RuleLogging, RuleStatus, ZonePolicyType
+from .models import ComponentType, Enforcement, Role, RuleAction, RuleLogging, RuleStatus, ZonePolicyType
 from .validation import validate_ip_entry, validate_service
 
 DATE_LABELS = {"valid_from": "Valid from", "valid_until": "Valid until"}
@@ -69,6 +69,8 @@ class ComponentBrief(BaseModel):
     id: int
     name: str
     type: ComponentType
+    enforcement: Enforcement = Enforcement.firewall
+    platform: str = ""
     location: str = ""
 
 
@@ -101,14 +103,29 @@ class RuleFields(BaseModel):
     log_level: RuleLogging = RuleLogging.detailed
     description: str = ""
     justification: str = ""
-    business_context: str = ""
+    business_context: str = Field("", max_length=256)
     info: str = ""
-    requestor: str = ""
-    owner: str = ""
-    change_id: str = ""
+    requestor: str = Field("", max_length=128)
+    owner: str = Field("", max_length=128)
+    change_id: str = Field("", max_length=128)
     valid_from: str | None = None
     valid_until: str | None = None
     impl_status: dict[str, str] = {}
+
+    @field_validator("name", "application", "app_id", "business_context", "requestor", "owner",
+                     "change_id", "source_zone", "destination_zone")
+    @classmethod
+    def single_line(cls, v, info):
+        """These are one-line values wherever they appear - a badge, a column,
+        a comment in generated configuration. A line break or another control
+        character in them has no legitimate reading, and in an export it ends
+        the statement it sits in. The multi-line fields (description,
+        justification, info) keep their line breaks; the exporters flatten
+        them on the way out (exporters.common.comment_text)."""
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+            raise ValueError(_("{field} must not contain line breaks or control characters",
+                               field=info.field_name))
+        return v.strip()
 
     @field_validator("vrf", mode="before")
     @classmethod
@@ -123,9 +140,11 @@ class RuleBase(BaseModel):
     follows from their type.
     """
 
-    name: str = ""
-    application: str = ""
-    app_id: str = ""
+    # Lengths follow the columns (models.Rule); the database default, SQLite,
+    # does not enforce them, PostgreSQL does.
+    name: str = Field("", max_length=128)
+    application: str = Field("", max_length=128)
+    app_id: str = Field("", max_length=64)
     vrf: str = ""              # environment/VRF; empty = default (first VRF)
     component_ids: list[int] = []
     source_zone: str = ""
@@ -144,14 +163,29 @@ class RuleBase(BaseModel):
     log_level: RuleLogging = RuleLogging.detailed
     description: str = ""
     justification: str = ""
-    business_context: str = ""
+    business_context: str = Field("", max_length=256)
     info: str = ""
-    requestor: str = ""
-    owner: str = ""
-    change_id: str = ""
+    requestor: str = Field("", max_length=128)
+    owner: str = Field("", max_length=128)
+    change_id: str = Field("", max_length=128)
     valid_from: str | None = None
     valid_until: str | None = None
     impl_status: dict[str, str] = {}
+
+    @field_validator("name", "application", "app_id", "business_context", "requestor", "owner",
+                     "change_id", "source_zone", "destination_zone")
+    @classmethod
+    def single_line(cls, v, info):
+        """These are one-line values wherever they appear - a badge, a column,
+        a comment in generated configuration. A line break or another control
+        character in them has no legitimate reading, and in an export it ends
+        the statement it sits in. The multi-line fields (description,
+        justification, info) keep their line breaks; the exporters flatten
+        them on the way out (exporters.common.comment_text)."""
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+            raise ValueError(_("{field} must not contain line breaks or control characters",
+                               field=info.field_name))
+        return v.strip()
 
     @field_validator("valid_from", "valid_until")
     @classmethod
@@ -411,6 +445,9 @@ class ZoneCheckOut(BaseModel):
 class ComponentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     type: ComponentType
+    # None = follows from the type (models.default_enforcement)
+    enforcement: Enforcement | None = None
+    platform: str = Field("", max_length=64)
     location: str = ""
     mgmt_address: str = ""
     ns_tier: int = Field(100, ge=0, le=1000, description="North-south tier: 0 = northmost (closest to the internet)")
@@ -421,6 +458,7 @@ class ComponentCreate(BaseModel):
 class ComponentOut(ComponentCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    enforcement: Enforcement
 
 
 class AciGatewayCreate(BaseModel):
@@ -505,6 +543,11 @@ class ResolveRequest(BaseModel):
     source_zone: str = ""
     destination_zone: str = ""
     vrf: str = ""
+    # For the live risk assessment: what the rule would log and whether it
+    # declares itself the ping baseline - both change the verdict.
+    log_level: RuleLogging = RuleLogging.detailed
+    ping_baseline: bool = False
+    action: RuleAction = RuleAction.permit
 
 
 class ResolveOut(BaseModel):
@@ -523,13 +566,16 @@ class UserOut(BaseModel):
     roles: list[Role] = []
     is_active: bool = True
     totp_enabled: bool = False
+    # Set by the admin listing only: the seed is there but no configured key
+    # reads it, so the account needs an admin reset (see users_router).
+    totp_unreadable: bool = False
     notify_email: bool = True
 
 
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     # Without a password an activation link is generated (mail or link for the admin)
-    password: str | None = Field(None, min_length=8)
+    password: str | None = Field(None, min_length=8, max_length=128)
     full_name: str = ""
     email: str = ""
     # `roles` is authoritative when given; `role` remains accepted so an older

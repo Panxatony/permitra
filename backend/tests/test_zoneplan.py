@@ -53,7 +53,7 @@ def test_mermaid_plan(db):
     assert "Protection level: very high" in plan and "Owner: Team Applikationen" in plan
     assert 'FW_FW_Cluster_BER{{"FW-Cluster-BER<br/><i>Juniper SRX</i>"}}' in plan
     # Intra-zone ACI segmentation on the zone node
-    assert "ACI intra-zone: ACI-Fabric-FFM" in plan
+    assert "Micro-segmentation intra-zone: ACI-Fabric-FFM" in plan
     # Edge zone -- firewall and colour classes
     assert "Z_PROD_APP --- FW_FW_Cluster_BER" in plan
     assert "class Z_PROD_APP sbVeryhigh;" in plan

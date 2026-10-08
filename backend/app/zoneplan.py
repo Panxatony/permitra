@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from .models import Rule, RuleStatus, SecurityComponent, Zone, active_rules
 from .zone_check import zone_ref
 
+FW_LABELS = {"juniper": "Juniper SRX", "checkpoint": "Check Point"}
 BAND_LABELS = {
     "external": "External (north) – internet / partners",
     "pap": "P-A-P layer (BSI): packet filter – ALG – packet filter",
@@ -42,13 +43,13 @@ def build_mermaid(db: Session, generated_at: str = "") -> str:
         if not rule.destination_zone:
             continue
         for component in rule.components:
-            if component.type.value == "aci":
+            if not component.is_firewall:
                 aci_by_zone.setdefault((rule.destination_zone or '').upper(), set()).add(component.name)
 
     firewalls: dict[int, SecurityComponent] = {}
     for zone in zones:
         for component in zone.components:
-            if component.type.value != "aci":
+            if component.is_firewall:
                 firewalls[component.id] = component
 
     lines = [
@@ -67,7 +68,7 @@ def build_mermaid(db: Session, generated_at: str = "") -> str:
         lines.append(f'  subgraph BAND_{level}["{BAND_LABELS[level]}"]')
         if level == "pap":
             for fw in sorted(band_fws, key=lambda f: (f.ns_tier or 100, f.name)):
-                label = f"{fw.name}<br/><i>{'Juniper SRX' if fw.type.value == 'juniper' else 'Check Point'}</i>"
+                label = f"{fw.name}<br/><i>{FW_LABELS.get(fw.type.value, fw.platform or fw.type.value)}</i>"
                 lines.append(f'    {_fw_id(fw.name)}{{{{"{label}"}}}}')
         for zone in band_zones:
             label = f"{zone.code}-{zone.name}" if zone.code else zone.name
@@ -76,14 +77,14 @@ def build_mermaid(db: Session, generated_at: str = "") -> str:
                 parts.append(f"Owner: {zone.owner}")
             aci = sorted(aci_by_zone.get(zone_ref(zone).upper(), ()))
             if aci:
-                parts.append(f"ACI intra-zone: {', '.join(aci)}")
+                parts.append(f"Micro-segmentation intra-zone: {', '.join(aci)}")
             lines.append(f'    {_node_id(zone.name)}["{"<br/>".join(parts)}"]')
         lines.append("  end")
 
     # Edges: zone – firewall (a zone transition always passes through a firewall)
     for zone in zones:
         for component in zone.components:
-            if component.type.value != "aci":
+            if component.is_firewall:
                 lines.append(f"  {_node_id(zone.name)} --- {_fw_id(component.name)}")
 
     # Protection level colour coding (as in the Permitra user interface)

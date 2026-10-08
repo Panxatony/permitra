@@ -97,7 +97,7 @@ class RuleLogging(str, enum.Enum):
 
 
 # Rollout status per platform (matches "Status Juniper"/"Status ACI" in the Excel file)
-PLATFORMS = ["juniper", "checkpoint", "aci"]
+PLATFORMS = ["juniper", "checkpoint", "aci", "microsegmentation"]
 
 
 class ZonePolicyType(str, enum.Enum):
@@ -206,22 +206,67 @@ class ComponentType(str, enum.Enum):
     juniper = "juniper"
     checkpoint = "checkpoint"
     aci = "aci"
+    # A micro-segmentation platform Permitra has no exporter for (NSX, Illumio,
+    # Guardicore, Kubernetes NetworkPolicy, a host-firewall fleet): it is
+    # documented as the enforcing instance, carries the implementation status
+    # and the drift upload like any other component, and nothing is generated
+    # for it. `platform` on the component names which one it is.
+    microsegmentation = "microsegmentation"
+
+
+class Enforcement(str, enum.Enum):
+    """How a component enforces a rule: as a firewall at a zone transition, or
+    as micro-segmentation within a zone. The question an auditor asks ("is
+    this relation enforced, and where?") was answered with a zone pair and
+    a component name; this is the model behind the name. Every check that
+    separates the two keys on it, so a new platform is placed by what it is,
+    not by which exporter it has."""
+    firewall = "firewall"
+    microsegmentation = "microsegmentation"
+
+
+def default_enforcement(component_type) -> Enforcement:
+    """What a component type enforces as, unless the component says otherwise."""
+    kind = ComponentType(component_type.value if isinstance(component_type, ComponentType) else component_type)
+    if kind in (ComponentType.aci, ComponentType.microsegmentation):
+        return Enforcement.microsegmentation
+    return Enforcement.firewall
 
 
 class SecurityComponent(Base):
-    """Security components: firewall clusters and ACI fabrics on which rules are rolled out."""
+    """Security components: firewall clusters, ACI fabrics and other
+    micro-segmentation platforms on which rules are rolled out."""
 
     __tablename__ = "security_components"
+
+    def __init__(self, **kwargs):
+        # The enforcement model follows from the type unless it is given; a
+        # component created by a script, a test or an older client that does
+        # not know the field gets the right answer, not an empty column.
+        if kwargs.get("enforcement") is None and kwargs.get("type") is not None:
+            kwargs["enforcement"] = default_enforcement(kwargs["type"])
+        super().__init__(**kwargs)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True)  # e.g. FW-Cluster-FFM
     type: Mapped[ComponentType] = mapped_column(Enum(ComponentType))
+    enforcement: Mapped[Enforcement] = mapped_column(Enum(Enforcement), default=Enforcement.firewall)
+    # Which product, for the generic micro-segmentation type (free text:
+    # "NSX", "Illumio", "Kubernetes NetworkPolicy"); informational otherwise.
+    platform: Mapped[str] = mapped_column(String(64), default="")
     location: Mapped[str] = mapped_column(String(128), default="")   # site/zone, e.g. "Zone FFM"
     mgmt_address: Mapped[str] = mapped_column(String(256), default="")  # management IP/hostname
     # North-south ordering: lower number = further north (closer to the internet)
     ns_tier: Mapped[int] = mapped_column(Integer, default=100)
     description: Mapped[str] = mapped_column(Text, default="")
     active: Mapped[bool] = mapped_column(default=True)
+
+    @property
+    def is_firewall(self) -> bool:
+        """A zone transition is always a firewall (BSI); this is the one test
+        every check asks, so a component is a firewall by what it enforces
+        as, never by its vendor."""
+        return (self.enforcement or default_enforcement(self.type)) == Enforcement.firewall
 
 
 class ZonePolicyChange(Base):

@@ -11,7 +11,7 @@ Idiomatic mapping instead of "one contract per rule":
   - if the bridge domain of the provider EPG carries a PBR gateway, the subject
     references its service graph template.
   - the SR IDs are preserved in the subject descriptions (drift comparison).
-Rules without an EPG mapping are exported as an individual contract (fallback) and
+Rules without an EPG mapping, and deny/reject rules, are not exported; they are named in the warnings and
 reported in the warnings.
 """
 import json
@@ -19,7 +19,7 @@ import json
 import yaml
 
 from ..messages import _
-from ..models import AciGateway, AddressEpgMap, Rule, RuleLogging, ServiceObject
+from ..models import AciGateway, AddressEpgMap, Rule, RuleAction, RuleLogging, ServiceObject
 from ..validation import parse_network
 from .common import icmp_echo_only, sanitize_name, service_ports, split_protocols
 
@@ -122,6 +122,13 @@ def build_contract_model(rules: list[Rule], db) -> dict:
     tenants = set()
 
     for rule in rules:
+        if rule.action != RuleAction.permit:
+            # A contract permits. Expressing a deny needs a taboo contract or
+            # a lower-priority permit it carves out of - neither is modelled,
+            # and a deny rendered as a plain contract would permit instead.
+            legacy.append(rule)
+            warnings.append(f"{rule.rule_id}: {rule.action.value} rules have no contract form – not exported")
+            continue
         mappings = mappings_by_vrf.get(getattr(rule, "vrf_id", None), [])
         consumers, src_ok = _epgs_for(rule.source, mappings)
         providers, dst_ok = _epgs_for(rule.destination, mappings)

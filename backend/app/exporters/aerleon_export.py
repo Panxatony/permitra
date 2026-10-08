@@ -13,7 +13,7 @@ import re
 import yaml
 
 from ..models import RuleAction, RuleLogging
-from .common import icmp_echo_only
+from .common import comment_text, icmp_echo_only, sanitize_name
 
 # Target platforms: generator name -> (header template, description).
 # {filter} is replaced by the filter name; zone-based targets use
@@ -66,7 +66,7 @@ def _collect_definitions(rules):
         networks.setdefault(name, {"values": []})
         if not any(v["address"] == _cidr(ip) for v in networks[name]["values"]):
             networks[name]["values"].append(
-                {"address": _cidr(ip), **({"comment": alias} if alias else {})}
+                {"address": _cidr(ip), **({"comment": comment_text(alias, 60)} if alias else {})}
             )
         addr_tokens[key] = name
 
@@ -131,7 +131,7 @@ def _rule_terms(rule, addr_tokens, svc_tokens):
     # Capirca distinguishes the two refusals as well, so the choice survives
     # into every target it generates rather than flattening to "deny" (#37).
     action = AERLEON_ACTION[rule.action]
-    comment = " – ".join(x for x in (rule.name, rule.application) if x) or rule.rule_id
+    comment = comment_text(" – ".join(x for x in (rule.name, rule.application) if x)) or rule.rule_id
 
     by_protocol: dict[str, list[str]] = {}
     open_protocols: list[str] = []  # protocols without a port (e.g. icmp, tcp without a port)
@@ -190,7 +190,9 @@ def build_policy(rules, target: str):
         # One filter per zone pair (in order of first use)
         pairs: dict[tuple, list] = {}
         for rule in rules:
-            key = (rule.source_zone or "any", rule.destination_zone or "any")
+            # The zone goes into the header as a token; a zone named with a
+            # space or an option word would change what the header says.
+            key = (sanitize_name(rule.source_zone or "any"), sanitize_name(rule.destination_zone or "any"))
             pairs.setdefault(key, []).append(rule)
         filters = [
             {

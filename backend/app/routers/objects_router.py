@@ -88,7 +88,7 @@ def _reassess(db: Session, rule, source: list[dict], destination: list[dict]) ->
     elif not components:
         reasons.append(_("No enforcing components could be determined"))
     if not reasons:
-        if src.upper() != dst.upper() and not any(c.type.value != "aci" for c in components):
+        if src.upper() != dst.upper() and not any(c.is_firewall for c in components):
             reasons.append(_("A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)"))
         verdict = check_zone_pair(db, src, dst, [c.type.value for c in components])
         if not verdict.allowed:

@@ -7,6 +7,7 @@ Produces per rule:
 """
 from ..models import Rule, RuleAction, RuleLogging
 from .common import (
+    comment_text,
     icmp_echo_only,
     parse_address_entries,
     sanitize_name,
@@ -44,9 +45,9 @@ JUNOS_ACTION = {
 
 
 def export_rule(rule: Rule) -> str:
-    lines = [f"# {rule.rule_id}: {rule.justification or rule.description or rule.name}".rstrip()]
+    lines = [f"# {rule.rule_id}: {comment_text(rule.justification or rule.description or rule.name)}".rstrip()]
     if rule.change_id:
-        lines.append(f"# Change: {rule.change_id}")
+        lines.append(f"# Change: {comment_text(rule.change_id)}")
 
     src_zone = sanitize_name(rule.source_zone or "trust")
     dst_zone = sanitize_name(rule.destination_zone or "untrust")
