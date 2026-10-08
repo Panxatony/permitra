@@ -32,6 +32,7 @@ from ..models import (
     utcnow,
 )
 from ..schemas import (
+    AddressEntry,
     CommentCreate,
     CommentOut,
     ConflictOut,
@@ -104,6 +105,27 @@ def resolve_components(db: Session, component_ids: list[int]) -> list[SecurityCo
         )
     return components
 
+
+
+def expand_groups(db: Session, payload, vrf_id: int) -> None:
+    """Replace group references in the payload by the groups' members.
+
+    Runs before derive_zones on every path that writes a rule, so a group is
+    one more way to say which addresses a rule is about - and never a way
+    around the checks those addresses face."""
+    from .. import groups as _groups
+
+    def entries_of(value):
+        return [e.model_dump() if hasattr(e, "model_dump") else dict(e) for e in value]
+
+    problems = []
+    for field in ("source", "destination"):
+        expanded, issues = _groups.expand_entries(db, entries_of(getattr(payload, field)), vrf_id)
+        problems.extend(issues)
+        # Back into the schema type: downstream code dumps the payload again.
+        setattr(payload, field, [AddressEntry(**e) for e in expanded])
+    if problems:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "; ".join(problems))
 
 
 def derive_zones(db: Session, payload, vrf_id: int):
@@ -829,6 +851,7 @@ def _create_rule(db: Session, payload, user: User, *,
     # On concurrent creation the unique constraint protects us; then try a new number.
     vrf = get_vrf(db, payload.vrf or None)
     enforce_required_fields(db, payload)
+    expand_groups(db, payload, vrf.id)
     for _attempt in range(5):
         derive_zones(db, payload, vrf.id)
         enforce_ping_baseline(db, payload)
@@ -1234,6 +1257,7 @@ def update_rule(
     rule = get_rule_or_404(db, rule_id)
     vrf = get_vrf(db, payload.vrf or None) if payload.vrf else rule.vrf
     enforce_required_fields(db, payload)
+    expand_groups(db, payload, vrf.id)
     derive_zones(db, payload, vrf.id)
     enforce_ping_baseline(db, payload)
     components = determine_components(db, payload, vrf.id)
@@ -1339,6 +1363,9 @@ def restore_version(
     if declared is None:
         declared = rule.ping_baseline and ping_baseline.is_any_only(payload.source)
     payload.ping_baseline = bool(declared)
+    # A snapshot keeps the group names on its members; the restored rule is
+    # about the group's members of today, not of the day of the snapshot.
+    expand_groups(db, payload, rule.vrf_id)
     derive_zones(db, payload, rule.vrf_id)
     enforce_ping_baseline(db, payload)
     components = determine_components(db, payload, rule.vrf_id)

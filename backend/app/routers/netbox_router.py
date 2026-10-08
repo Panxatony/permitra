@@ -7,7 +7,7 @@ from .. import audit
 from ..auth import require_roles
 from ..database import get_db
 from ..messages import _
-from ..models import NetboxConfig, NetboxPrefix, Role, User, ZoneNetwork
+from ..models import AddressGroup, NetboxConfig, NetboxPrefix, Role, User, ZoneNetwork
 
 router = APIRouter(prefix="/api/netbox", tags=["netbox"])
 
@@ -123,3 +123,35 @@ def adopt(payload: dict, db: Session = Depends(get_db),
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             _("No prefixes with a zone selected"))
     return _create_batch(db, user, items, "NetBox import")
+
+
+@router.post("/import-workloads")
+def run_workload_import(
+    request: Request,
+    vrf: str | None = None,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_roles(Role.admin)),
+):
+    """Devices and VMs with a primary address become workloads with labels
+    (role, tenant, site, platform, tags). Selector groups built on those
+    labels are re-synchronised afterwards, so a rule that refers to such a
+    group follows the inventory."""
+    from ..netbox import import_workloads
+    from ..vrf import get_vrf
+    from .objects_router import resync_groups
+
+    vrf_obj = get_vrf(db, vrf)
+    try:
+        result = import_workloads(db, vrf_obj.id)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    names = {g.name for g in db.query(AddressGroup).filter(AddressGroup.vrf_id == vrf_obj.id).all()}
+    result["rules_resynced"] = resync_groups(db, names, admin.username, reset_review=False)
+    db.commit()
+    audit.record(db, "admin", "netbox.workloads_imported", actor=admin.username,
+                 detail="{imported} workload(s) imported, {removed} removed",
+                 detail_values={"imported": str(result["imported"]), "removed": str(result["removed"])},
+                 source_ip=audit.client_ip(request))
+    return result

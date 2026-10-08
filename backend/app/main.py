@@ -30,6 +30,7 @@ from .routers import (
     setup_router,
     users_router,
     vrfs_router,
+    workloads_router,
     zones_router,
 )
 from .seed import seed_users
@@ -85,6 +86,7 @@ app.include_router(recert_router.router)
 app.include_router(reports_router.router)
 app.include_router(setup_router.router)
 app.include_router(vrfs_router.router)
+app.include_router(workloads_router.router)
 
 
 logger = logging.getLogger("permitra")

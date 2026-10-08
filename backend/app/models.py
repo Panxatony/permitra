@@ -728,6 +728,66 @@ class RiskyPort(Base):
     label: Mapped[str] = mapped_column(String(128))
 
 
+class WorkloadKind(str, enum.Enum):
+    device = "device"
+    vm = "vm"
+    container = "container"
+    service = "service"
+    other = "other"
+
+
+class Workload(Base):
+    """A host, VM, container or service the rules are about, with labels.
+
+    The inventory is documentation: it says what exists and how it is
+    labelled, so that groups (AddressGroup) can be defined by label instead
+    of by address. Addresses are a list because a workload may carry several;
+    labels are a flat key/value map, which is what every micro-segmentation
+    platform's selector works on."""
+
+    __tablename__ = "workloads"
+    __table_args__ = (UniqueConstraint("vrf_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vrf_id: Mapped[int] = mapped_column(ForeignKey("vrfs.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128), index=True)
+    kind: Mapped[WorkloadKind] = mapped_column(Enum(WorkloadKind), default=WorkloadKind.vm)
+    addresses: Mapped[list] = mapped_column(JSON, default=list)     # ["10.0.0.5", "10.0.0.0/28"]
+    labels: Mapped[dict] = mapped_column(JSON, default=dict)        # {"app": "shop", "tier": "web"}
+    description: Mapped[str] = mapped_column(String(256), default="")
+    # "manual" or an import such as "netbox"; an import updates what it owns
+    # and leaves manual entries alone.
+    source: Mapped[str] = mapped_column(String(32), default="manual")
+    netbox_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GroupKind(str, enum.Enum):
+    static = "static"        # listed members: workloads by name, addresses as given
+    selector = "selector"    # every workload whose labels satisfy the selector
+
+
+class AddressGroup(Base):
+    """A named set of addresses a rule refers to as one thing.
+
+    A selector group is "the web tier of the shop" written as `app=shop,
+    tier=web`; its members are whatever the inventory says today. A static
+    group is a list. Either way the rule stores the resolved addresses and
+    the group's name on each, and is re-synchronised when the membership
+    moves (groups.py)."""
+
+    __tablename__ = "address_groups"
+    __table_args__ = (UniqueConstraint("vrf_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vrf_id: Mapped[int] = mapped_column(ForeignKey("vrfs.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128), index=True)
+    kind: Mapped[GroupKind] = mapped_column(Enum(GroupKind), default=GroupKind.selector)
+    selector: Mapped[str] = mapped_column(String(256), default="")
+    members: Mapped[list] = mapped_column(JSON, default=list)   # [{"workload": "web01"} | {"ip": ..., "alias": ...}]
+    description: Mapped[str] = mapped_column(String(256), default="")
+
+
 class NetboxPrefix(Base):
     """Prefix imported from NetBox (staging). It is adopted into the zone registry
     as soon as a zone is assigned to it (adopted=True)."""
