@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import audit, change_management, ping_baseline
+from .. import audit, change_management, groups, ping_baseline
 from ..accounts import account_key
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
@@ -32,6 +32,7 @@ from ..models import (
     utcnow,
 )
 from ..schemas import (
+    AddressEntry,
     CommentCreate,
     CommentOut,
     ConflictOut,
@@ -48,6 +49,7 @@ from ..schemas import (
     RuleUpdate,
     RuleVersionOut,
 )
+from ..segments import check_rule_pair
 from ..settings import get_setting
 from ..validation import format_entry, parse_network
 from ..vrf import get_vrf
@@ -104,6 +106,27 @@ def resolve_components(db: Session, component_ids: list[int]) -> list[SecurityCo
         )
     return components
 
+
+
+def expand_groups(db: Session, payload, vrf_id: int) -> None:
+    """Replace group references in the payload by the groups' members.
+
+    Runs before derive_zones on every path that writes a rule, so a group is
+    one more way to say which addresses a rule is about - and never a way
+    around the checks those addresses face."""
+
+
+    def entries_of(value):
+        return [e.model_dump() if hasattr(e, "model_dump") else dict(e) for e in value]
+
+    problems = []
+    for field in ("source", "destination"):
+        expanded, issues = groups.expand_entries(db, entries_of(getattr(payload, field)), vrf_id)
+        problems.extend(issues)
+        # Back into the schema type: downstream code dumps the payload again.
+        setattr(payload, field, [AddressEntry(**e) for e in expanded])
+    if problems:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "; ".join(problems))
 
 
 def derive_zones(db: Session, payload, vrf_id: int):
@@ -229,14 +252,23 @@ def enforce_bsi_firewall(source_zone: str, destination_zone: str, components: li
         )
 
 
-def enforce_zone_matrix(db: Session, source_zone: str, destination_zone: str, platforms: list[str]):
-    """Block rules that the zone communication matrix declares inadmissible."""
-    result = check_zone_pair(db, source_zone, destination_zone, platforms)
+def enforce_zone_matrix(db: Session, source_zone: str, destination_zone: str, platforms: list[str],
+                        source: list | None = None, destination: list | None = None):
+    """Block rules that the zone communication matrix declares inadmissible -
+    and, inside a segmented zone, rules the segment matrix forbids."""
+    result = check_rule_pair(db, source_zone, destination_zone, platforms,
+                             _plain_entries(source), _plain_entries(destination))
     if not result.allowed:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             _("Zone matrix: ") + "; ".join(result.messages),
         )
+
+
+def _plain_entries(value):
+    if value is None:
+        return None
+    return [e.model_dump() if hasattr(e, "model_dump") else dict(e) for e in value]
 
 
 def enforce_required_fields(db: Session, payload):
@@ -787,10 +819,15 @@ def resolve_components_endpoint(
     _user: User = Depends(get_current_user),
 ):
     """Determine the components from source/destination; report addresses without a mapping."""
-    src_entries = [e.model_dump() for e in payload.source]
-    dst_entries = [e.model_dump() for e in payload.destination]
     vrf_obj = get_vrf(db, payload.vrf or None)
+    # The form sends group references as it will send them on submit; the
+    # verdicts below are about the members, so they are expanded here the
+    # same way. A group that cannot be expanded is a zone issue, not a 422:
+    # the form is still being filled in.
     zone_issues = []
+    src_entries, src_problems = groups.expand_entries(db, [e.model_dump() for e in payload.source], vrf_obj.id)
+    dst_entries, dst_problems = groups.expand_entries(db, [e.model_dump() for e in payload.destination], vrf_obj.id)
+    zone_issues.extend(src_problems + dst_problems)
     src_zone, src_un, src_hits = resolve_zone_for_entries(db, src_entries, vrf_obj.id)
     dst_zone, dst_un, dst_hits = resolve_zone_for_entries(db, dst_entries, vrf_obj.id)
     for label, un, hits in ((_("Source"), src_un, src_hits), (_("Destination"), dst_un, dst_hits)):
@@ -806,6 +843,13 @@ def resolve_components_endpoint(
     out = ResolveOut(components=components, unknown=unknown).model_dump()
     out.update({"source_zone": src_zone, "destination_zone": dst_zone,
                 "zone_issues": zone_issues, "unassigned": unassigned})
+    # Inside a segmented zone the form needs the segment matrix's verdict as
+    # well; the zone check alone would say "intra-zone, allowed".
+    if src_zone and dst_zone and src_zone.upper() == dst_zone.upper():
+        verdict = check_rule_pair(db, src_zone, dst_zone, [c.type.value for c in components],
+                                  src_entries, dst_entries)
+        out["segment_check"] = {"allowed": verdict.allowed, "policy": verdict.policy,
+                                "messages": verdict.messages}
     return out
 
 
@@ -829,6 +873,7 @@ def _create_rule(db: Session, payload, user: User, *,
     # On concurrent creation the unique constraint protects us; then try a new number.
     vrf = get_vrf(db, payload.vrf or None)
     enforce_required_fields(db, payload)
+    expand_groups(db, payload, vrf.id)
     for _attempt in range(5):
         derive_zones(db, payload, vrf.id)
         enforce_ping_baseline(db, payload)
@@ -838,11 +883,12 @@ def _create_rule(db: Session, payload, user: User, *,
         if matrix_blocking:
             enforce_zone_matrix(
                 db, payload.source_zone, payload.destination_zone,
-                [c.type.value for c in components]
+                [c.type.value for c in components], payload.source, payload.destination,
             )
         else:
-            verdict = check_zone_pair(db, payload.source_zone, payload.destination_zone,
-                                      [c.type.value for c in components])
+            verdict = check_rule_pair(db, payload.source_zone, payload.destination_zone,
+                                      [c.type.value for c in components],
+                                      _plain_entries(payload.source), _plain_entries(payload.destination))
             if not verdict.allowed:
                 matrix_violation = "; ".join(verdict.messages)
 
@@ -1234,12 +1280,14 @@ def update_rule(
     rule = get_rule_or_404(db, rule_id)
     vrf = get_vrf(db, payload.vrf or None) if payload.vrf else rule.vrf
     enforce_required_fields(db, payload)
+    expand_groups(db, payload, vrf.id)
     derive_zones(db, payload, vrf.id)
     enforce_ping_baseline(db, payload)
     components = determine_components(db, payload, vrf.id)
     enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
     enforce_zone_matrix(
-        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
+        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components],
+        payload.source, payload.destination,
     )
     # impl_status is maintained by operations through its own endpoint – an edit must
     # not reset it (approval sets already implemented components to "to change")
@@ -1339,12 +1387,16 @@ def restore_version(
     if declared is None:
         declared = rule.ping_baseline and ping_baseline.is_any_only(payload.source)
     payload.ping_baseline = bool(declared)
+    # A snapshot keeps the group names on its members; the restored rule is
+    # about the group's members of today, not of the day of the snapshot.
+    expand_groups(db, payload, rule.vrf_id)
     derive_zones(db, payload, rule.vrf_id)
     enforce_ping_baseline(db, payload)
     components = determine_components(db, payload, rule.vrf_id)
     enforce_bsi_firewall(payload.source_zone, payload.destination_zone, components)
     enforce_zone_matrix(
-        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components]
+        db, payload.source_zone, payload.destination_zone, [c.type.value for c in components],
+        payload.source, payload.destination,
     )
 
     # requestor and owner are deliberately not restored: the creator does not
@@ -1478,8 +1530,8 @@ def _decide(db, rule_id, user, decision: ReviewDecision, new_status: RuleStatus,
             lapsed = ping_baseline.zone_problems(db, rule.source_zone, rule.destination_zone)
             if lapsed:
                 rule.removal_reason = "; ".join(lapsed)[:255]
-        verdict = check_zone_pair(db, rule.source_zone, rule.destination_zone,
-                                  rule.platforms or [])
+        verdict = check_rule_pair(db, rule.source_zone, rule.destination_zone,
+                                  rule.platforms or [], rule.source or [], rule.destination or [])
         # An explicit removal proposal counts here as well: it arises e.g. when a
         # network was moved to another zone and the rule became inadmissible as a
         # result – because one side now spans several zones, or because the zone

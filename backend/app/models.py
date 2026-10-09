@@ -145,6 +145,10 @@ class Zone(Base):
     cia_c: Mapped[str] = mapped_column(String(16), default="normal")  # confidentiality
     cia_i: Mapped[str] = mapped_column(String(16), default="normal")  # integrity
     cia_a: Mapped[str] = mapped_column(String(16), default="normal")  # availability
+    # What an unmaintained relation between two of this zone's segments means:
+    # "permit" or "deny". None for a zone that was never segmented - its
+    # intra-zone traffic is not asked at all (segments.py).
+    intra_zone_default: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     @property
     def protection_level(self) -> str:
@@ -179,6 +183,41 @@ class ZoneNetwork(Base):
 
     zone: Mapped[Zone] = relationship(back_populates="networks")
     vrf: Mapped[Vrf] = relationship()
+
+
+class Segment(Base):
+    """A segment: a group that belongs to a zone, so the zone's intra-zone
+    traffic can be governed one level below the zone matrix. The group says
+    who is in the segment (by label or by list); the segment says which
+    zone's matrix it sits in."""
+
+    __tablename__ = "segments"
+    __table_args__ = (UniqueConstraint("zone_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    zone_id: Mapped[int] = mapped_column(ForeignKey("zones.id", ondelete="CASCADE"), index=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("address_groups.id", ondelete="RESTRICT"), index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    description: Mapped[str] = mapped_column(String(256), default="")
+
+    zone: Mapped["Zone"] = relationship()
+    group: Mapped["AddressGroup"] = relationship()
+
+
+class SegmentPolicy(Base):
+    """The segment matrix of a zone: per (from, to) whether rules are allowed."""
+
+    __tablename__ = "segment_policies"
+    __table_args__ = (UniqueConstraint("from_segment_id", "to_segment_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    from_segment_id: Mapped[int] = mapped_column(ForeignKey("segments.id", ondelete="CASCADE"), index=True)
+    to_segment_id: Mapped[int] = mapped_column(ForeignKey("segments.id", ondelete="CASCADE"), index=True)
+    policy: Mapped[ZonePolicyType] = mapped_column(Enum(ZonePolicyType), default=ZonePolicyType.block_all)
+    note: Mapped[str] = mapped_column(Text, default="")
+
+    from_segment: Mapped[Segment] = relationship(foreign_keys=[from_segment_id])
+    to_segment: Mapped[Segment] = relationship(foreign_keys=[to_segment_id])
 
 
 class ZonePolicy(Base):
@@ -726,6 +765,66 @@ class RiskyPort(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     port: Mapped[str] = mapped_column(String(16), unique=True, index=True)
     label: Mapped[str] = mapped_column(String(128))
+
+
+class WorkloadKind(str, enum.Enum):
+    device = "device"
+    vm = "vm"
+    container = "container"
+    service = "service"
+    other = "other"
+
+
+class Workload(Base):
+    """A host, VM, container or service the rules are about, with labels.
+
+    The inventory is documentation: it says what exists and how it is
+    labelled, so that groups (AddressGroup) can be defined by label instead
+    of by address. Addresses are a list because a workload may carry several;
+    labels are a flat key/value map, which is what every micro-segmentation
+    platform's selector works on."""
+
+    __tablename__ = "workloads"
+    __table_args__ = (UniqueConstraint("vrf_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vrf_id: Mapped[int] = mapped_column(ForeignKey("vrfs.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128), index=True)
+    kind: Mapped[WorkloadKind] = mapped_column(Enum(WorkloadKind), default=WorkloadKind.vm)
+    addresses: Mapped[list] = mapped_column(JSON, default=list)     # ["10.0.0.5", "10.0.0.0/28"]
+    labels: Mapped[dict] = mapped_column(JSON, default=dict)        # {"app": "shop", "tier": "web"}
+    description: Mapped[str] = mapped_column(String(256), default="")
+    # "manual" or an import such as "netbox"; an import updates what it owns
+    # and leaves manual entries alone.
+    source: Mapped[str] = mapped_column(String(32), default="manual")
+    netbox_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GroupKind(str, enum.Enum):
+    static = "static"        # listed members: workloads by name, addresses as given
+    selector = "selector"    # every workload whose labels satisfy the selector
+
+
+class AddressGroup(Base):
+    """A named set of addresses a rule refers to as one thing.
+
+    A selector group is "the web tier of the shop" written as `app=shop,
+    tier=web`; its members are whatever the inventory says today. A static
+    group is a list. Either way the rule stores the resolved addresses and
+    the group's name on each, and is re-synchronised when the membership
+    moves (groups.py)."""
+
+    __tablename__ = "address_groups"
+    __table_args__ = (UniqueConstraint("vrf_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vrf_id: Mapped[int] = mapped_column(ForeignKey("vrfs.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128), index=True)
+    kind: Mapped[GroupKind] = mapped_column(Enum(GroupKind), default=GroupKind.selector)
+    selector: Mapped[str] = mapped_column(String(256), default="")
+    members: Mapped[list] = mapped_column(JSON, default=list)   # [{"workload": "web01"} | {"ip": ..., "alias": ...}]
+    description: Mapped[str] = mapped_column(String(256), default="")
 
 
 class NetboxPrefix(Base):

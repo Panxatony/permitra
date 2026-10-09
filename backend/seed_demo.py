@@ -17,6 +17,7 @@ from app.models import (
     AciGateway,
     AddressComponentMap,
     AddressEpgMap,
+    AddressGroup,
     AddressObject,
     AuditCheckpoint,
     AuditEvent,
@@ -27,6 +28,7 @@ from app.models import (
     ComponentType,
     CoverageSnapshot,
     Epg,
+    GroupKind,
     RecertCampaign,
     RecertItem,
     Rule,
@@ -34,9 +36,12 @@ from app.models import (
     RuleStatus,
     RuleVersion,
     SecurityComponent,
+    Segment,
+    SegmentPolicy,
     ServiceObject,
     Setting,
     Vrf,
+    Workload,
     Zone,
     ZoneNetwork,
     ZonePolicy,
@@ -330,7 +335,9 @@ def seed(wipe: bool):
         # too. Accounts, passkeys, tokens and the NetBox connection stay: they
         # are not demo content, and signing in again after every reset would be.
         for model in (RecertItem, RecertCampaign, CoverageSnapshot, ComponentActualConfig,
-                      AuditCheckpoint, AuditRetentionSeal, AuditEvent, Setting, Comment, RuleVersion, Rule, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
+                      AuditCheckpoint, AuditRetentionSeal, AuditEvent, Setting, Comment, RuleVersion, Rule,
+                      SegmentPolicy, Segment, ZonePolicyChange, ZonePolicy, ZoneNetwork, Zone, AciGateway,
+                      AddressGroup, Workload,
                       AddressComponentMap, AddressEpgMap, Epg, AddressObject,
                       ServiceObject, ComponentLink, SecurityComponent, Vrf):
             db.query(model).delete()
@@ -784,6 +791,101 @@ def seed(wipe: bool):
     db.flush()
     db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
                        change_note="Demo rule created", changed_by="demo-seed"))
+
+    # Workloads, groups and segments (#35, #36). The application tier of
+    # the shop is an inventory with labels; two groups are built on the labels
+    # and one rule is written against them - so the demo shows a rule that
+    # follows its group. PROD-APP is segmented with default-deny: the frontend
+    # may reach the API, the batch workers may reach the API, nothing else.
+    WORKLOADS = [
+        ("app11", "10.10.30.11", {"app": "shop", "tier": "frontend", "env": "prod"}),
+        ("app12", "10.10.30.12", {"app": "shop", "tier": "frontend", "env": "prod"}),
+        ("app13", "10.10.30.13", {"app": "shop", "tier": "frontend", "env": "prod"}),
+        ("api21", "10.10.30.21", {"app": "shop", "tier": "api", "env": "prod"}),
+        ("api22", "10.10.30.22", {"app": "shop", "tier": "api", "env": "prod"}),
+        ("batch31", "10.10.30.31", {"app": "shop", "tier": "batch", "env": "prod"}),
+        ("pg11", "10.10.31.11", {"app": "shop", "tier": "db", "env": "prod"}),
+        ("pg12", "10.10.31.12", {"app": "shop", "tier": "db", "env": "prod"}),
+    ]
+    for name, ip, labels in WORKLOADS:
+        db.add(Workload(vrf_id=vrf_it.id, name=name, addresses=[ip], labels=labels,
+                        description=f"{labels['tier']} ({labels['app']})", source="manual"))
+    groups = {}
+    for name, selector, descr in (
+        ("shop-frontend", "app=shop, tier=frontend", "Webshop – Frontend-Server"),
+        ("shop-api", "app=shop, tier=api", "Webshop – API-Server"),
+        ("shop-batch", "app=shop, tier=batch", "Webshop – Batch-Worker"),
+        ("shop-db", "app=shop, tier=db", "Webshop – Datenbanken"),
+    ):
+        groups[name] = AddressGroup(vrf_id=vrf_it.id, name=name, kind=GroupKind.selector,
+                                    selector=selector, description=descr)
+        db.add(groups[name])
+    db.flush()
+
+    from app import groups as group_module
+    from app import segments as segment_module
+
+    def group_entries(name):
+        return group_module.resolve_group(db, groups[name])
+
+    for rid, src_group, dst_group, services, name, just in (
+        ("SR00107", "shop-frontend", "shop-api", [{"protocol": "TCP", "port": "8443"}],
+         "Webshop Frontend -> API",
+         "Die Frontend-Server rufen die Shop-API auf; die Mitglieder folgen den Labels"),
+        ("SR00108", "shop-api", "shop-db", [{"protocol": "TCP", "port": "5432"}],
+         "Webshop API -> Datenbank",
+         "Die API-Server lesen und schreiben die Shop-Datenbank"),
+    ):
+        src_zone = "PROD-APP"
+        dst_zone = "PROD-APP" if dst_group != "shop-db" else "PROD-DB"
+        comps = resolve_seed_components(src_zone, dst_zone)
+        rule = Rule(
+            rule_id=rid, vrf_id=vrf_it.id, name=name, application="Webshop",
+            app_id=APP_IDS["Webshop"], components=comps,
+            source_zone=zc(src_zone), destination_zone=zc(dst_zone),
+            source=group_entries(src_group), destination=group_entries(dst_group),
+            services=services, action=RuleAction.permit,
+            justification=just, business_context="Onlineshop",
+            requestor="architekt", owner="betrieb", status=RuleStatus.approved,
+            impl_status={c.name: "implemented" for c in comps},
+            created_by="architekt",
+        )
+        db.add(rule)
+        db.flush()
+        db.add(RuleVersion(rule_pk=rule.id, version=1, snapshot={"seed": "demo"},
+                           change_note="Demo rule created", changed_by="demo-seed"))
+
+    segs = {}
+    for seg_name, group_name in (("frontend", "shop-frontend"), ("api", "shop-api"), ("batch", "shop-batch")):
+        segs[seg_name] = Segment(zone_id=zones["PROD-APP"].id, group_id=groups[group_name].id,
+                                 name=seg_name, description=groups[group_name].description)
+        db.add(segs[seg_name])
+    db.flush()
+    for a, b, policy in (("frontend", "api", ZonePolicyType.allow_only),
+                         ("batch", "api", ZonePolicyType.allow_only),
+                         ("frontend", "batch", ZonePolicyType.block_all)):
+        db.add(SegmentPolicy(from_segment_id=segs[a].id, to_segment_id=segs[b].id, policy=policy))
+    zones["PROD-APP"].intra_zone_default = "deny"
+    db.flush()
+    # The switch to default-deny did to the zone's existing intra-zone rules
+    # what the real request does: the ones the segment matrix does not cover
+    # are back in review, with the reason on the rule.
+    for rule in db.query(Rule).filter(Rule.source_zone == zc("PROD-APP"),
+                                      Rule.destination_zone == zc("PROD-APP"),
+                                      Rule.status.in_(IN_FORCE)).all():
+        verdict = segment_module.check_segment_pair(db, zones["PROD-APP"], rule.source, rule.destination)
+        if verdict.allowed:
+            continue
+        rule.status = RuleStatus.in_review
+        rule.version += 1
+        db.add(RuleVersion(rule_pk=rule.id, version=rule.version, snapshot={"seed": "demo"},
+                           change_note="Zone {zone} switched to default-deny between its segments "
+                                       "(request {request}): the rule has to be reassessed",
+                           change_values={"zone": "PROD-APP", "request": "demo"},
+                           changed_by="demo-seed"))
+        db.add(Comment(rule_pk=rule.id, author="demo-seed",
+                       text="Zone PROD-APP auf Default-Deny zwischen ihren Segmenten umgestellt: "
+                            + "; ".join(verdict.messages)))
 
     # The ping baselines. Any-to-any on purpose, ICMP echo only, between
     # internal zones the matrix already allows - so the demo shows what the

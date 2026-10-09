@@ -902,3 +902,13 @@ table.matrix .row-head { background: var(--panel-alt-2); position: sticky; left:
   a { color: #000; text-decoration: none; }
   section, .card, tr { break-inside: avoid; }
 }
+
+/* Workloads, groups and segments (#35, #36) */
+.label-chips { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+.label-chip, .group-badge { background: var(--blue-bg-2); color: var(--blue-fg); border: 1px solid var(--blue-border); font-weight: 500; }
+.group-badge { margin-left: .3rem; }
+.member-chip { display: inline-block; margin: .15rem .4rem .15rem 0; }
+.filter-row { display: flex; gap: .5rem; margin-bottom: .5rem; }
+.filter-row input { flex: 1; }
+.group-row { align-items: center; }
+.segment-default { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: .6rem 0; font-size: .85rem; }

@@ -10,6 +10,7 @@ import Help from './pages/Help'
 import Reports from './pages/Reports'
 import Networks from './pages/Networks'
 import ObjectCatalog from './pages/ObjectCatalog'
+import Workloads from './pages/Workloads'
 import Recertification from './pages/Recertification'
 import ExportPage from './pages/ExportPage'
 import Login from './pages/Login'
@@ -92,6 +93,7 @@ const NAV = [
     roles: ['architect', 'operations', 'change_approver'] },
   { to: '/components', label: 'Components', roles: ['architect', 'operations'] },
   { to: '/objects', label: 'Objects', roles: ['architect', 'operations'] },
+  { to: '/workloads', label: 'Workloads', roles: ['architect', 'operations'] },
   { to: '/export', label: 'Export', roles: ['architect', 'operations'] },
   { to: '/reports', label: 'Reports',
     roles: ['architect', 'operations', 'change_approver'] },
@@ -225,6 +227,7 @@ export default function App() {
       <Route path="/networks" element={<Layout><Networks /></Layout>} />
       <Route path="/components" element={<Layout><Components /></Layout>} />
       <Route path="/objects" element={<Layout><ObjectCatalog /></Layout>} />
+      <Route path="/workloads" element={<Layout><Workloads /></Layout>} />
       <Route path="/export" element={<Layout><ExportPage /></Layout>} />
       <Route path="/help" element={<Layout><Help /></Layout>} />
       <Route path="/reports" element={<Layout><Reports /></Layout>} />

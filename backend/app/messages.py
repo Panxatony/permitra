@@ -155,6 +155,41 @@ CATALOG: dict[str, dict[str, str]] = {
         "Address object not found": "Adress-Objekt nicht gefunden",
         "Advisory lock not available": "Advisory-Lock nicht verfügbar",
         "An intra-zone relation is not maintained": "Intra-Zonen-Beziehung wird nicht gepflegt",
+        '{label} spans several segments ({segments}) – split the rule': '{label} umfasst mehrere Segmente ({segments}) – Regel aufteilen',
+        '{label}: address(es) in no segment of zone {zone}: {addresses} – assign them to a segment, or allow unsegmented traffic for the zone':
+            '{label}: Adresse(n) in keinem Segment der Zone {zone}: {addresses} – einem Segment zuordnen oder unsegmentierten Verkehr für die Zone erlauben',
+        '{label}: address(es) in no segment of zone {zone}: {addresses}':
+            '{label}: Adresse(n) in keinem Segment der Zone {zone}: {addresses}',
+        'Segment relation {from_segment} → {to_segment} in zone {zone} is not maintained – least privilege (default-deny): set it to allow via a matrix request (two approvals)':
+            'Segment-Beziehung {from_segment} → {to_segment} in Zone {zone} ist nicht gepflegt – Least Privilege (Default-Deny): per Matrix-Antrag auf Erlauben setzen (zwei Freigaben)',
+        'Segment relation {from_segment} → {to_segment} in zone {zone} is not maintained':
+            'Segment-Beziehung {from_segment} → {to_segment} in Zone {zone} ist nicht gepflegt',
+        'The segment matrix of zone {zone} forbids {from_segment} → {to_segment} (Block)':
+            'Die Segment-Matrix der Zone {zone} verbietet {from_segment} → {to_segment} (Block)',
+        "Service 'any' between segments of a segmented zone": "Dienst 'any' zwischen Segmenten einer segmentierten Zone",
+        "The intra-zone default must be 'permit' or 'deny'": "Der Intra-Zonen-Default muss 'permit' oder 'deny' sein",
+        "Zone '{name}' has no segments – create a segment first": "Zone '{name}' hat keine Segmente – zuerst ein Segment anlegen",
+        'A request for the intra-zone default of {zone} is already waiting for approval':
+            'Ein Antrag für den Intra-Zonen-Default von {zone} wartet bereits auf Freigabe',
+        "Segment '{name}' not found in zone {zone}": "Segment '{name}' in Zone {zone} nicht gefunden",
+        "A segment's relation to itself is not maintained": 'Die Beziehung eines Segments zu sich selbst wird nicht gepflegt',
+        'A segment of {zone} no longer exists': 'Ein Segment von {zone} existiert nicht mehr',
+        'Zone {zone} switched to default-deny between its segments (request {request}): the rule has to be reassessed':
+            'Zone {zone} auf Default-Deny zwischen ihren Segmenten umgestellt (Antrag {request}): Regel muss neu bewertet werden',
+        'Segment matrix change {from_segment} → {to_segment} in zone {zone} to Block (request {request}): the rule has to be reassessed':
+            'Segment-Matrix-Änderung {from_segment} → {to_segment} in Zone {zone} auf Block (Antrag {request}): Regel muss neu bewertet werden',
+        'Segment not found': 'Segment nicht gefunden',
+        "Group '{name}' is not entirely inside zone {zone}: {details}": "Gruppe '{name}' liegt nicht vollständig in Zone {zone}: {details}",
+        'outside: ': 'außerhalb: ',
+        'unassigned: ': 'nicht zugeordnet: ',
+        "Segment '{name}' already exists in zone {zone}": "Segment '{name}' existiert in Zone {zone} bereits",
+        "Group '{name}' is already a segment": "Gruppe '{name}' ist bereits ein Segment",
+        "Segment '{name}' is used by {count} rule(s) – the group cannot be swapped: {rule_ids}":
+            "Segment '{name}' wird von {count} Regel(n) verwendet – die Gruppe kann nicht getauscht werden: {rule_ids}",
+        "Segment '{name}' is used by {count} rule(s) – remove those rules first: {rule_ids}":
+            "Segment '{name}' wird von {count} Regel(n) verwendet – zuerst diese Regeln entfernen: {rule_ids}",
+        'Segment {name} of zone {zone} = group {group}': 'Segment {name} der Zone {zone} = Gruppe {group}',
+        'Segment {name} of zone {zone} removed': 'Segment {name} der Zone {zone} entfernt',
         "Anchored entry no longer matches the checkpoint (the chain was recalculated afterwards)":
             "Verankerter Eintrag stimmt nicht mehr mit dem Prüfpunkt überein (Kette wurde nachträglich neu berechnet)",
         "Anycast gateway with prefix, e.g. 10.10.30.1/24": "Anycast-Gateway mit Präfix, z.B. 10.10.30.1/24",
@@ -514,6 +549,22 @@ CATALOG: dict[str, dict[str, str]] = {
         "Address object '{name}' already exists": "Adress-Objekt '{name}' existiert bereits",
         "Address object '{name}': IP {old_ip} → {new_ip}": "Adress-Objekt '{name}': IP {old_ip} → {new_ip}",
         "Change ID set to {change_id}": "Change-ID gesetzt auf {change_id}",
+        "The selector is empty – name at least one label, e.g. app=shop": "Der Selektor ist leer – mindestens ein Label angeben, z. B. app=shop",
+        "'{key}' is not a valid label key": "'{key}' ist kein gültiger Label-Schlüssel",
+        "Group '{name}' does not exist": "Gruppe '{name}' existiert nicht",
+        "Group '{name}' has no members": "Gruppe '{name}' hat keine Mitglieder",
+        "Group not found": "Gruppe nicht gefunden",
+        "Group '{name}' already exists": "Gruppe '{name}' existiert bereits",
+        "Group '{name}' is referenced by rules and cannot be renamed": "Gruppe '{name}' wird von Regeln referenziert und kann nicht umbenannt werden",
+        "Group '{name}' is referenced by rule(s): {rules}": "Gruppe '{name}' wird von Regel(n) referenziert: {rules}",
+        "A static group needs at least one member": "Eine statische Gruppe braucht mindestens ein Mitglied",
+        "The change would leave rule(s) inadmissible – {problems}": "Die Änderung würde Regel(n) unzulässig machen – {problems}",
+        "Workload not found": "Workload nicht gefunden",
+        "Workload '{name}' already exists": "Workload '{name}' existiert bereits",
+        "A workload cannot be 'any'": "Ein Workload kann nicht 'any' sein",
+        "Group membership changed: {added} address(es) added, {removed} removed": "Gruppenmitgliedschaft geändert: {added} Adresse(n) hinzugefügt, {removed} entfernt",
+        "Group membership changed: {added} address(es) added, {removed} removed – the approval is withdrawn, the rule needs a new review": "Gruppenmitgliedschaft geändert: {added} Adresse(n) hinzugefügt, {removed} entfernt – die Freigabe ist zurückgezogen, die Regel braucht eine neue Prüfung",
+        "{imported} workload(s) imported, {removed} removed": "{imported} Workload(s) importiert, {removed} entfernt",
         "Permitra generates nothing for {platform} – the implementation is documented in the platform itself":
             "Permitra erzeugt für {platform} nichts – die Umsetzung wird in der Plattform selbst dokumentiert",
         "{previous} → {change_id}": "{previous} → {change_id}",

@@ -46,20 +46,33 @@ class Service(BaseModel):
 
 
 class AddressEntry(BaseModel):
-    """Address entry: always an IP/network, optionally with an alias (host or network name)."""
+    """Address entry: always an IP/network, optionally with an alias (host or network name).
 
-    ip: str = Field(..., description='IP, network (CIDR) or "any"')
+    An entry may instead name a group: it is then replaced by the group's
+    members before the rule is checked, each member carrying the group's name
+    so the rule can be re-synchronised when the membership moves. A member
+    sent back as stored (group and address) is a group reference again."""
+
+    ip: str = Field("", description='IP, network (CIDR) or "any"; may be empty when `group` is set')
     alias: str = Field("", max_length=128, description="e.g. hostname for an IP, network name for a network")
+    group: str = Field("", max_length=128, description="name of an address group to expand")
 
     @field_validator("ip")
     @classmethod
     def check_ip(cls, v):
-        return validate_ip_entry(v)
+        v = (v or "").strip()
+        return validate_ip_entry(v) if v else ""
 
-    @field_validator("alias")
+    @field_validator("alias", "group")
     @classmethod
-    def strip_alias(cls, v):
+    def strip_text(cls, v):
         return v.strip()
+
+    @model_validator(mode="after")
+    def address_or_group(self):
+        if not self.ip and not self.group:
+            raise ValueError(_("IP or network is required"))
+        return self
 
 
 class ComponentBrief(BaseModel):
@@ -417,6 +430,37 @@ class ZoneOut(ZoneCreate):
     model_config = ConfigDict(from_attributes=True)
     id: int
     protection_level: str = "normal"  # maximum of C/I/A
+    intra_zone_default: str | None = None
+
+
+class SegmentIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=64)
+    group: str = Field(..., min_length=1, max_length=128, description="name of the address group that is the segment")
+    description: str = Field("", max_length=256)
+
+
+class SegmentOut(BaseModel):
+    id: int
+    zone: str
+    name: str
+    group: str
+    group_kind: str
+    description: str
+    member_count: int
+
+
+class SegmentPolicyOut(BaseModel):
+    from_segment: str
+    to_segment: str
+    policy: ZonePolicyType
+    note: str = ""
+
+
+class SegmentMatrixOut(BaseModel):
+    zone: str
+    intra_zone_default: str | None
+    segments: list[SegmentOut]
+    policies: list[SegmentPolicyOut]
 
 
 class ZonePolicySet(BaseModel):

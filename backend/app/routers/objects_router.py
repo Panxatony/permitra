@@ -7,16 +7,27 @@ the same checks an edit of the rule would face, and a rule in force loses its
 approval: what was approved was the old address.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
+from .. import groups, rule_recheck
 from ..auth import get_current_user, require_roles
-from ..component_resolution import resolve_rule_components
 from ..database import get_db
 from ..messages import _
-from ..models import IN_FORCE, AddressObject, Role, RuleStatus, RuleVersion, ServiceObject, User, active_rules
+from ..models import (
+    IN_FORCE,
+    AddressGroup,
+    AddressObject,
+    GroupKind,
+    Role,
+    RuleStatus,
+    RuleVersion,
+    ServiceObject,
+    User,
+    active_rules,
+)
 from ..validation import validate_ip_entry, validate_service
-from ..zone_check import check_zone_pair, resolve_zone_for_entries
+from ..vrf import get_vrf
 
 router = APIRouter(prefix="/api/objects", tags=["objects"])
 
@@ -56,48 +67,6 @@ class ServiceObjectOut(ServiceObjectIn):
     id: int
 
 
-def _reassess(db: Session, rule, source: list[dict], destination: list[dict]) -> tuple[dict, list[str]]:
-    """Run a rule's new addresses through the checks an edit of the rule would face.
-
-    Zones are derived data, so they are derived again; the components follow the
-    addresses; and the zone matrix and the BSI firewall requirement are asked
-    about the pair that results. Returns the state to apply and the reasons it
-    must not be applied - the same reasons the rule form would show.
-    """
-    reasons: list[str] = []
-    zones = {}
-    for label, field, entries in ((_("Source"), "source", source),
-                                  (_("Destination"), "destination", destination)):
-        zone, unassigned, hits = resolve_zone_for_entries(db, entries, rule.vrf_id)
-        if unassigned:
-            reasons.append(
-                _("{label}: network(s) not assigned to any security zone: {networks} "
-                  "– create the network on the Networks page first and assign it to a "
-                  "security zone",
-                  label=label, networks=", ".join(unassigned)))
-        elif len(hits) > 1:
-            reasons.append(_("{label} spans several zones ({zones}) – split the rule",
-                             label=label, zones=", ".join(sorted(hits))))
-        zones[field] = zone or getattr(rule, f"{field}_zone") or ""
-    src, dst = zones["source"], zones["destination"]
-    components, unknown = resolve_rule_components(db, source, destination, src, dst, rule.vrf_id)
-    if unknown:
-        reasons.append(_("No component mapping is defined yet for these addresses: ")
-                       + ", ".join(u["ip"] for u in unknown)
-                       + _(". Define it once via the address mapping."))
-    elif not components:
-        reasons.append(_("No enforcing components could be determined"))
-    if not reasons:
-        if src.upper() != dst.upper() and not any(c.is_firewall for c in components):
-            reasons.append(_("A zone transition requires a firewall – Cisco ACI alone is not sufficient (BSI)"))
-        verdict = check_zone_pair(db, src, dst, [c.type.value for c in components])
-        if not verdict.allowed:
-            reasons.append(_("Zone matrix: ") + "; ".join(verdict.messages))
-    state = {"source": source, "destination": destination,
-             "source_zone": src, "destination_zone": dst, "components": components}
-    return state, reasons
-
-
 def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: str) -> int:
     """Propagate the new IP into every rule entry that carries this alias.
 
@@ -127,7 +96,7 @@ def propagate_ip_change(db: Session, obj: AddressObject, old_ip: str, username: 
             new[field] = entries
         if not touched:
             continue
-        state, reasons = _reassess(db, rule, new["source"], new["destination"])
+        state, reasons = rule_recheck.reassess(db, rule, new["source"], new["destination"])
         if reasons:
             problems.append(f"{rule.rule_id}: " + "; ".join(reasons))
         else:
@@ -219,6 +188,194 @@ def delete_address(
     if not obj:
         raise HTTPException(status.HTTP_404_NOT_FOUND, _("Address object not found"))
     db.delete(obj)
+    db.commit()
+
+
+
+# --- Address groups -----------------------------------------------------------
+
+class GroupIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    kind: GroupKind = GroupKind.selector
+    selector: str = Field("", max_length=256)
+    members: list[dict] = Field(default_factory=list)
+    description: str = Field("", max_length=256)
+    vrf: str = ""
+
+    @field_validator("name")
+    @classmethod
+    def single_line(cls, v):
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in v):
+            raise ValueError(_("{field} must not contain line breaks or control characters", field="name"))
+        return v.strip()
+
+    @model_validator(mode="after")
+    def shape(self):
+        if self.kind == GroupKind.selector:
+            self.selector = groups.validate_selector(self.selector)
+            self.members = []
+        else:
+            cleaned = []
+            for m in self.members:
+                if m.get("workload"):
+                    cleaned.append({"workload": str(m["workload"]).strip()})
+                elif m.get("ip"):
+                    cleaned.append({"ip": validate_ip_entry(str(m["ip"])), "alias": str(m.get("alias") or "").strip()})
+            if not cleaned:
+                raise ValueError(_("A static group needs at least one member"))
+            self.members, self.selector = cleaned, ""
+        return self
+
+
+class GroupOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    kind: GroupKind
+    selector: str
+    members: list[dict]
+    description: str
+    vrf_id: int
+    member_count: int = 0
+    # The rules a write here rewrote - the page says so instead of staying
+    # silent about a change that moved an approved rule.
+    rules_updated: list[str] = []
+
+
+def _group_out(db: Session, group: AddressGroup, rules_updated: list[str] | None = None) -> GroupOut:
+    out = GroupOut.model_validate(group)
+    out.member_count = len(groups.resolve_group(db, group))
+    out.rules_updated = rules_updated or []
+    return out
+
+
+def resync_groups(db: Session, names: set[str], username: str, *, reset_review: bool) -> list[str]:
+    """Bring every rule that refers to one of the groups up to date.
+
+    Each rule's group references are expanded against the current membership;
+    a rule whose addresses did not move is left alone. Every rule that moved
+    is re-checked first, and one inadmissible rule refuses the whole change
+    (422 naming it) - the alternative is a rule silently out of policy.
+    `reset_review` is the caller's statement about what kind of change this
+    is (see rule_recheck.apply). Returns the rule IDs that were rewritten."""
+    if not names:
+        return []
+    plans, problems = [], []
+    for rule in groups.rules_referencing(db, names):
+        new = {}
+        for field in ("source", "destination"):
+            expanded, issues = groups.expand_entries(db, getattr(rule, field) or [], rule.vrf_id)
+            if issues:
+                problems.append(f"{rule.rule_id}: " + "; ".join(issues))
+            new[field] = expanded
+        if problems and problems[-1].startswith(rule.rule_id):
+            continue
+        if new["source"] == (rule.source or []) and new["destination"] == (rule.destination or []):
+            continue
+        state, reasons = rule_recheck.reassess(db, rule, new["source"], new["destination"])
+        if reasons:
+            problems.append(f"{rule.rule_id}: " + "; ".join(reasons))
+        else:
+            plans.append((rule, state))
+    if problems:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            _("The change would leave rule(s) inadmissible – {problems}", problems=" | ".join(problems)),
+        )
+    for rule, state in plans:
+        before = {e.get("ip") for e in (rule.source or []) + (rule.destination or []) if e.get("group")}
+        after = {e.get("ip") for e in state["source"] + state["destination"] if e.get("group")}
+        rule_recheck.apply(
+            db, rule, state, username,
+            "Group membership changed: {added} address(es) added, {removed} removed",
+            {"added": str(len(after - before)), "removed": str(len(before - after))},
+            reset_review=reset_review,
+        )
+    return [rule.rule_id for rule, _state in plans]
+
+
+@router.get("/groups", response_model=list[GroupOut])
+def list_groups(vrf: str | None = None, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    query = db.query(AddressGroup)
+    if vrf:
+        query = query.filter(AddressGroup.vrf_id == get_vrf(db, vrf).id)
+    return [_group_out(db, g) for g in query.order_by(AddressGroup.name).all()]
+
+
+@router.get("/groups/{group_id}/members")
+def group_members(group_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
+    """What the group resolves to right now - the preview the rule form shows."""
+    group = db.get(AddressGroup, group_id)
+    if not group:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Group not found"))
+    members = groups.resolve_group(db, group)
+    return {"group": group.name, "kind": group.kind.value, "count": len(members), "members": members,
+            "rules": [r.rule_id for r in groups.rules_referencing(db, {group.name})]}
+
+
+@router.post("/groups", response_model=GroupOut, status_code=201)
+def create_group(
+    payload: GroupIn,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
+):
+    vrf = get_vrf(db, payload.vrf or None)
+    if groups.find_group(db, payload.name, vrf.id):
+        raise HTTPException(status.HTTP_409_CONFLICT, _("Group '{name}' already exists", name=payload.name))
+    group = AddressGroup(vrf_id=vrf.id, name=payload.name, kind=payload.kind, selector=payload.selector,
+                         members=payload.members, description=payload.description)
+    db.add(group)
+    db.commit()
+    db.refresh(group)
+    return _group_out(db, group)
+
+
+@router.put("/groups/{group_id}", response_model=GroupOut)
+def update_group(
+    group_id: int,
+    payload: GroupIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(Role.architect, Role.operations)),
+):
+    group = db.get(AddressGroup, group_id)
+    if not group:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Group not found"))
+    other = groups.find_group(db, payload.name, group.vrf_id)
+    if other and other.id != group.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, _("Group '{name}' already exists", name=payload.name))
+    if payload.name.lower() != group.name.lower() and groups.rules_referencing(db, {group.name}):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("Group '{name}' is referenced by rules and cannot be renamed", name=group.name))
+    definition_changed = (payload.kind != group.kind or payload.selector != group.selector
+                          or payload.members != group.members)
+    group.name, group.kind, group.selector = payload.name, payload.kind, payload.selector
+    group.members, group.description = payload.members, payload.description
+    db.flush()
+    updated: list[str] = []
+    if definition_changed:
+        # Somebody changed what the group *means*: that is a content change
+        # to every rule using it, and the approval is withdrawn.
+        updated = resync_groups(db, {group.name}, user.username, reset_review=True)
+    db.commit()
+    db.refresh(group)
+    return _group_out(db, group, updated)
+
+
+@router.delete("/groups/{group_id}", status_code=204)
+def delete_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles(Role.architect, Role.operations)),
+):
+    group = db.get(AddressGroup, group_id)
+    if not group:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _("Group not found"))
+    used = groups.rules_referencing(db, {group.name})
+    if used:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            _("Group '{name}' is referenced by rule(s): {rules}",
+                              name=group.name, rules=", ".join(r.rule_id for r in used)))
+    db.delete(group)
     db.commit()
 
 

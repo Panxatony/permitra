@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from . import crypto
 from .messages import _
-from .models import NetboxConfig, NetboxPrefix, utcnow
+from .models import NetboxConfig, NetboxPrefix, Workload, WorkloadKind, utcnow
 
 DEFAULT_STATUSES = ("active", "reserved")
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -201,3 +201,94 @@ def import_prefixes(db: Session) -> dict:
     db.commit()
     pending = db.query(NetboxPrefix).filter(NetboxPrefix.adopted == False).count()  # noqa: E712
     return {"fetched": fetched, "pending": pending, "skipped_statuses": skipped}
+
+
+# ---------- workloads ----------
+
+def _slug(obj) -> str:
+    return ((obj or {}).get("slug") or (obj or {}).get("name") or "") if isinstance(obj, dict) else ""
+
+
+def _labels_of(item: dict, kind: str) -> dict:
+    """NetBox's classifications as flat labels: role, tenant, site, platform,
+    status, cluster, and every tag as `tag.<slug>`. The names are NetBox's
+    own, so a selector written against them reads like the NetBox filter."""
+    labels = {"kind": kind}
+    for key, field in (("role", "role"), ("role", "device_role"), ("tenant", "tenant"), ("site", "site"),
+                       ("platform", "platform"), ("cluster", "cluster"), ("device_type", "device_type")):
+        value = _slug(item.get(field))
+        if value and key not in labels:
+            labels[key] = value
+    status_val = ((item.get("status") or {}).get("value") or "") if isinstance(item.get("status"), dict) else ""
+    if status_val:
+        labels["status"] = status_val
+    for tag in item.get("tags") or []:
+        slug = _slug(tag)
+        if slug:
+            labels[f"tag.{slug}"] = "true"
+    return labels
+
+
+def _addresses_of(item: dict) -> list[str]:
+    out = []
+    for field in ("primary_ip4", "primary_ip6"):
+        addr = ((item.get(field) or {}).get("address") or "") if isinstance(item.get(field), dict) else ""
+        if addr:
+            # NetBox stores the interface address with its prefix length; the
+            # workload is the host, not its subnet.
+            out.append(addr.split("/")[0])
+    return out
+
+
+def import_workloads(db: Session, vrf_id: int) -> dict:
+    """Devices and virtual machines with a primary address become workloads.
+
+    Only objects with a primary IP are taken - a workload without an address
+    cannot be in a rule. Objects imported earlier are updated in place
+    (matched by their NetBox id and kind); ones that vanished from NetBox are
+    removed; manual workloads are not touched."""
+    cfg = get_config(db)
+    if not cfg or not cfg.url or not cfg.token_enc:
+        raise ValueError(_("NetBox is not configured"))
+    seen: set[str] = set()
+    imported, without_address = 0, 0
+    for path, kind in (("/api/dcim/devices/?limit=500", WorkloadKind.device),
+                       ("/api/virtualization/virtual-machines/?limit=500", WorkloadKind.vm)):
+        data = _request(cfg, path)
+        while True:
+            for item in data.get("results", []):
+                addresses = _addresses_of(item)
+                if not addresses:
+                    without_address += 1
+                    continue
+                key = f"{kind.value}:{item['id']}"
+                seen.add(key)
+                name = (item.get("name") or f"{kind.value}-{item['id']}").strip()
+                row = (db.query(Workload)
+                         .filter(Workload.vrf_id == vrf_id, Workload.source == "netbox",
+                                 Workload.netbox_id == item["id"], Workload.kind == kind).first())
+                if row is None:
+                    # A manual workload of the same name is left alone; the
+                    # import gets a distinguishable name instead of overwriting.
+                    if db.query(Workload).filter(Workload.vrf_id == vrf_id, Workload.name.ilike(name)).first():
+                        name = f"{name} (netbox)"
+                    row = Workload(vrf_id=vrf_id, name=name, kind=kind, source="netbox", netbox_id=item["id"])
+                    db.add(row)
+                else:
+                    row.name = name
+                row.addresses = addresses
+                row.labels = _labels_of(item, kind.value)
+                row.description = (item.get("description") or "")[:256]
+                row.last_seen = utcnow()
+                imported += 1
+            nxt = data.get("next")
+            if not nxt:
+                break
+            data = _request(cfg, nxt)
+    removed = 0
+    for row in db.query(Workload).filter(Workload.vrf_id == vrf_id, Workload.source == "netbox").all():
+        if f"{row.kind.value}:{row.netbox_id}" not in seen:
+            db.delete(row)
+            removed += 1
+    db.commit()
+    return {"imported": imported, "removed": removed, "without_address": without_address}

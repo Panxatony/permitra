@@ -53,3 +53,11 @@ dedicated IPAM. Prefixes can be imported from **NetBox** (status *active* and *p
 configure the NetBox URL and API token in the admin area (token stored encrypted), run the
 import (`POST /api/netbox/import`), then adopt prefixes into the zone registry on the Networks
 page — assigning each a zone, which goes through the normal approval workflow (source `netbox`).
+
+**Workloads** can be imported from the same NetBox connection (`POST /api/netbox/import-workloads`,
+or the *Import from NetBox* button on the Workloads page): devices and virtual machines with a
+primary IP become workloads (source `netbox`), their role, tenant, site, platform, cluster, device
+type and status become labels (`role=web-server`), tags become `tag.<slug>=true`. A re-import
+updates by NetBox ID and removes workloads that vanished; selector groups built on the labels are
+re-synchronised afterwards, and one rule the import would leave inadmissible refuses the whole
+import (see [Workloads, groups and segments](CONCEPTS.md#workloads-groups-and-segments)).
