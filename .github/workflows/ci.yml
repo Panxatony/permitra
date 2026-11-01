@@ -384,6 +384,10 @@ jobs:
           # tests pass on a runtime that is not the one being shipped.
           python-version: '3.14'
       - name: No secret may end up in the repository
+        # The internal-name list is a repository secret; pull requests from
+        # forks do not get it and run the generic half of the check only.
+        env:
+          SECRET_SCAN_INTERNAL_TERMS: ${{ secrets.SECRET_SCAN_INTERNAL_TERMS }}
         run: python scripts/secret_scan.py
 
   docker-build:

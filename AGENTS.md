@@ -18,9 +18,14 @@ never a public issue (see `SECURITY.md`).
 
 **Never**
 
-- Never put secrets into the repository, issues, pull requests, logs or chat
-  replies: no passwords, tokens, keys or `.env` values, not even partially.
-  Run `python3 scripts/secret_scan.py` before every push; both CIs run it too.
+- Never put secrets or internal names into the repository, issues, pull
+  requests, logs or chat replies: no passwords, tokens, keys or `.env` values,
+  not even partially; no host names or addresses of the maintainer's
+  infrastructure. Run `python3 scripts/secret_scan.py` before every push; both
+  CIs run it too. The list of internal names is the gitignored
+  `.secret_scan_internal` (and the CI variable `SECRET_SCAN_INTERNAL_TERMS`);
+  before something leaves the mirror for the first time, run
+  `python3 scripts/secret_scan.py --history --ref main`.
 - Never push to `main` directly, on either remote. Never force-push.
 - Never merge. The maintainer merges merge requests and pull requests.
 - Never describe a vulnerability publicly, not even as exploit details in a
@@ -190,7 +195,7 @@ with 200 (demo, website) and 301 (`www`).
 | `wait_health.sh <url> [s]` | wait for `/api/health` = ok after a deployment |
 | `wait_gitlab_pipeline.sh <branch> [s]` | wait for a branch's GitLab pipeline and list its jobs; needs `GITLAB_URL`, `GITLAB_PROJECT`, `GITLAB_TOKEN_FILE` |
 | `wait_pr_checks.sh <number> [s]` | wait for a pull request's GitHub checks |
-| `secret_scan.py` | secret scan over tracked files, before every push |
+| `secret_scan.py [--history] [--ref <rev>]` | secrets and internal names in tracked files; `--history` walks every blob and commit message, `--ref` limits it to one branch |
 | `backup.sh`, `restore.sh` | encrypted dump and restore |
 | `lock_requirements.sh` | pin `requirements*.txt` inside the backend image |
 | `export_help.py`, `invert_i18n.py`, `shoot_*.py` | help texts, i18n inversion, screenshots for the docs |

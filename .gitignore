@@ -24,3 +24,6 @@ CLAUDE.local.md
 
 # Private operating notes (hosts, IPs, credential paths): AGENTS.local.md
 AGENTS.local.md
+
+# Internal-term list for scripts/secret_scan.py (host names, addresses)
+.secret_scan_internal

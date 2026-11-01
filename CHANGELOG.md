@@ -4,6 +4,14 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Development: `scripts/secret_scan.py`** also refuses internal names (host names, addresses,
+  user names) read from the gitignored `.secret_scan_internal` or the CI
+  variable `SECRET_SCAN_INTERNAL_TERMS`, knows more token shapes, hides the
+  matched term under CI, and `--history [--ref <rev>]` walks every blob and
+  commit message before a repository or a branch goes public. Operators who
+  run the scan in their own pipeline can set the variable; without a list that
+  half of the check is off.
+
 - **Workloads, labels and groups: a rule can refer to "the web tier".** A
   workload inventory (hosts, VMs, containers, services with addresses and
   labels; manual or imported from NetBox devices and VMs) and groups built on
