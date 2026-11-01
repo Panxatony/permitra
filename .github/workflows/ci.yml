@@ -136,7 +136,11 @@ jobs:
 
   backup-restore:
     name: backup & restore round trip
-    runs-on: ubuntu-latest
+    # Pinned, not "latest": the client has to match the postgres:16 service
+    # below, and ubuntu-latest moved to 26.04 on 2026-11-01, which ships no
+    # postgresql-client-16 any more. 24.04 still does. When the service moves
+    # to a newer major, move both.
+    runs-on: ubuntu-24.04
     # The point of this job: a backup that has never been restored is a guess.
     # It dumps a migrated database, encrypts it, restores it into a second one
     # and then asks the question that matters - does the audit chain still
