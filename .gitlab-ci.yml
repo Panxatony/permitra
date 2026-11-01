@@ -50,7 +50,8 @@ backend-tests:
   variables:
     PERMITRA_DEV: "1"          # random per-process secret instead of a real SECRET_KEY
   before_script:
-    - apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc libpq-dev >/dev/null
+    # git for tests/test_secret_scan.py, which builds a throw-away repository
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc libpq-dev git >/dev/null
     - pip install --quiet -r backend/requirements-dev.txt
   script:
     - cd backend

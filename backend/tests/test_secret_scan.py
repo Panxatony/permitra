@@ -15,6 +15,10 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "secret_scan.py"
 GIT = shutil.which("git") or "git"
 
+# The scanner is a wrapper around git; without it there is nothing to test,
+# and a missing binary must read as "skipped", not as a scanner defect.
+pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+
 
 def _git(repo: Path, *args: str) -> None:
     # Fixed arguments from this file, nothing from outside: S603 does not apply.
