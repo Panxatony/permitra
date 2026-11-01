@@ -21,3 +21,6 @@ htmlcov/
 
 # Personal notes for Claude Code: infrastructure, hosts, work in progress
 CLAUDE.local.md
+
+# Private operating notes (hosts, IPs, credential paths): AGENTS.local.md
+AGENTS.local.md
