@@ -4,6 +4,14 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Dependencies: pyasn1 0.6.5, Vite 8.3.5.** pyasn1 0.6.4 carried four
+  published CVEs (fixed in 0.6.5); Vite 8.2.x and its `launch-editor` had a
+  high-severity advisory that concerns the development server only, not the
+  built frontend. In the development lock, urllib3 2.8.0, filelock 4.2.6,
+  certifi 2026.10.23 and msgpack 1.2.4 close advisories of their own. Both
+  audits are clean again. Nothing else moves: the locks were recompiled for
+  those packages only, Vite within its existing range.
+
 - **Development: `scripts/secret_scan.py`** also refuses internal names (host names, addresses,
   user names) read from the gitignored `.secret_scan_internal` or the CI
   variable `SECRET_SCAN_INTERNAL_TERMS`, knows more token shapes, hides the
