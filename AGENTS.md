@@ -220,6 +220,12 @@ are listed on purpose.
   type once with `.create(bind, checkfirst=True)`, declare columns with
   `postgresql.ENUM(..., create_type=False)`, drop with `checkfirst` on
   downgrade, and test against `postgres:16-alpine`; SQLite does not catch it.
+- **SQLAlchemy 2.1 resolves a bare `postgresql://` URL to psycopg 3.** The
+  2.0 default was psycopg2, which is the only driver in the image. After the
+  lift, `alembic upgrade head` with a driverless `DATABASE_URL` failed with
+  `No module named 'psycopg'`. `backend/app/database.py` now pins such URLs
+  to `postgresql+psycopg2://`; keep the explicit driver in new configurations
+  anyway, and run the PostgreSQL round trip after every framework lift.
 - **Wrong environment variable for the database.** A migration check wrote
   into `backend/permitra.db` because `PERMITRA_DATABASE_URL` was set. The
   application reads `DATABASE_URL` (`backend/app/database.py`). Absolute
