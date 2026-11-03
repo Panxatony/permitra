@@ -4,6 +4,18 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Frameworks: FastAPI 0.162, Starlette 1.10, SQLAlchemy 2.1.6, Pydantic 2.14.2,
+  Alembic 1.20.1, uvicorn 0.54.** Every backend dependency was lifted with
+  `scripts/lock_requirements.sh --upgrade` (also aerleon 1.18, webauthn 3.0.1,
+  python-multipart 0.0.33, cryptography 50.0.2; development lock pytest 9.2,
+  ruff 0.17.3, httpx2 2.16, filelock 4.2.7). The test suite, the PostgreSQL
+  migration round trip and the image build pass unchanged.
+  **Operators:** SQLAlchemy 2.1 resolves a bare `postgresql://` URL to
+  psycopg 3, which the image does not ship. The application now pins such a
+  `DATABASE_URL` to `postgresql+psycopg2://` itself, so existing
+  configurations keep working; nothing to change. SQLAlchemy 2.1 also no
+  longer pulls in greenlet, which the synchronous engine never used.
+
 - **Dependencies: React 19.3.1, react-router-dom 7.18.5, @vitejs/plugin-react
   6.2.1, Mako 1.4.3.** The routine lift that bundles the open Dependabot pull
   requests for the React group, the frontend group and Mako; all within the
