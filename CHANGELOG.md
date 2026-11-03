@@ -4,6 +4,13 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Dependencies: React 19.3.1, react-router-dom 7.18.5, @vitejs/plugin-react
+  6.2.1, Mako 1.4.3.** The routine lift that bundles the open Dependabot pull
+  requests for the React group, the frontend group and Mako; all within the
+  ranges already declared, no behaviour change expected. Both audits stay
+  clean. The framework upgrade (FastAPI 0.162, SQLAlchemy 2.1) is deliberately
+  not part of this and follows separately.
+
 - **Dependencies: pyasn1 0.6.5, Vite 8.3.5.** pyasn1 0.6.4 carried four
   published CVEs (fixed in 0.6.5); Vite 8.2.x and its `launch-editor` had a
   high-severity advisory that concerns the development server only, not the
