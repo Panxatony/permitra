@@ -136,7 +136,11 @@ jobs:
 
   backup-restore:
     name: backup & restore round trip
-    runs-on: ubuntu-latest
+    # Pinned, not "latest": the client has to match the postgres:16 service
+    # below, and ubuntu-latest moved to 26.04 on 2026-11-01, which ships no
+    # postgresql-client-16 any more. 24.04 still does. When the service moves
+    # to a newer major, move both.
+    runs-on: ubuntu-24.04
     # The point of this job: a backup that has never been restored is a guess.
     # It dumps a migrated database, encrypts it, restores it into a second one
     # and then asks the question that matters - does the audit chain still
@@ -384,6 +388,10 @@ jobs:
           # tests pass on a runtime that is not the one being shipped.
           python-version: '3.14'
       - name: No secret may end up in the repository
+        # The internal-name list is a repository secret; pull requests from
+        # forks do not get it and run the generic half of the check only.
+        env:
+          SECRET_SCAN_INTERNAL_TERMS: ${{ secrets.SECRET_SCAN_INTERNAL_TERMS }}
         run: python scripts/secret_scan.py
 
   docker-build:
