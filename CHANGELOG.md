@@ -4,6 +4,15 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Python 3.15.** The backend image and both CIs move from `python:3.14-slim`
+  to `python:3.15-slim`; the locks were recompiled inside the new image
+  without any version change (every compiled dependency already ships a
+  3.15 wheel: pydantic-core, cbor2, httptools, uvloop, psycopg2-binary,
+  cryptography). **Operators:** nothing to configure; the next
+  `docker compose up -d --build` rebuilds the image on the new base. A local
+  virtualenv on an older interpreter keeps working, but 3.15 is what is
+  shipped and tested.
+
 - **Frameworks: FastAPI 0.162, Starlette 1.10, SQLAlchemy 2.1.6, Pydantic 2.14.2,
   Alembic 1.20.1, uvicorn 0.54.** Every backend dependency was lifted with
   `scripts/lock_requirements.sh --upgrade` (also aerleon 1.18, webauthn 3.0.1,

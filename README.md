@@ -83,7 +83,7 @@ Two things worth knowing before the rest:
 > `backend/requirements.txt` is generated and fully pinned. Add or change a
 > dependency in `backend/requirements.in`, then run
 > `./scripts/lock_requirements.sh` and commit both files — CI checks that
-> they are in step. The lock is resolved for **Python 3.14**, the version the
+> they are in step. The lock is resolved for **Python 3.15**, the version the
 > image runs; an older interpreter usually works but is not what is shipped.
 
 ```bash
