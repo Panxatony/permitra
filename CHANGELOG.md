@@ -4,6 +4,28 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Read-only role for audits.** A new role `auditor` gives the person
+  examining an instance the rules with their history, zones and networks,
+  recertification, the reports including the evidence report, and the audit
+  log with its chain verification, on a page of its own. It changes nothing:
+  every request that is not a read answers 403 for such an account, decided
+  in one place for all endpoints, with the account's own sign-in settings as
+  the only exception. User administration, API tokens and the NetBox
+  configuration stay with the admin, as does anchoring the audit chain. The
+  role cannot be combined with another one. Until now the audit log was
+  readable by admins only, so an audit needed an admin account or an admin
+  at the keyboard. **Operators:** migration `c4a91e7d3f26` adds the value to
+  the PostgreSQL role type and runs on start as usual. A downgrade
+  deactivates every auditor account and relabels it `architect`, because the
+  older version does not know the role; such accounts have to be reviewed by
+  hand after a later upgrade. Demo and development instances get an
+  additional read-only account at the next start. Audit events hold
+  usernames and source IPs: handing out the role decides who reads those.
+  Two things changed for the change approver on the way: the rule page no
+  longer offers them the export link, which led to a page they cannot
+  open, and the reports page no longer shows them the upload form of the
+  drift comparison, which the API refused.
+
 - **What changed since the implementation.** For a component in `to change`,
   the rule page and `GET /api/rules/{id}/implementation` name the version
   operations last confirmed as implemented there and the difference to the

@@ -42,6 +42,7 @@ Project website: https://permitra.de · Live demo: https://demo.permitra.de
 | `operations` | Maintain implementation status per component, export, drift comparison, evidence report |
 | `change_approver` | Approvals: rule reviews (one approval) and zone/network/matrix requests (two approvals by different approvers); runs the recertification cycle (starts and closes campaigns); focused approvals start page |
 | `admin` | Permitra administration only — installation, user management, settings. Deliberately not a superuser: no rule views in the interface, no approvals, no recertification, no reports. It keeps exactly three rule powers, all of them administrative: deleting a rule, and proposing or ending a requestor handover once that account is gone |
+| `auditor` | Read-only, for the person examining the instance: rules with their history, zones and networks, recertification, reports including the evidence report, and the audit log with its chain verification. Changes nothing but its own account (password, two-factor, notifications) and sees no user administration |
 
 An account can hold **several roles**, and its permission is their union — small
 teams do not have four people for four roles. This does not soften separation of
@@ -53,6 +54,9 @@ duties, because the four-eyes checks key on the acting *account*, not on a role:
   different accounts, so one multi-role account cannot supply both.
 
 Two hats on one person is still one pair of eyes.
+
+The one role that does not combine is `auditor`: an account that examines the
+work holds no role that does the work.
 
 ## What it does
 
@@ -104,7 +108,7 @@ npm run dev                                               # UI on http://localho
 
 **Demo logins:** two accounts per role — `architekt`/`architekt2`, `betrieb`/`betrieb2`,
 `approver`/`approver2`, `admin`/`admin2`, plus `doppelrolle` (architect *and* change
-approver, to walk the multi-role case). Password is the username + `123`. Two accounts
+approver, to walk the multi-role case) and `auditor` (read-only). Password is the username + `123`. Two accounts
 per role is what makes the four-eyes paths walkable: one requests, the other approves.
 API documentation (Swagger): http://localhost:8000/docs
 

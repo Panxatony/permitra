@@ -37,11 +37,20 @@ ROUTES = [
     ("/reports", "betrieb"),
     ("/account", "architekt"),
     ("/admin", "admin"),
+    # The read-only role has a navigation of its own; every page on it has to
+    # come up without the calls only a working role may make.
+    ("/rules", "auditor"),
+    ("/zones", "auditor"),
+    ("/networks", "auditor"),
+    ("/recertification", "auditor"),
+    ("/reports", "auditor"),
+    ("/audit-log", "auditor"),
+    ("/account", "auditor"),
 ]
 
 
 @pytest.mark.parametrize("language", ["en", "de"])
-@pytest.mark.parametrize(("route", "user"), ROUTES, ids=[r for r, _ in ROUTES])
+@pytest.mark.parametrize(("route", "user"), ROUTES, ids=[f"{r} as {u}" for r, u in ROUTES])
 def test_route_renders(open_page, instance_language, route, user, language):
     instance_language(language)
     page = open_page(route, user)

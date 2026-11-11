@@ -431,7 +431,8 @@ export default function ZoneMatrix() {
       api.matrixChanges().then(setChanges).catch(() => setChanges([]))
       api.groups().then(setGroups).catch(() => setGroups([]))
       api.settings().then(setSettings).catch(() => setSettings({}))
-      api.zoneNextCode().then((r) => setNewZoneCode((c) => c || r.code)).catch(() => {})
+      // Only an architect proposes a zone; the endpoint refuses everyone else.
+      if (canEdit) api.zoneNextCode().then((r) => setNewZoneCode((c) => c || r.code)).catch(() => {})
       const data = await api.zoneMatrix()
       setZones(data.zones)
       const map = {}

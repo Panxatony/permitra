@@ -271,6 +271,7 @@ tr.row-deleted td { opacity: .55; }
 .role-operations { background: var(--green-bg-2); color: var(--green); }
 .role-admin { background: var(--purple-bg); color: var(--purple-fg); }
 .role-change_approver { background: var(--amber-bg); color: var(--amber-text); }
+.role-auditor { background: var(--neutral-bg); color: var(--neutral-fg); }
 
 /* Login */
 .login-page { min-height: 100vh; display: grid; place-items: center; }

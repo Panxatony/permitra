@@ -197,6 +197,8 @@ CATALOG: dict[str, dict[str, str]] = {
         "API token is invalid or revoked": "API-Token ungültig oder widerrufen",
         "API tokens are read-only – only read access is permitted":
             "API-Token sind read-only – nur lesende Zugriffe erlaubt",
+        "The auditor role is read-only – only read access is permitted":
+            "Die Rolle Auditor ist nur lesend – nur lesende Zugriffe erlaubt",
         "Assigning a rule ID failed, try again": "Rule-ID-Vergabe fehlgeschlagen, bitte erneut versuchen",
         "At least one service (protocol/port) is required":
             "Mindestens ein Dienst (Protokoll/Port) ist erforderlich",
@@ -284,6 +286,8 @@ CATALOG: dict[str, dict[str, str]] = {
             "Ein Requestor ist ein Architekten-Konto – '{username}' ist {role}",
         "That is already the requestor": "Das ist bereits der Requestor",
         "An account must hold at least one role": "Ein Konto muss mindestens eine Rolle haben",
+        "The auditor role cannot be combined with another role":
+            "Die Rolle Auditor kann nicht mit einer anderen Rolle kombiniert werden",
         "Unknown component: {ids}": "Unbekannte Komponente: {ids}",
         "Dates must be given as YYYY-MM-DD": "Datumsangaben müssen im Format JJJJ-MM-TT erfolgen",
         "The period ends before it starts": "Der Zeitraum endet vor seinem Beginn",

@@ -1,10 +1,20 @@
+import AuditLog from '../components/AuditLog'
 import SetupChecklist from '../components/SetupChecklist'
 import { useEffect, useState } from 'react'
 import { api, getUser, hasRole } from '../api'
 import RiskCriteria from '../components/RiskCriteria'
 import { dateLocale, useLang } from '../i18n'
 
-const ROLES = ['architect', 'operations', 'change_approver', 'admin']
+const ROLES = ['architect', 'operations', 'change_approver', 'admin', 'auditor']
+
+/* The auditor role stands alone (#41): ticking it clears the others, ticking
+   another role clears it. The backend refuses the combination with a 422; the
+   checkboxes simply never produce it. */
+function toggleRole(current, role, checked) {
+  if (!checked) return current.filter((x) => x !== role)
+  if (role === 'auditor') return ['auditor']
+  return [...current.filter((x) => x !== 'auditor'), role]
+}
 
 /* Admin area: Permitra settings - user management as the first step.
    New users without a password receive an activation link (by email if SMTP is
@@ -18,9 +28,9 @@ export default function Admin() {
   const [notice, setNotice] = useState('')
   const [link, setLink] = useState('')
   const [settings, setSettings] = useState({})
-  const [audit, setAudit] = useState([])
-  const [integrity, setIntegrity] = useState(null)
-  const [siem, setSiem] = useState(null)
+  // Bumped on every reload, so the audit log card shows the event an action
+  // on this page has just produced.
+  const [auditRefresh, setAuditRefresh] = useState(0)
   const [tokens, setTokens] = useState([])
   const [tokenName, setTokenName] = useState('')
   const [newToken, setNewToken] = useState('')
@@ -30,8 +40,7 @@ export default function Admin() {
   const load = () => {
     api.users().then(setUsers).catch((e) => setError(e.message))
     api.settings().then(setSettings).catch(() => setSettings({}))
-    api.auditLog({ limit: 50 }).then(setAudit).catch(() => setAudit([]))
-    api.auditSiemStatus().then(setSiem).catch(() => setSiem(null))
+    setAuditRefresh((n) => n + 1)
     api.apiTokens().then(setTokens).catch(() => setTokens([]))
     api.netboxConfig().then((c) => { setNetbox(c); setNbForm((f) => ({ ...f, url: c.url, verify_tls: c.verify_tls, statuses: c.statuses || 'active,reserved' })) })
       .catch(() => setNetbox(null))
@@ -106,15 +115,14 @@ export default function Admin() {
                       // An admin cannot take the admin role off their own
                       // account - the backend refuses it too, and a control
                       // that only fails on submit is worse than one that is off.
-                      const locked = u.username === me.username && r === 'admin'
+                      // The auditor role would replace it, so it is off as well.
+                      const locked = u.username === me.username && (r === 'admin' || r === 'auditor')
                       return (
                         <label key={r} className="role-option" title={r}>
                           <input type="checkbox" checked={held} disabled={locked}
                             onChange={(e) => {
                               const current = u.roles?.length ? u.roles : [u.role]
-                              const next = e.target.checked
-                                ? [...current, r]
-                                : current.filter((x) => x !== r)
+                              const next = toggleRole(current, r, e.target.checked)
                               if (!next.length) return
                               act(() => api.updateUser(u.username, { roles: next }),
                                 t('Role changed'))
@@ -247,9 +255,7 @@ export default function Admin() {
               <input type="checkbox" checked={form.roles.includes(r)}
                 onChange={(e) => setForm({
                   ...form,
-                  roles: e.target.checked
-                    ? [...form.roles, r]
-                    : form.roles.filter((x) => x !== r),
+                  roles: toggleRole(form.roles, r, e.target.checked),
                 })} />
               {r}
             </label>
@@ -366,63 +372,7 @@ export default function Admin() {
         </form>
       </section>
 
-      <section className="card" style={{ marginTop: '1rem' }}>
-        <h3>{t('Audit log')} <span className="muted small">{t('(last 50 events; full log via the /api/audit-log API for SIEM)')}</span></h3>
-        <div className="row" style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '.8rem' }}>
-          <button className="btn btn-ghost" onClick={() => act(async () => {
-            const r = await api.auditVerify(); setIntegrity(r); return {}
-          })}>{t('Verify integrity')}</button>
-          {integrity && (integrity.ok
-            ? <span className="pill" style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'var(--green-border)' }}>
-                ✓ {t('Chain intact')} ({integrity.checked} {t('entries')})
-              </span>
-            : <span className="pill" style={{ background: 'var(--red-bg)', color: 'var(--red)', borderColor: 'var(--red-border)' }}>
-                ✗ {t('Chain broken')} – ID {integrity.broken_at_id}: {integrity.reason}
-              </span>)}
-          <button className="btn btn-ghost" onClick={() => act(async () => {
-            const r = await api.auditCheckpoint()
-            const s = await api.auditSiemStatus(); setSiem(s)
-            const v = await api.auditVerify(); setIntegrity(v)
-            return { detail: r.event_count
-              ? t('Chain end anchored at entry') + ` ${r.event_count}`
-              : r.detail }
-          })}>{t('Anchor now')}</button>
-          {siem && (
-            <span className="muted small">
-              {t('SIEM delivery')}: {siem.enabled ? t('active') : t('not configured')}
-              {' · '}{t('pending')}: {siem.pending} · {t('sent')}: {siem.sent}
-              {siem.skipped ? ` · ${t('no sink')}: ${siem.skipped}` : ''}
-              {siem.anchor
-                ? ` · ${t('anchored at')}: ${siem.anchor.event_count}` +
-                  (siem.enabled
-                    ? (siem.anchor.delivered ? ` (${t('sent to SIEM')})`
-                                             : ` (${t('delivery pending')})`)
-                    : '')
-                : ` · ${t('not anchored yet')}`}
-            </span>
-          )}
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr><th>{t('Time')}</th><th>{t('Event')}</th><th>{t('Object')}</th><th>{t('By')}</th><th>{t('Source IP')}</th><th>{t('Details')}</th></tr>
-            </thead>
-            <tbody>
-              {audit.map((e, i) => (
-                <tr key={i}>
-                  <td className="small">{e.timestamp ? new Date(e.timestamp).toLocaleString(dateLocale(lang)) : '–'}</td>
-                  <td><code>{e.event}</code></td>
-                  <td>{e.object}</td>
-                  <td>{e.actor || '–'}</td>
-                  <td className="small">{e.source_ip || '–'}</td>
-                  <td className="small">{e.detail || (e.status ? t(e.status) : '')}</td>
-                </tr>
-              ))}
-              {!audit.length && <tr><td colSpan={6} className="muted">{t('No entries.')}</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <AuditLog canAnchor refreshKey={auditRefresh} />
     </div>
   )
 }

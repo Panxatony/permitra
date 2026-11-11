@@ -116,6 +116,8 @@ export default function RuleDetail() {
   const isArchitect = hasRole(user, 'architect')
   const isOps = hasRole(user, 'operations')
   const isApprover = hasRole(user, 'change_approver')
+  // The roles that take part in a rule's life comment on it; an auditor reads.
+  const canComment = isArchitect || isOps || isApprover
 
   const act = (fn) => async () => {
     setError('')
@@ -351,7 +353,7 @@ export default function RuleDetail() {
             {IN_FORCE.includes(rule.status) && (isOps || isArchitect) && (
               <button className="btn btn-ghost" onClick={act(() => api.deactivate(id, reviewComment))}>{t('Deactivate rule')}</button>
             )}
-            {IN_FORCE.includes(rule.status) && (
+            {IN_FORCE.includes(rule.status) && (isOps || isArchitect) && (
               <Link className="btn" to={`/export?ids=${rule.rule_id}`}>{t('Export configuration →')}</Link>
             )}
             {rule.status === 'deleted' && (
@@ -393,11 +395,13 @@ export default function RuleDetail() {
               </li>
             ))}
           </ul>
-          <form onSubmit={addComment} className="comment-form">
-            <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)}
-              placeholder={t('Comment for the review…')} />
-            <button className="btn" type="submit">{t('Comment')}</button>
-          </form>
+          {canComment && (
+            <form onSubmit={addComment} className="comment-form">
+              <textarea rows={2} value={comment} onChange={(e) => setComment(e.target.value)}
+                placeholder={t('Comment for the review…')} />
+              <button className="btn" type="submit">{t('Comment')}</button>
+            </form>
+          )}
         </section>
 
         <section className="card wide">

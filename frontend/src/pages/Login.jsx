@@ -111,7 +111,7 @@ export default function Login() {
           {t('Forgot password?')}
         </button>
         <p className="muted small">
-          Demo: architekt · betrieb · approver · approver2 · admin — Passwort jeweils Name+123
+          Demo: architekt · betrieb · approver · approver2 · admin · auditor — Passwort jeweils Name+123
         </p>
         {/* Below the form on purpose: somebody who cannot sign in is exactly the
             visitor the imprint requirement is written for. */}
