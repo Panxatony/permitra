@@ -27,8 +27,8 @@ Full interactive documentation is at `/docs` on a running instance (OpenAPI).
 | `POST /api/zones/matrix/changes` with `{"type": "segment_policy", "zone", "from_segment", "to_segment", "policy"}` or `{"type": "segment_default", "zone", "default": "permit"\|"deny"}` | Segment matrix cells and a zone's intra-zone default go through the same two-approver request as zone cells; pending requests carry the affected rules |
 | `GET /api/recertification/campaigns` · `POST …` · `POST …/{id}/close` | Recertification. Reading is open to the working roles; **starting and closing a campaign is change-approver only** — not the admin |
 | `GET /api/reports/evidence` · `/evidence.csv` | Evidence report for an audit: every change in a period, optionally by zone or application, with requester, approver, justification and date, plus the chain-integrity statement |
-| `GET /api/export/{fmt}` | `csv`, `json`, `juniper`, `checkpoint-cli`, `checkpoint-api`, `aci-json`, `aci-yaml` |
-| `GET /api/export/aerleon/{target}` | Capirca/Aerleon targets incl. `policy` YAML |
+| `GET /api/export/{fmt}` | `csv`, `json`, `juniper`, `checkpoint-cli`, `checkpoint-api`, `aci-json`, `aci-yaml`. `impl=pending` exports only the rules in force that are still to be configured (see [EXPORTS.md](EXPORTS.md#only-the-open-implementation-work)); 404 when nothing is open |
+| `GET /api/export/aerleon/{target}` | Capirca/Aerleon targets incl. `policy` YAML; takes `impl=pending` as well |
 | `GET /api/export/host/{os}?ip=` | Host firewall config for a target server |
 
 ## Read-only API tokens (Ansible/Terraform)

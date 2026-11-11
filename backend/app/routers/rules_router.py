@@ -425,9 +425,21 @@ def impl_pending(rule: Rule) -> bool:
     impl = rule.impl_status or {}
     if any(impl.get(c.name) == "to remove" for c in rule.components):
         return True
-    if rule.status not in IN_FORCE or not rule.components:
-        return False
-    return any(impl.get(c.name) not in ("implemented", "deactivated") for c in rule.components)
+    return bool(components_to_configure(rule))
+
+
+def components_to_configure(rule: Rule) -> list[SecurityComponent]:
+    """The components an in-force rule still has to be configured on: status
+    missing, "open", "new" or "to change".
+
+    "to remove" is deliberately not part of it. This is the question the
+    exports ask, and an export only ever creates - a rule on its way off a
+    device has nothing in it that operations could apply."""
+    if rule.status not in IN_FORCE:
+        return []
+    impl = rule.impl_status or {}
+    return [c for c in rule.components
+            if impl.get(c.name) not in ("implemented", "deactivated", "to remove")]
 
 
 def _match_address_field(entries: list, query: str, net) -> tuple[list[str], str | None]:

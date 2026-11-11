@@ -30,6 +30,16 @@ Permitra.
 
 Exports always apply the approval filter, **including when explicit `ids=` are given** — a rule ID narrows *which* rules are meant, not whether their status still counts. A deactivated or draft rule is therefore not exported by accident; a deliberate preview needs `only_approved=false`, and that export is marked as such in the audit trail. Every export path (device formats, Capirca/Aerleon, host firewall) writes an audit entry with actor, format and rule count.
 
+### Only the open implementation work
+
+`impl=pending` on `GET /api/export/{fmt}` and `GET /api/export/aerleon/{target}` narrows the export to what still has to be configured: rules in force whose implementation status on the component is missing, `open`, `new` or `to change`. Rules that are `implemented` or `deactivated` there are left out, so the file is the work package for the next change window rather than the whole rule base. Which component's status counts:
+
+- with `component_id=`, the status on that component;
+- without it, for a device format, the status on the components that format is for (a rule already implemented on every Juniper firewall is not in the Juniper export, even if a Check Point gateway is still open);
+- for `csv`, `json`, a Capirca/Aerleon target or `platform_filter=false`, the status on any of the rule's components.
+
+A rule in `to change` is exported in its current, approved form. The export does not say which entries were dropped since the device was configured; the implementation view of the rule does. `to remove` is not part of this export, because Permitra does not generate removal configuration. If nothing is open the endpoint answers 404, so an automation cannot mistake "nothing to do" for an empty configuration. The audit entry names the export as one of open implementation work. In the interface the option is *Open implementation only* on the export page; the rule list filtered to *To implement* links to it.
+
 ## Host firewall export
 
 For a **target IP**, Permitra generates the server's local firewall rules (`GET /api/export/host/{debian|redhat|sles}?ip=`), based on all approved permit rules whose destination covers the IP. Formats: **Debian** = nftables ruleset (default drop, loopback, established/related, ICMP), **RedHat** = firewalld script with rich rules, **SLES** = iptables script. Every line carries the SR ID as a comment; IPv6 sources are handled correctly.

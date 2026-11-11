@@ -4,6 +4,16 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Export of the open implementation work.** `impl=pending` on
+  `GET /api/export/{fmt}` and `GET /api/export/aerleon/{target}` exports only
+  the rules in force that still have to be configured: implementation status
+  missing, `open`, `new` or `to change` on the component named with
+  `component_id`, otherwise on the components the format is for. Rules that
+  are already implemented there are left out, `to remove` is not part of it,
+  and an export with nothing open answers 404. The export page has the option
+  *Open implementation only*, and the rule list filtered to *To implement*
+  links to it. The audit entry names such an export.
+
 - **Python 3.15.** The backend image and both CIs move from `python:3.14-slim`
   to `python:3.15-slim`; the locks were recompiled inside the new image
   without any version change (every compiled dependency already ships a

@@ -95,6 +95,11 @@ export default function RuleList() {
             keeps it from being a mass deactivation. */}
         <NewRuleButton />
         {hasRole(getUser(), 'architect') && <RetireApplication onDone={() => load()} />}
+        {/* The list answers "what is still to do", the export hands the same
+            set over as configuration; only the roles that may export see it. */}
+        {filters.impl === 'pending' && hasRole(getUser(), 'architect', 'operations') && (
+          <Link to="/export?impl=pending" className="btn">{t('Export open implementation')}</Link>
+        )}
       </div>
 
       <form className="filterbar" onSubmit={submit}>

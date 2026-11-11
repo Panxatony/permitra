@@ -388,6 +388,10 @@ CATALOG: dict[str, dict[str, str]] = {
         "No mail delivery configured – pass on the reset link manually":
             "Kein Mailversand konfiguriert – Reset-Link bitte manuell übermitteln",
         "No matching rules": "Keine passenden Regeln",
+        "No rule with an open implementation matches – nothing left to configure":
+            "Keine passende Regel mit offener Umsetzung – es ist nichts mehr zu konfigurieren",
+        "Invalid value '{value}' for impl (allowed: pending)":
+            "Ungültiger Wert '{value}' für impl (erlaubt: pending)",
         "No matching rules (filters: approved only, matching platform)":
             "Keine passenden Regeln (Filter: nur freigegebene, passende Plattform)",
         "No passkey is registered for this account": "Für dieses Konto ist kein Passkey hinterlegt",
@@ -714,6 +718,9 @@ CATALOG: dict[str, dict[str, str]] = {
         "{count} prefixes": "{count} Prefixe",
         "{count} rule(s)": "{count} Regel(n)",
         "{count} rule(s), app_id={app_id}": "{count} Regel(n), app_id={app_id}",
+        "{count} rule(s) with an open implementation": "{count} Regel(n) mit offener Umsetzung",
+        "{count} rule(s) with an open implementation, app_id={app_id}":
+            "{count} Regel(n) mit offener Umsetzung, app_id={app_id}",
         "{count} rule(s), app_id={app_id}, NOT approved: {rule_ids}":
             "{count} Regel(n), app_id={app_id}, NICHT freigegeben: {rule_ids}",
         "{count} rule(s), NOT approved: {rule_ids}":
