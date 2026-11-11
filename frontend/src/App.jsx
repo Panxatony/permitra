@@ -1,6 +1,6 @@
-import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { api, clearSession, getUser, getVrfName, rolesOf, setVrfName } from './api'
+import { api, clearSession, getUser, getVrfName, hasRole, rolesOf, setVrfName } from './api'
 import { useLang } from './i18n'
 import { LegalLinks } from './legal'
 import { useTheme } from './theme'
@@ -15,6 +15,7 @@ import Recertification from './pages/Recertification'
 import ExportPage from './pages/ExportPage'
 import Login from './pages/Login'
 import Approvals from './pages/Approvals'
+import AuditLogPage from './pages/AuditLogPage'
 import Admin from './pages/Admin'
 import Account from './pages/Account'
 import SetPassword from './pages/SetPassword'
@@ -27,7 +28,7 @@ import ZoneMatrix from './pages/ZoneMatrix'
 const THEME_ICONS = { system: '🖥️', light: '☀️', dark: '🌙' }
 const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 
-const ROLE_LABELS = { architect: 'Architect', operations: 'Operations', change_approver: 'Change approver', admin: 'Administrator' }
+const ROLE_LABELS = { architect: 'Architect', operations: 'Operations', change_approver: 'Change approver', admin: 'Administrator', auditor: 'Auditor' }
 
 /* Which routes a role may open - mirroring the navigation, but enforced.
    The navigation only hides links, and hiding is worth exactly nothing against
@@ -40,13 +41,20 @@ const ROLE_LABELS = { architect: 'Architect', operations: 'Operations', change_a
    The admin list is short on purpose: an admin installs and administers
    Permitra. Running the recertification cycle belongs to the change approver
    (#81), so the admin no longer reaches those pages either - the menu and the
-   permission now say the same thing. */
+   permission now say the same thing.
+
+   The auditor reads (GitLab issue 41): the rules with their history, recertification, the
+   reports, the zone model and the audit log. The pages that consist of edit
+   forms - components, objects, workloads - are not on the list; what they hold
+   shows resolved on the rule itself and is readable through the API. */
 const ROLE_ROUTES = {
   admin: { allow: ['/admin', '/help', '/account'], home: '/admin' },
   change_approver: { allow: ['/approvals', '/rules', '/recertification', '/reports',
     '/zones', '/networks', '/help', '/account'], home: '/approvals' },
-  architect: { deny: ['/admin', '/approvals'], home: '/' },
-  operations: { deny: ['/admin', '/approvals'], home: '/' },
+  architect: { deny: ['/admin', '/approvals', '/audit-log'], home: '/' },
+  operations: { deny: ['/admin', '/approvals', '/audit-log'], home: '/' },
+  auditor: { allow: ['/rules', '/recertification', '/reports', '/zones', '/networks',
+    '/audit-log', '/help', '/account'], home: '/rules' },
 }
 
 /* An account holds a set of roles and its permission is their union (#78), so a
@@ -65,7 +73,7 @@ function routeAllowed(roles, path) {
 
 /* The landing page of the highest-precedence role held, matching the primary
    role the backend derives for the badge. */
-const HOME_PRECEDENCE = ['admin', 'change_approver', 'architect', 'operations']
+const HOME_PRECEDENCE = ['admin', 'change_approver', 'architect', 'operations', 'auditor']
 
 function homeFor(roles) {
   const primary = HOME_PRECEDENCE.find((r) => roles.includes(r))
@@ -79,24 +87,26 @@ const NAV = [
   { to: '/admin', label: 'Administration', roles: ['admin'] },
   { to: '/', label: 'Dashboard', roles: ['architect', 'operations'] },
   { to: '/approvals', label: 'Approvals', roles: ['change_approver'] },
-  { to: '/rules', label: 'Rules', roles: ['architect', 'operations', 'change_approver'] },
+  { to: '/rules', label: 'Rules', roles: ['architect', 'operations', 'change_approver', 'auditor'] },
   // Creating a rule - and documenting an emergency change, which is an option on
   // that same form - starts on the rules page as an overlay, so it is where the
   // rules are rather than a page you navigate away to. The routes below still
   // exist for deep links.
   { to: '/search', label: 'Analysis', roles: ['architect', 'operations'] },
   { to: '/recertification', label: 'Recertification',
-    roles: ['architect', 'operations', 'change_approver'] },
+    roles: ['architect', 'operations', 'change_approver', 'auditor'] },
   { to: '/zones', label: 'Security zones',
-    roles: ['architect', 'operations', 'change_approver'] },
+    roles: ['architect', 'operations', 'change_approver', 'auditor'] },
   { to: '/networks', label: 'Networks',
-    roles: ['architect', 'operations', 'change_approver'] },
+    roles: ['architect', 'operations', 'change_approver', 'auditor'] },
   { to: '/components', label: 'Components', roles: ['architect', 'operations'] },
   { to: '/objects', label: 'Objects', roles: ['architect', 'operations'] },
   { to: '/workloads', label: 'Workloads', roles: ['architect', 'operations'] },
   { to: '/export', label: 'Export', roles: ['architect', 'operations'] },
   { to: '/reports', label: 'Reports',
-    roles: ['architect', 'operations', 'change_approver'] },
+    roles: ['architect', 'operations', 'change_approver', 'auditor'] },
+  // The admin reads the same log as a card on the administration page.
+  { to: '/audit-log', label: 'Audit log', roles: ['auditor'] },
 ]
 
 function Layout({ children }) {
@@ -204,6 +214,18 @@ function Home() {
   return <Dashboard />
 }
 
+/* The rule form belongs to the roles that can save it. Whoever only reads
+   rules - the change approver, the auditor - and follows a typed or stale link
+   lands on the rule instead of on a form whose save button answers 403. */
+function RuleFormRoute() {
+  const { id } = useParams()
+  const user = getUser()
+  if (user && !hasRole(user, 'architect', 'operations')) {
+    return <Navigate to={id ? `/rules/${id}` : '/rules'} replace />
+  }
+  return <RuleForm />
+}
+
 export default function App() {
   return (
     <Routes>
@@ -215,9 +237,9 @@ export default function App() {
       <Route path="/admin" element={<Layout><Admin /></Layout>} />
       <Route path="/rules" element={<Layout><RuleList /></Layout>} />
       <Route path="/recertification" element={<Layout><Recertification /></Layout>} />
-      <Route path="/rules/new" element={<Layout><RuleForm /></Layout>} />
+      <Route path="/rules/new" element={<Layout><RuleFormRoute /></Layout>} />
       <Route path="/rules/:id" element={<Layout><RuleDetail /></Layout>} />
-      <Route path="/rules/:id/edit" element={<Layout><RuleForm /></Layout>} />
+      <Route path="/rules/:id/edit" element={<Layout><RuleFormRoute /></Layout>} />
       <Route path="/search" element={<Layout><Search /></Layout>} />
       <Route path="/path" element={<Navigate to="/search" replace />} />
       {/* The gateways moved onto the components page - an ACI gateway is a
@@ -231,6 +253,7 @@ export default function App() {
       <Route path="/export" element={<Layout><ExportPage /></Layout>} />
       <Route path="/help" element={<Layout><Help /></Layout>} />
       <Route path="/reports" element={<Layout><Reports /></Layout>} />
+      <Route path="/audit-log" element={<Layout><AuditLogPage /></Layout>} />
     </Routes>
   )
 }

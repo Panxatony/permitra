@@ -4,6 +4,48 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Read-only role for audits.** A new role `auditor` gives the person
+  examining an instance the rules with their history, zones and networks,
+  recertification, the reports including the evidence report, and the audit
+  log with its chain verification, on a page of its own. It changes nothing:
+  every request that is not a read answers 403 for such an account, decided
+  in one place for all endpoints, with the account's own sign-in settings as
+  the only exception. User administration, API tokens and the NetBox
+  configuration stay with the admin, as does anchoring the audit chain. The
+  role cannot be combined with another one. Until now the audit log was
+  readable by admins only, so an audit needed an admin account or an admin
+  at the keyboard. **Operators:** migration `c4a91e7d3f26` adds the value to
+  the PostgreSQL role type and runs on start as usual. A downgrade
+  deactivates every auditor account and relabels it `architect`, because the
+  older version does not know the role; such accounts have to be reviewed by
+  hand after a later upgrade. Demo and development instances get an
+  additional read-only account at the next start. Audit events hold
+  usernames and source IPs: handing out the role decides who reads those.
+  Two things changed for the change approver on the way: the rule page no
+  longer offers them the export link, which led to a page they cannot
+  open, and the reports page no longer shows them the upload form of the
+  drift comparison, which the API refused.
+
+- **What changed since the implementation.** For a component in `to change`,
+  the rule page and `GET /api/rules/{id}/implementation` name the version
+  operations last confirmed as implemented there and the difference to the
+  current rule: sources, destinations and services to add and to take off the
+  device, and a changed name, action, zone or environment. Until now the
+  preview showed only the rule as approved, so a dropped address was simply
+  absent and stayed on the device. A renewed approval that changes nothing on
+  the device is shown as such; a component without a confirmed version on
+  record says so. Permitra still generates no removal statements.
+
+- **Export of the open implementation work.** `impl=pending` on
+  `GET /api/export/{fmt}` and `GET /api/export/aerleon/{target}` exports only
+  the rules in force that still have to be configured: implementation status
+  missing, `open`, `new` or `to change` on the component named with
+  `component_id`, otherwise on the components the format is for. Rules that
+  are already implemented there are left out, `to remove` is not part of it,
+  and an export with nothing open answers 404. The export page has the option
+  *Open implementation only*, and the rule list filtered to *To implement*
+  links to it. The audit entry names such an export.
+
 - **Python 3.15.** The backend image and both CIs move from `python:3.14-slim`
   to `python:3.15-slim`; the locks were recompiled inside the new image
   without any version change (every compiled dependency already ships a

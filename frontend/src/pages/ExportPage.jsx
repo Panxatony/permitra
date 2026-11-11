@@ -39,6 +39,9 @@ export default function ExportPage() {
   const [fmt, setFmt] = useState('juniper')
   const [ids, setIds] = useState(searchParams.get('ids') || '')
   const [onlyApproved, setOnlyApproved] = useState(!searchParams.get('ids'))
+  // "Open work" is what operations still has to configure on a component; the
+  // dashboard and the rule list link here with ?impl=pending.
+  const [onlyOpen, setOnlyOpen] = useState(searchParams.get('impl') === 'pending')
   const [components, setComponents] = useState([])
   const [componentId, setComponentId] = useState('')
   const [targetIp, setTargetIp] = useState('')
@@ -69,9 +72,10 @@ export default function ExportPage() {
         text = await api.exportPreview(`host/${host.os}`, { ip: targetIp.trim() })
       } else if (aerleon) {
         text = await api.exportPreview(`aerleon/${aerleon.target}`,
-          { only_approved: onlyApproved, component_id: componentId })
+          { only_approved: onlyApproved, component_id: componentId, impl: onlyOpen ? 'pending' : '' })
       } else {
-        text = await api.exportPreview(f, { ids, only_approved: onlyApproved, component_id: componentId })
+        text = await api.exportPreview(f, { ids, only_approved: onlyApproved, component_id: componentId,
+          impl: onlyOpen ? 'pending' : '' })
       }
       setPreview(typeof text === 'string' ? text : JSON.stringify(text, null, 2))
     } catch (err) {
@@ -79,7 +83,7 @@ export default function ExportPage() {
     } finally {
       setLoading(false)
     }
-  }, [fmt, ids, onlyApproved, componentId, targetIp])
+  }, [fmt, ids, onlyApproved, onlyOpen, componentId, targetIp])
 
   useEffect(() => { load() }, [load])
 
@@ -92,11 +96,13 @@ export default function ExportPage() {
     } else if (aerleonFormat) {
       params.set('only_approved', onlyApproved)
       if (componentId) params.set('component_id', componentId)
+      if (onlyOpen) params.set('impl', 'pending')
       path = `aerleon/${aerleonFormat.target}`
     } else {
       params.set('only_approved', onlyApproved)
       if (ids) params.set('ids', ids)
       if (componentId) params.set('component_id', componentId)
+      if (onlyOpen) params.set('impl', 'pending')
     }
     fetch(`/api/export/${path}?${params}`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then((res) => res.blob())
@@ -163,10 +169,19 @@ export default function ExportPage() {
             <label>{t('Specific rules only (IDs, comma-separated)')}
               <input value={ids} onChange={(e) => setIds(e.target.value)} placeholder="SR00855, SR00846" />
             </label>
+            {/* Open work is by definition in force, so the option above it is
+                implied and locked while this one is set. */}
             <label className="checkbox">
-              <input type="checkbox" checked={onlyApproved} onChange={(e) => setOnlyApproved(e.target.checked)} />
+              <input type="checkbox" checked={onlyApproved || onlyOpen} disabled={onlyOpen}
+                onChange={(e) => setOnlyApproved(e.target.checked)} />
               {t('Approved rules only')}
             </label>
+            {!hostFormat && (
+              <label className="checkbox" title={t('Rules in force whose implementation on the component is still open or to change')}>
+                <input type="checkbox" checked={onlyOpen} onChange={(e) => setOnlyOpen(e.target.checked)} />
+                {t('Open implementation only')}
+              </label>
+            )}
             <button className="btn btn-primary" onClick={() => load()}>{t('Refresh preview')}</button>
           </div>
         </aside>

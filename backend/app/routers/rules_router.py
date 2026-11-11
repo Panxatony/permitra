@@ -7,7 +7,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import audit, change_management, groups, ping_baseline
+from .. import audit, change_management, groups, impl_diff, ping_baseline
 from ..accounts import account_key
 from ..auth import get_current_user, require_roles
 from ..component_resolution import find_mapping, resolve_rule_components
@@ -425,9 +425,21 @@ def impl_pending(rule: Rule) -> bool:
     impl = rule.impl_status or {}
     if any(impl.get(c.name) == "to remove" for c in rule.components):
         return True
-    if rule.status not in IN_FORCE or not rule.components:
-        return False
-    return any(impl.get(c.name) not in ("implemented", "deactivated") for c in rule.components)
+    return bool(components_to_configure(rule))
+
+
+def components_to_configure(rule: Rule) -> list[SecurityComponent]:
+    """The components an in-force rule still has to be configured on: status
+    missing, "open", "new" or "to change".
+
+    "to remove" is deliberately not part of it. This is the question the
+    exports ask, and an export only ever creates - a rule on its way off a
+    device has nothing in it that operations could apply."""
+    if rule.status not in IN_FORCE:
+        return []
+    impl = rule.impl_status or {}
+    return [c for c in rule.components
+            if impl.get(c.name) not in ("implemented", "deactivated", "to remove")]
 
 
 def _match_address_field(entries: list, query: str, net) -> tuple[list[str], str | None]:
@@ -1809,6 +1821,37 @@ def _sync_active_status(db: Session, rule: Rule, user: User) -> None:
 
 # --- Versions, comments, conflicts -------------------------------------------
 
+def _change_since_implemented(rule: Rule, component: str) -> dict:
+    """For a component in "to change": the version operations confirmed there
+    and what the rule says differently now. The preview beside it is the whole
+    current rule; this is the part of it that is work."""
+    confirmed = impl_diff.implemented_version(rule.versions, component)
+    if confirmed is None:
+        return {
+            "implemented": None, "changes": None,
+            "changes_note": _("No implemented version is recorded for this component – "
+                              "compare the preview with the device"),
+        }
+    changes = impl_diff.difference(confirmed.snapshot, snapshot(rule))
+    if impl_diff.is_empty(changes):
+        advice = _("Nothing that reaches the device has changed since version {version} – "
+                 "the implementation can be confirmed", version=confirmed.version)
+    elif impl_diff.has_removals(changes):
+        advice = _("Entries removed since version {version} are no longer in the preview – "
+                 "take them off the device by hand", version=confirmed.version)
+    else:
+        advice = ""
+    return {
+        "implemented": {
+            "version": confirmed.version,
+            "at": confirmed.changed_at.isoformat() if confirmed.changed_at else None,
+            "by": confirmed.changed_by,
+        },
+        "changes": changes,
+        "changes_note": advice,
+    }
+
+
 @router.get("/{rule_id}/implementation")
 def implementation(rule_id: str, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     """Show, for each assigned component, how the rule is implemented there:
@@ -1861,6 +1904,8 @@ def implementation(rule_id: str, db: Session = Depends(get_db), _user: User = De
                     "No EPG mapping maintained for source/destination – the rule is not "
                     "exported to the fabric. Maintain it on the Objects page under ACI EPGs."
                 )
+        if entry["impl_status"] == "to change":
+            entry.update(_change_since_implemented(rule, component.name))
         results.append(entry)
     if rule.status not in IN_FORCE:
         for entry in results:

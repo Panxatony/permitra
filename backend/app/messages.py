@@ -197,6 +197,8 @@ CATALOG: dict[str, dict[str, str]] = {
         "API token is invalid or revoked": "API-Token ungültig oder widerrufen",
         "API tokens are read-only – only read access is permitted":
             "API-Token sind read-only – nur lesende Zugriffe erlaubt",
+        "The auditor role is read-only – only read access is permitted":
+            "Die Rolle Auditor ist nur lesend – nur lesende Zugriffe erlaubt",
         "Assigning a rule ID failed, try again": "Rule-ID-Vergabe fehlgeschlagen, bitte erneut versuchen",
         "At least one service (protocol/port) is required":
             "Mindestens ein Dienst (Protokoll/Port) ist erforderlich",
@@ -284,6 +286,8 @@ CATALOG: dict[str, dict[str, str]] = {
             "Ein Requestor ist ein Architekten-Konto – '{username}' ist {role}",
         "That is already the requestor": "Das ist bereits der Requestor",
         "An account must hold at least one role": "Ein Konto muss mindestens eine Rolle haben",
+        "The auditor role cannot be combined with another role":
+            "Die Rolle Auditor kann nicht mit einer anderen Rolle kombiniert werden",
         "Unknown component: {ids}": "Unbekannte Komponente: {ids}",
         "Dates must be given as YYYY-MM-DD": "Datumsangaben müssen im Format JJJJ-MM-TT erfolgen",
         "The period ends before it starts": "Der Zeitraum endet vor seinem Beginn",
@@ -388,6 +392,10 @@ CATALOG: dict[str, dict[str, str]] = {
         "No mail delivery configured – pass on the reset link manually":
             "Kein Mailversand konfiguriert – Reset-Link bitte manuell übermitteln",
         "No matching rules": "Keine passenden Regeln",
+        "No rule with an open implementation matches – nothing left to configure":
+            "Keine passende Regel mit offener Umsetzung – es ist nichts mehr zu konfigurieren",
+        "Invalid value '{value}' for impl (allowed: pending)":
+            "Ungültiger Wert '{value}' für impl (erlaubt: pending)",
         "No matching rules (filters: approved only, matching platform)":
             "Keine passenden Regeln (Filter: nur freigegebene, passende Plattform)",
         "No passkey is registered for this account": "Für dieses Konto ist kein Passkey hinterlegt",
@@ -676,6 +684,17 @@ CATALOG: dict[str, dict[str, str]] = {
         "The rule is in status '{status}'": "Regel ist im Status '{status}'",
         "The rule is in status '{status}' – the preview shows the future implementation":
             "Regel ist im Status '{status}' – Vorschau zeigt die künftige Umsetzung",
+        "No implemented version is recorded for this component – compare the preview with the device":
+            "Für diese Komponente ist keine umgesetzte Fassung verzeichnet – "
+            "Vorschau mit dem Gerät vergleichen",
+        "Nothing that reaches the device has changed since version {version} – "
+        "the implementation can be confirmed":
+            "Seit Version {version} hat sich nichts geändert, was das Gerät erreicht – "
+            "die Umsetzung kann bestätigt werden",
+        "Entries removed since version {version} are no longer in the preview – "
+        "take them off the device by hand":
+            "Seit Version {version} entfernte Einträge stehen nicht mehr in der Vorschau – "
+            "auf dem Gerät von Hand entfernen",
         "The zone for {from_zone} → {to_zone} no longer exists":
             "Zone für {from_zone} → {to_zone} existiert nicht mehr",
         "Unknown component(s): {components}": "Unbekannte Komponente(n): {components}",
@@ -714,6 +733,9 @@ CATALOG: dict[str, dict[str, str]] = {
         "{count} prefixes": "{count} Prefixe",
         "{count} rule(s)": "{count} Regel(n)",
         "{count} rule(s), app_id={app_id}": "{count} Regel(n), app_id={app_id}",
+        "{count} rule(s) with an open implementation": "{count} Regel(n) mit offener Umsetzung",
+        "{count} rule(s) with an open implementation, app_id={app_id}":
+            "{count} Regel(n) mit offener Umsetzung, app_id={app_id}",
         "{count} rule(s), app_id={app_id}, NOT approved: {rule_ids}":
             "{count} Regel(n), app_id={app_id}, NICHT freigegeben: {rule_ids}",
         "{count} rule(s), NOT approved: {rule_ids}":

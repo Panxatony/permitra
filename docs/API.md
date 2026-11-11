@@ -16,6 +16,7 @@ Full interactive documentation is at `/docs` on a running instance (OpenAPI).
 | `GET /api/rules/applications/summary` | The applications rules were opened for, with their in-force counts |
 | `POST /api/rules/applications/{app_id}/retire` | Propose every in-force rule of a retired application for removal (architect). **`dry_run` defaults to `true`** — a call without it reports what would happen and changes nothing |
 | `PUT /api/rules/{id}/impl-status` | Implementation status per component (operations) |
+| `GET /api/rules/{id}/implementation` | Per component: implementation status and the configuration generated for it. For a component in `to change` also `implemented` (the version operations last confirmed there, with account and time) and `changes`: sources, destinations and services `added` and `removed` since that version, and the changed `fields` (name, action, zones, environment). `implemented: null` means no confirmed version is on record; `changes_note` says in words what to do |
 | `GET /api/rules/{id}/conflicts` | Conflict warnings — overlap, duplicate, permit/deny shadowing. Only against rules on the **same zone transition**, directional: two rules enforced on different policies cannot shadow each other, however their addresses look. Rules carrying no zones (legacy imports) are compared on their addresses alone |
 | `GET /api/rules/path-search?src=&dst=` | All rules touching an address, in both directions |
 | `GET /api/rules/path-analysis?src=&dst=` | Which firewalls the traffic crosses and whether it gets through. The hops are **routed over the documented component links**, not ordered by tier: `routing` is `routed`, `no_route` (the links connect no way between them — a finding) or `not_documented` (no links recorded, so the order falls back to the north-south tiering). `routes` lists every shortest route, because a rule present on one redundant route and missing on the other holds until the failover; `route_gaps` names the clusters on a route that no approved rule covers. A hop neither address sits behind is marked `transit` |
@@ -25,10 +26,11 @@ Full interactive documentation is at `/docs` on a running instance (OpenAPI).
 | `GET /api/objects/groups` · `GET …/{id}/members` · `POST` · `PUT /{id}` · `DELETE /{id}` | Groups by selector (`app=shop, tier=web`) or by list. A rule refers to one as `{"group": "name"}` in `source`/`destination`; a referenced group cannot be deleted or renamed (409), a definition change re-expands and re-checks every rule using it |
 | `GET /api/zones/{zone}/segments` · `…/segments/matrix.csv` · `POST` · `PUT /{id}` · `DELETE /{id}` | Segments of a zone (a group lying entirely inside it) and the matrix between them. A segment in-force rules resolve to cannot be removed or rebased (409) |
 | `POST /api/zones/matrix/changes` with `{"type": "segment_policy", "zone", "from_segment", "to_segment", "policy"}` or `{"type": "segment_default", "zone", "default": "permit"\|"deny"}` | Segment matrix cells and a zone's intra-zone default go through the same two-approver request as zone cells; pending requests carry the affected rules |
-| `GET /api/recertification/campaigns` · `POST …` · `POST …/{id}/close` | Recertification. Reading is open to the working roles; **starting and closing a campaign is change-approver only** — not the admin |
-| `GET /api/reports/evidence` · `/evidence.csv` | Evidence report for an audit: every change in a period, optionally by zone or application, with requester, approver, justification and date, plus the chain-integrity statement |
-| `GET /api/export/{fmt}` | `csv`, `json`, `juniper`, `checkpoint-cli`, `checkpoint-api`, `aci-json`, `aci-yaml` |
-| `GET /api/export/aerleon/{target}` | Capirca/Aerleon targets incl. `policy` YAML |
+| `GET /api/recertification/campaigns` · `POST …` · `POST …/{id}/close` | Recertification. Reading is open to the working roles and the auditor; **starting and closing a campaign is change-approver only** — not the admin |
+| `GET /api/reports/evidence` · `/evidence.csv` | Evidence report for an audit: every change in a period, optionally by zone or application, with requester, approver, justification and date, plus the chain-integrity statement. Working roles and the auditor |
+| `GET /api/audit-log?since=&type=&limit=` · `/verify` · `/siem-status` | The audit log, the chain verification and the SIEM delivery state (admin, auditor). `POST /api/audit-log/checkpoint` anchors the chain (admin) |
+| `GET /api/export/{fmt}` | `csv`, `json`, `juniper`, `checkpoint-cli`, `checkpoint-api`, `aci-json`, `aci-yaml`. `impl=pending` exports only the rules in force that are still to be configured (see [EXPORTS.md](EXPORTS.md#only-the-open-implementation-work)); 404 when nothing is open |
+| `GET /api/export/aerleon/{target}` | Capirca/Aerleon targets incl. `policy` YAML; takes `impl=pending` as well |
 | `GET /api/export/host/{os}?ip=` | Host firewall config for a target server |
 
 ## Read-only API tokens (Ansible/Terraform)
@@ -63,6 +65,16 @@ locals { rules = jsondecode(data.http.permitra_rules.response_body).items }
 
 Endpoints: `GET/POST/DELETE /api/api-tokens` (admin). The token itself is authenticated via
 `Authorization: Bearer pat_…`.
+
+## Read-only accounts for an audit
+
+An account with the role `auditor` signs in like any other and reads: every `GET` that is open to all signed-in
+roles (rules, versions, zones, networks, components, objects, workloads, exports), plus recertification, the
+reports and the audit log. Every request that is not a `GET` answers 403 for it, whatever the endpoint - the rule
+sits in the authentication layer, so a new endpoint is covered without anyone remembering it. The exception is
+the account itself under `/api/auth/` (password, two-factor, passkeys, notifications). `GET /api/users`,
+`/api/api-tokens` and `/api/netbox/config` stay with the admin. The role cannot be combined with another one
+(422). An export an auditor downloads is recorded in the audit log like everyone else's.
 
 ## Change management integration (optional)
 
