@@ -107,7 +107,7 @@ the demo also sets `PERMITRA_IMPRINT_URL` and `PERMITRA_PRIVACY_URL`.
 **Application in one paragraph** (details in `docs/CONCEPTS.md`): backend
 FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic (`backend/`); frontend React 19
 and Vite (`frontend/`); PostgreSQL in operation, SQLite in development and
-tests; Python 3.14 in CI and in the image. Roles: architect, operations,
+tests; Python 3.15 in CI and in the image. Roles: architect, operations,
 change_approver, admin. A rule review needs one approval; zone and matrix
 batch requests need two approvals by different approvers. Since 0.7.4 the
 model has a workload inventory with labels (`/api/workloads`, NetBox import),

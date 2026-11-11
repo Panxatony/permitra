@@ -26,7 +26,7 @@ default:
 
 ruff:
   stage: lint
-  image: python:3.14-slim
+  image: python:3.15-slim
   cache:
     key: pip-$CI_COMMIT_REF_SLUG
     paths: [.cache/pip]
@@ -43,7 +43,7 @@ ruff:
 
 backend-tests:
   stage: test
-  image: python:3.14-slim
+  image: python:3.15-slim
   cache:
     key: pip-$CI_COMMIT_REF_SLUG
     paths: [.cache/pip]
@@ -70,7 +70,7 @@ backend-tests:
 # (dialect differences, faulty Alembic steps, advisory locks).
 migrations-postgres:
   stage: test
-  image: python:3.14-slim
+  image: python:3.15-slim
   services:
     - name: postgres:16-alpine
       alias: postgres
@@ -120,7 +120,7 @@ frontend-build:
 
 dependency-audit:
   stage: security
-  image: python:3.14-slim
+  image: python:3.15-slim
   before_script:
     - pip install --quiet pip-audit
   script:
@@ -167,7 +167,7 @@ npm-audit:
 # of a check are one copy that quietly falls behind.
 secret-scan:
   stage: security
-  image: python:3.14-slim
+  image: python:3.15-slim
   before_script:
     # The slim image ships without git, but the scan needs `git ls-files`
     - apt-get update -qq && apt-get install -y -qq --no-install-recommends git >/dev/null
