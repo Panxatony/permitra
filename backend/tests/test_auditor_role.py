@@ -1,4 +1,4 @@
-"""The auditor role (#41): reads what an audit asks for, writes nothing.
+"""The auditor role (GitLab issue 41): reads what an audit asks for, writes nothing.
 
 Supporting an audit is one of the goals of version one, and the four roles
 before this one could all write. These tests go through the real HTTP layer,

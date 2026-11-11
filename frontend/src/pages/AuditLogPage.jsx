@@ -1,7 +1,7 @@
 import AuditLog from '../components/AuditLog'
 import { useLang } from '../i18n'
 
-/* The auditor's view of the audit log (#41). Reading the log and checking its
+/* The auditor's view of the audit log (GitLab issue 41). Reading the log and checking its
    chain used to need the admin account - the one account an audit should not
    have to borrow. */
 export default function AuditLogPage() {

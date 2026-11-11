@@ -43,7 +43,7 @@ const ROLE_LABELS = { architect: 'Architect', operations: 'Operations', change_a
    (#81), so the admin no longer reaches those pages either - the menu and the
    permission now say the same thing.
 
-   The auditor reads (#41): the rules with their history, recertification, the
+   The auditor reads (GitLab issue 41): the rules with their history, recertification, the
    reports, the zone model and the audit log. The pages that consist of edit
    forms - components, objects, workloads - are not on the list; what they hold
    shows resolved on the rule itself and is readable through the API. */

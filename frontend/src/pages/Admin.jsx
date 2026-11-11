@@ -7,7 +7,7 @@ import { dateLocale, useLang } from '../i18n'
 
 const ROLES = ['architect', 'operations', 'change_approver', 'admin', 'auditor']
 
-/* The auditor role stands alone (#41): ticking it clears the others, ticking
+/* The auditor role stands alone (GitLab issue 41): ticking it clears the others, ticking
    another role clears it. The backend refuses the combination with a 422; the
    checkboxes simply never produce it. */
 function toggleRole(current, role, checked) {
