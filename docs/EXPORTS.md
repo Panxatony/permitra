@@ -38,7 +38,18 @@ Exports always apply the approval filter, **including when explicit `ids=` are g
 - without it, for a device format, the status on the components that format is for (a rule already implemented on every Juniper firewall is not in the Juniper export, even if a Check Point gateway is still open);
 - for `csv`, `json`, a Capirca/Aerleon target or `platform_filter=false`, the status on any of the rule's components.
 
-A rule in `to change` is exported in its current, approved form. The export does not say which entries were dropped since the device was configured; the implementation view of the rule does. `to remove` is not part of this export, because Permitra does not generate removal configuration. If nothing is open the endpoint answers 404, so an automation cannot mistake "nothing to do" for an empty configuration. The audit entry names the export as one of open implementation work. In the interface the option is *Open implementation only* on the export page; the rule list filtered to *To implement* links to it.
+A rule in `to change` is exported in its current, approved form. The export does not say which entries were dropped since the device was configured; the rule page does, see [What changed since the implementation](#what-changed-since-the-implementation). `to remove` is not part of this export, because Permitra does not generate removal configuration. If nothing is open the endpoint answers 404, so an automation cannot mistake "nothing to do" for an empty configuration. The audit entry names the export as one of open implementation work. In the interface the option is *Open implementation only* on the export page; the rule list filtered to *To implement* links to it.
+
+### What changed since the implementation
+
+When an implemented rule is approved again, its components go to `to change`. The generated configuration then describes the rule as it stands now, which is enough to add what is new and not enough to notice what is gone: an address that left the rule is simply absent. For each component in `to change`, the rule page (and `GET /api/rules/{id}/implementation`) therefore names the version operations last confirmed as implemented there and the difference to the current rule: sources, destinations and services to add, those to take off the device, and a changed name, action, zone or environment.
+
+- The comparison is per component. Two firewalls confirmed at different versions get different lists.
+- The confirmed version is the one at which operations last reported the component as `implemented`; for an imported rule, the version it arrived with.
+- It compares what the rule says, not configuration lines. Permitra still generates no removal statements: what is listed as removed has to be taken off the device by hand.
+- A renewed approval that changes nothing on the device (a new expiry date, a reworded justification) is shown as such, so the implementation can be confirmed straight away.
+- If no confirmed version is on record, the view says so instead of showing an empty difference.
+- The logging level is not part of a version snapshot and is not compared.
 
 ## Host firewall export
 

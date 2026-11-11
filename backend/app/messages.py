@@ -680,6 +680,17 @@ CATALOG: dict[str, dict[str, str]] = {
         "The rule is in status '{status}'": "Regel ist im Status '{status}'",
         "The rule is in status '{status}' – the preview shows the future implementation":
             "Regel ist im Status '{status}' – Vorschau zeigt die künftige Umsetzung",
+        "No implemented version is recorded for this component – compare the preview with the device":
+            "Für diese Komponente ist keine umgesetzte Fassung verzeichnet – "
+            "Vorschau mit dem Gerät vergleichen",
+        "Nothing that reaches the device has changed since version {version} – "
+        "the implementation can be confirmed":
+            "Seit Version {version} hat sich nichts geändert, was das Gerät erreicht – "
+            "die Umsetzung kann bestätigt werden",
+        "Entries removed since version {version} are no longer in the preview – "
+        "take them off the device by hand":
+            "Seit Version {version} entfernte Einträge stehen nicht mehr in der Vorschau – "
+            "auf dem Gerät von Hand entfernen",
         "The zone for {from_zone} → {to_zone} no longer exists":
             "Zone für {from_zone} → {to_zone} existiert nicht mehr",
         "Unknown component(s): {components}": "Unbekannte Komponente(n): {components}",

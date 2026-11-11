@@ -7,6 +7,51 @@ import { dateLocale, useLang } from '../i18n'
 
 const IMPL_OPTIONS = ['open', 'new', 'to change', 'to remove', 'implemented', 'deactivated']
 
+const DEVICE_FIELD_LABELS = {
+  name: 'Name', action: 'Action', source_zone: 'Source zone', destination_zone: 'Destination zone', vrf: 'Environment',
+}
+
+/* For a component in "to change": what the rule says differently from the
+   version operations confirmed there. The export shows the rule as it is
+   approved now, so an entry that was dropped is simply absent from it - this
+   is the only place that names what has to come off the device. */
+function ImplChange({ entry }) {
+  const { t, lang } = useLang()
+  if (!entry || entry.impl_status !== 'to change') return null
+  const { implemented, changes, changes_note: note } = entry
+  if (!implemented || !changes) return <p className="impl-change muted small">{note}</p>
+  const address = (e) => [e.ip || e.group, e.alias].filter(Boolean).join(' ')
+  const service = (s) => `${s.protocol}${s.port ? `/${s.port}` : ''}`
+  const parts = [
+    ['Source', changes.source, address],
+    ['Destination', changes.destination, address],
+    ['Services', changes.services, service],
+  ]
+  return (
+    <div className="impl-change small">
+      <div>
+        <strong>{t('Changed since the implemented version')} v{implemented.version}</strong>
+        <span className="muted"> · {implemented.by}
+          {implemented.at ? `, ${new Date(implemented.at).toLocaleString(dateLocale(lang))}` : ''}</span>
+      </div>
+      <ul>
+        {parts.flatMap(([label, part, format]) => [
+          ...part.added.map((e, i) => (
+            <li key={`${label}+${i}`} className="impl-add">+ {t(label)}: <code>{format(e)}</code> <span className="muted">{t('to add')}</span></li>
+          )),
+          ...part.removed.map((e, i) => (
+            <li key={`${label}-${i}`} className="impl-remove">− {t(label)}: <code>{format(e)}</code> <span className="muted">{t('to take off the device')}</span></li>
+          )),
+        ])}
+        {changes.fields.map((f) => (
+          <li key={f.field}>{t(DEVICE_FIELD_LABELS[f.field] || f.field)}: <code>{f.old || '–'}</code> → <code>{f.new || '–'}</code></li>
+        ))}
+      </ul>
+      {note && <p className="muted">{note}</p>}
+    </div>
+  )
+}
+
 /* Approved and active are the same thing to act on: the rule is in force. A
    deleted rule offers no actions at all - it is documentation, not a workflow
    step, and nothing may put it back into service. */
@@ -39,13 +84,23 @@ export default function RuleDetail() {
   const [successor, setSuccessor] = useState('')
   const canHandOver = rule && (user.username === rule.requestor || hasRole(user, 'admin'))
   const [risk, setRisk] = useState(null)
+  const [impl, setImpl] = useState(null)
   const [comment, setComment] = useState('')
   const [reviewComment, setReviewComment] = useState('')
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
     try {
-      setRule(await api.rule(id))
+      const loaded = await api.rule(id)
+      setRule(loaded)
+      // The difference to the implemented version is only asked for when a
+      // component waits for a change; the endpoint renders every component's
+      // configuration, which no other rule page needs.
+      if (Object.values(loaded.impl_status || {}).includes('to change')) {
+        api.implementation(id).then(setImpl).catch(() => setImpl(null))
+      } else {
+        setImpl(null)
+      }
       api.conflicts(id).then(setConflicts).catch(() => setConflicts([]))
       api.risk(id).then(setRisk).catch(() => setRisk(null))
     } catch (err) {
@@ -309,16 +364,19 @@ export default function RuleDetail() {
           <h3>{t('Implementation status per component (operations)')}</h3>
           <div className="impl-status">
             {(rule.components || []).map((c) => (
-              <label key={c.id} className="inline">
-                <span className={`badge platform-${c.type}`}>{c.name}</span>
-                <select
-                  disabled={!isOps}
-                  value={rule.impl_status?.[c.name] || 'open'}
-                  onChange={(e) => act(() => api.setImplStatus(id, { [c.name]: e.target.value }))()}
-                >
-                  {IMPL_OPTIONS.map((o) => <option key={o} value={o}>{t(o)}</option>)}
-                </select>
-              </label>
+              <div key={c.id}>
+                <label className="inline">
+                  <span className={`badge platform-${c.type}`}>{c.name}</span>
+                  <select
+                    disabled={!isOps}
+                    value={rule.impl_status?.[c.name] || 'open'}
+                    onChange={(e) => act(() => api.setImplStatus(id, { [c.name]: e.target.value }))()}
+                  >
+                    {IMPL_OPTIONS.map((o) => <option key={o} value={o}>{t(o)}</option>)}
+                  </select>
+                </label>
+                <ImplChange entry={impl?.implementations?.find((e) => e.component_id === c.id)} />
+              </div>
             ))}
             {!(rule.components || []).length && <span className="muted">{t('No components assigned.')}</span>}
           </div>

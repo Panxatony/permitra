@@ -4,6 +4,16 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **What changed since the implementation.** For a component in `to change`,
+  the rule page and `GET /api/rules/{id}/implementation` name the version
+  operations last confirmed as implemented there and the difference to the
+  current rule: sources, destinations and services to add and to take off the
+  device, and a changed name, action, zone or environment. Until now the
+  preview showed only the rule as approved, so a dropped address was simply
+  absent and stayed on the device. A renewed approval that changes nothing on
+  the device is shown as such; a component without a confirmed version on
+  record says so. Permitra still generates no removal statements.
+
 - **Export of the open implementation work.** `impl=pending` on
   `GET /api/export/{fmt}` and `GET /api/export/aerleon/{target}` exports only
   the rules in force that still have to be configured: implementation status
