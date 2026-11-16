@@ -1,7 +1,7 @@
-fastapi>=0.141.1
+fastapi>=0.162.5
 uvicorn[standard]>=0.52.4
-sqlalchemy>=2.0.52
-pydantic>=2.13.5
+sqlalchemy>=2.1.8
+pydantic>=2.14.3
 PyJWT>=2.14.0
 python-multipart>=0.0.32
 psycopg2-binary>=2.9.12; platform_system != "Windows"
