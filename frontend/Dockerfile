@@ -1,7 +1,10 @@
 FROM node:26-alpine AS build
 WORKDIR /app
-COPY package.json ./
-RUN npm install --no-audit --no-fund
+# The lock file decides what gets installed. With package.json alone,
+# `npm install` resolved the version ranges anew on every build, so the image
+# held whatever was newest that day - not what CI had built, tested and audited.
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 COPY index.html vite.config.js ./
 COPY public ./public
 COPY src ./src

@@ -4,6 +4,14 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **The frontend image installs from the lock file.** `frontend/Dockerfile`
+  copied only `package.json` and ran `npm install`, which resolved the
+  version ranges anew on every build: the image could hold newer packages
+  than the ones CI had built, tested and audited from `package-lock.json`.
+  It now copies the lock file and runs `npm ci`, so the image holds exactly
+  the locked versions and a build fails when `package.json` and the lock
+  disagree. Operators have nothing to configure.
+
 - **Dependencies: FastAPI 0.165, SQLAlchemy 2.1.9, Pydantic 2.14.4, Vite 8.3.8,
   @vitejs/plugin-react 6.3.0.** The routine lift that bundles the open
   Dependabot pull requests for the backend and the frontend group. The locks
