@@ -4,6 +4,16 @@ Notable changes to Permitra. Dates use ISO format (YYYY-MM-DD).
 
 ## Unreleased
 
+- **Dependencies: FastAPI 0.165, SQLAlchemy 2.1.9, Pydantic 2.14.4, Vite 8.3.8,
+  @vitejs/plugin-react 6.3.0.** The routine lift that bundles the open
+  Dependabot pull requests for the backend and the frontend group. The locks
+  were recompiled with `--upgrade`, so the transitive pins moved as well
+  (among them python-multipart 0.0.34, PyYAML 6.0.4, cbor2 6.3.0, certifi);
+  Starlette stays at 1.10. The development tools move too (ruff 0.17.6,
+  coverage 7.17.4). No behaviour change expected; both audits stay clean.
+  Operators have nothing to configure, the next `up --build` installs the
+  new versions.
+
 - **Read-only role for audits.** A new role `auditor` gives the person
   examining an instance the rules with their history, zones and networks,
   recertification, the reports including the evidence report, and the audit
