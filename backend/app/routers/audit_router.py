@@ -11,6 +11,10 @@ from ..models import Role, User
 
 router = APIRouter(prefix="/api/audit-log", tags=["audit"])
 
+# Reading the log and checking its chain is what an audit comes for; anchoring
+# the head writes, and stays with the admin.
+READERS = (Role.admin, Role.auditor)
+
 
 @router.get("")
 def audit_log(
@@ -18,7 +22,7 @@ def audit_log(
     type: str | None = Query(None, description="'rule' | 'zone_change'"),
     limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(Role.admin)),
+    _user: User = Depends(require_roles(*READERS)),
 ):
     """Unified, machine-readable audit log (newest first) for SIEM retrieval."""
     return collect(db, since=since, limit=limit, event_type=type)
@@ -27,7 +31,7 @@ def audit_log(
 @router.get("/verify")
 def audit_verify(
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(Role.admin)),
+    _user: User = Depends(require_roles(*READERS)),
 ):
     """Verify the integrity of the audit hash chain (#26). ok=False as soon as an
     entry was altered or the ordering/gap-free sequence is broken."""
@@ -52,7 +56,7 @@ def audit_checkpoint(
 @router.get("/siem-status")
 def audit_siem_status(
     db: Session = Depends(get_db),
-    _user: User = Depends(require_roles(Role.admin)),
+    _user: User = Depends(require_roles(*READERS)),
 ):
     """Delivery state towards the SIEM (#26): configured, pending, sent."""
     return siem_status(db)

@@ -34,7 +34,7 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 @router.get("/requestors")
 def requestor_summary(db: Session = Depends(get_db),
                       user: User = Depends(require_roles(
-                          Role.change_approver, Role.architect, Role.operations))):
+                          Role.change_approver, Role.architect, Role.operations, Role.auditor))):
     """Rules per requestor: how many, how many in force, and whether the person
     still exists.
 
@@ -139,7 +139,7 @@ def evidence_report(
     app_id: str = Query("", description="Only rules of this application"),
     db: Session = Depends(get_db),
     _user: User = Depends(require_roles(
-        Role.change_approver, Role.architect, Role.operations)),
+        Role.change_approver, Role.architect, Role.operations, Role.auditor)),
 ):
     """What an auditor actually asks for: every change to a zone in a period,
     with who requested it, who approved it, why, and when (#86).
@@ -234,7 +234,7 @@ def evidence_report_csv(
     app_id: str = Query(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(
-        Role.change_approver, Role.architect, Role.operations)),
+        Role.change_approver, Role.architect, Role.operations, Role.auditor)),
 ):
     """The same report as one flat table, for the auditor who wants to sort it."""
     data = evidence_report(date_from, date_to, zone, app_id, db, user)

@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
@@ -9,8 +11,39 @@ from ..exporters import aci, aerleon_export, checkpoint, generic, hostfw, junipe
 from ..messages import _
 from ..models import IN_FORCE, Rule, User
 from ..validation import parse_network
+from .rules_router import components_to_configure
 
 router = APIRouter(prefix="/api/export", tags=["export"])
+
+# Declared with Annotated so the default stays a plain None when the endpoint
+# function is called directly, as the tests do.
+ImplFilter = Annotated[str | None, Query(
+    description="'pending' = only rules in force whose implementation is still open "
+                "(on the component named, else on the components the format is for)")]
+
+
+def _only_open_work(rules: list[Rule], impl: str | None, component_id: int | None,
+                    component_type: str | None = None) -> list[Rule]:
+    """Narrows an export down to what operations still has to configure.
+
+    The question is asked per component, because that is how the work is
+    handed out: a rule that is in place on the Juniper cluster and still open
+    on the fabric belongs in the ACI export and not in the Juniper one. With a
+    component named, its status decides; without one, the components the
+    format is written for; for a format without a platform, any component."""
+    if impl is None:
+        return rules
+    if impl != "pending":
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("Invalid value '{value}' for impl (allowed: pending)", value=impl))
+
+    def counts(component) -> bool:
+        if component_id:
+            return component.id == component_id
+        return component_type is None or component.type.value == component_type
+
+    return [r for r in rules if any(counts(c) for c in components_to_configure(r))]
+
 
 FORMATS = {
     "csv": ("text/csv", generic.export_csv, "rules.csv"),
@@ -46,6 +79,7 @@ def aerleon(
     target: str,
     component_id: int | None = Query(None, description="Only rules of this component"),
     only_approved: bool = Query(True, description="Export approved rules only"),
+    impl: ImplFilter = None,
     download: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -64,8 +98,11 @@ def aerleon(
     rules = query.order_by(Rule.rule_id).all()
     if component_id:
         rules = [r for r in rules if any(c.id == component_id for c in r.components)]
+    rules = _only_open_work(rules, impl, component_id)
     if not rules:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, _("No matching rules"))
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            _("No rule with an open implementation matches – nothing left to configure")
+                            if impl else _("No matching rules"))
     try:
         if target == "policy":
             content = aerleon_export.export_policy_yaml(rules)
@@ -81,7 +118,9 @@ def aerleon(
         headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     not_approved = [r.rule_id for r in rules if r.status not in IN_FORCE]
     values = {"count": len(rules)}
-    if not_approved:
+    if impl:
+        detail = "{count} rule(s) with an open implementation"
+    elif not_approved:
         detail = "{count} rule(s), NOT approved: {rule_ids}"
         values["rule_ids"] = ", ".join(not_approved)
     else:
@@ -144,6 +183,7 @@ def export(
     app_id: str | None = Query(None, description="Only rules of this application ID (per-app report)"),
     only_approved: bool = Query(True, description="Export approved rules only"),
     platform_filter: bool = Query(True, description="Only rules whose platform matches the format"),
+    impl: ImplFilter = None,
     download: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -175,10 +215,14 @@ def export(
                        "checkpoint-api": "checkpoint", "aci-json": "aci", "aci-yaml": "aci"}
     if platform_filter and fmt in platform_of_fmt:
         rules = [r for r in rules if platform_of_fmt[fmt] in (r.platforms or [])]
+    rules = _only_open_work(rules, impl, component_id,
+                            platform_of_fmt.get(fmt) if platform_filter else None)
 
     if not rules:
         detail = _("No matching rules (filters: approved only, matching platform)")
-        if wanted and only_approved:
+        if impl:
+            detail = _("No rule with an open implementation matches – nothing left to configure")
+        elif wanted and only_approved:
             # Most common case: the named rule exists but is not (yet) approved.
             # Say so, otherwise the user goes looking in entirely the wrong place.
             existing = (db.query(Rule)
@@ -209,7 +253,13 @@ def export(
         values["app_id"] = app_id
     if not_approved:
         values["rule_ids"] = ", ".join(not_approved)
-    if app_id and not_approved:
+    # An export of the open work holds rules in force only, so "NOT approved"
+    # cannot occur beside it and two spellings are enough.
+    if impl and app_id:
+        detail = "{count} rule(s) with an open implementation, app_id={app_id}"
+    elif impl:
+        detail = "{count} rule(s) with an open implementation"
+    elif app_id and not_approved:
         detail = "{count} rule(s), app_id={app_id}, NOT approved: {rule_ids}"
     elif app_id:
         detail = "{count} rule(s), app_id={app_id}"

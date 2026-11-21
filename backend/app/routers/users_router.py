@@ -121,6 +121,14 @@ def reset_totp(
     return user
 
 
+def _refuse_combined_auditor(roles) -> None:
+    """The auditor role stands alone: an account that could also write would
+    make "read-only" a matter of which page it is on."""
+    if Role.auditor in roles and len(set(roles)) > 1:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            _("The auditor role cannot be combined with another role"))
+
+
 @router.post("", status_code=201)
 def create_user(
     request: Request,
@@ -141,7 +149,9 @@ def create_user(
         email=payload.email,
         is_active=with_password,
     )
-    apply_roles(user, payload.roles or [payload.role])
+    wanted = payload.roles or [payload.role]
+    _refuse_combined_auditor(wanted)
+    apply_roles(user, wanted)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -188,6 +198,7 @@ def update_user(
         if not incoming:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                                 _("An account must hold at least one role"))
+        _refuse_combined_auditor(incoming)
         apply_roles(user, incoming)
     # Deactivation and role changes revoke existing tokens immediately
     if payload.is_active is False or incoming is not None:

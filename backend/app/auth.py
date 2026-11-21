@@ -208,7 +208,34 @@ def get_current_user(request: Request = None, token: str = Depends(oauth2_scheme
             valid_from = valid_from.replace(tzinfo=timezone.utc)
         if iat is None or iat < int(valid_from.timestamp()):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, _("Session is no longer valid"))
+    _refuse_auditor_write(request, user)
     return user
+
+
+# The one place an auditor may change something: the own account (password,
+# second factor, passkeys, notification preference).
+AUDITOR_WRITABLE_PREFIX = "/api/auth/"
+
+
+def _refuse_auditor_write(request, user: User) -> None:
+    """An auditor account reads; it writes nothing but its own account.
+
+    Decided here, at the one door every authenticated request passes, and not
+    at the endpoints: several writing endpoints ask for a login only (comments,
+    the risk assessment, resolving components), and a guard per endpoint is a
+    guard the next new endpoint forgets. Like the read-only API token this
+    fails closed - without a request there is no method to check, and "could
+    not tell" must not read as "read-only".
+    """
+    if not user.has_role(Role.auditor):
+        return
+    if request is not None:
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return
+        if request.url.path.startswith(AUDITOR_WRITABLE_PREFIX):
+            return
+    raise HTTPException(status.HTTP_403_FORBIDDEN,
+                        _("The auditor role is read-only – only read access is permitted"))
 
 
 def require_roles(*roles: Role):

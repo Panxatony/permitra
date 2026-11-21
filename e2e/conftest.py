@@ -28,6 +28,7 @@ CREDENTIALS = {
     "architekt2": "architekt2123",
     "betrieb": "betrieb123",
     "approver": "approver123",
+    "auditor": "auditor123",
 }
 
 

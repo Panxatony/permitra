@@ -49,6 +49,8 @@ DEMO_USERS = [
     ("approver2", "approver2123", "Hana Approver", [Role.change_approver]),
     ("doppelrolle", "doppelrolle123", "Iris Doppelrolle",
      [Role.architect, Role.change_approver]),
+    # Read-only (GitLab issue 41): what a person examining the instance gets to see.
+    ("auditor", "auditor123", "Jonas Auditor", [Role.auditor]),
 ]
 
 # A path, not a secret - the whole point is that the value lives in the file

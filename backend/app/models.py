@@ -45,6 +45,9 @@ class Role(str, enum.Enum):
     operations = "operations"          # rolls out (rollout status, export, drift)
     change_approver = "change_approver"  # approves (rule reviews, matrix requests)
     admin = "admin"
+    # Reads everything an audit asks for - rules with their history, reports,
+    # recertification, the audit log - and changes nothing but its own account.
+    auditor = "auditor"
 
 
 class RuleStatus(str, enum.Enum):
@@ -575,7 +578,8 @@ class User(Base):
 
 # Highest first: the primary role shown on the badge and used for the landing
 # route when an account holds several.
-ROLE_PRECEDENCE = (Role.admin, Role.change_approver, Role.architect, Role.operations)
+ROLE_PRECEDENCE = (Role.admin, Role.change_approver, Role.architect, Role.operations,
+                   Role.auditor)
 
 
 def primary_role(roles) -> Role:
@@ -596,6 +600,13 @@ def apply_roles(user: "User", roles) -> None:
     wanted = list(dict.fromkeys(roles))
     if not wanted:
         raise ValueError("an account must hold at least one role")
+    # "Read-only" has to be a property of the account, not of the page it
+    # happens to be on: an auditor who also held a working role could write
+    # after all, and the evidence that the audit account changed nothing would
+    # be gone. The users router answers this with a 422; this is the backstop
+    # for every other caller.
+    if Role.auditor in wanted and len(wanted) > 1:
+        raise ValueError("the auditor role cannot be combined with another role")
     # Only the difference, never a wholesale replacement: rebuilding the list
     # would delete and re-insert the rows that stay, and SQLAlchemy issues the
     # insert before the delete - which trips the (user_id, role) unique

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '../api'
+import { api, getUser, hasRole } from '../api'
 import { dateLocale, useLang } from '../i18n'
 import { HelpLink, StatusBadge } from './shared'
 
@@ -13,6 +13,9 @@ export default function DriftPanel({ components }) {
   const [config, setConfig] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  // Storing a device configuration is for the roles the backend admits; the
+  // change approver and the auditor read the comparison.
+  const canUpload = hasRole(getUser(), 'architect', 'operations')
 
   const loadReport = (id) => {
     if (!id) return
@@ -147,7 +150,7 @@ export default function DriftPanel({ components }) {
         )
       )}
 
-      {selected && (
+      {selected && canUpload && (
         <form onSubmit={upload} className="drift-upload">
           <textarea rows={6} value={config} onChange={(e) => setConfig(e.target.value)}
             placeholder={t('Paste the actual configuration here…\nset security policies from-zone ... policy SR0101 ...')} />
